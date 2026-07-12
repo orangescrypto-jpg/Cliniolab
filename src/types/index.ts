@@ -289,6 +289,7 @@ export type FeatureFlagKey =
   | 'email_quiz_results'
   | 'email_comment_reply'
   | 'email_inactivity_nudge'
+  | 'email_certificate_issued'
   | 'daily_quiz'
   | 'jobs_page'
   | 'scholarships_page'

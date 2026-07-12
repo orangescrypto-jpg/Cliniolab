@@ -1,0 +1,228 @@
+'use client';
+
+import { useEffect, useState } from 'react';
+import { Card } from '@/components/ui/Card';
+import { Button } from '@/components/ui/Button';
+import { ImagePicker } from '@/components/ui/ImagePicker';
+import { useAuth } from '@/lib/auth/AuthProvider';
+import type { Resource, ResourceKind, ResourcePricing } from '@/types';
+
+interface PendingPurchase {
+  id: string;
+  resourceId: string;
+  userId: string;
+  proofImageUrl: string | null;
+  status: string;
+  createdAt: string;
+  resourceTitle: string;
+}
+
+export default function AdminResourcesPage() {
+  const { user } = useAuth();
+  const [resources, setResources] = useState<Resource[]>([]);
+  const [pending, setPending] = useState<PendingPurchase[]>([]);
+
+  const [kind, setKind] = useState<ResourceKind>('book');
+  const [title, setTitle] = useState('');
+  const [description, setDescription] = useState('');
+  const [coverImageUrl, setCoverImageUrl] = useState('');
+  const [institutionName, setInstitutionName] = useState('');
+  const [subjectTag, setSubjectTag] = useState('');
+  const [pricing, setPricing] = useState<ResourcePricing>('free');
+  const [priceNaira, setPriceNaira] = useState(0);
+  const [driveLink, setDriveLink] = useState('');
+  const [error, setError] = useState<string | null>(null);
+
+  function loadResources() {
+    fetch('/api/admin/resources')
+      .then((res) => res.json())
+      .then((data) => setResources(data.resources ?? []));
+  }
+
+  function loadPending() {
+    if (user?.role !== 'admin') return;
+    fetch('/api/admin/purchases')
+      .then((res) => res.json())
+      .then((data) => setPending(data.purchases ?? []));
+  }
+
+  useEffect(() => {
+    loadResources();
+    loadPending();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
+
+  async function createResource() {
+    setError(null);
+    if (!title.trim() || !driveLink.trim()) {
+      setError('Title and Google Drive link are required.');
+      return;
+    }
+    if (pricing === 'paid' && priceNaira <= 0) {
+      setError('Set a price for a paid resource.');
+      return;
+    }
+
+    const res = await fetch('/api/resources', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        kind,
+        title,
+        description: description || undefined,
+        coverImageUrl: coverImageUrl || undefined,
+        institutionName: kind === 'past_question_pack' ? institutionName || undefined : undefined,
+        subjectTag: subjectTag || undefined,
+        pricing,
+        priceKobo: pricing === 'paid' ? Math.round(priceNaira * 100) : undefined,
+        driveLink,
+      }),
+    });
+
+    if (res.ok) {
+      setTitle('');
+      setDescription('');
+      setCoverImageUrl('');
+      setInstitutionName('');
+      setSubjectTag('');
+      setPriceNaira(0);
+      setDriveLink('');
+      loadResources();
+    } else {
+      const data = await res.json();
+      setError(data.error);
+    }
+  }
+
+  async function deleteResource(id: string) {
+    if (!confirm('Delete this resource permanently?')) return;
+    const res = await fetch(`/api/admin/resources/${id}`, { method: 'DELETE' });
+    if (res.ok) loadResources();
+  }
+
+  async function confirmPurchase(id: string, status: 'confirmed' | 'rejected') {
+    const res = await fetch(`/api/admin/purchases/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status }),
+    });
+    if (res.ok) loadPending();
+  }
+
+  return (
+    <div>
+      <h1 className="font-display text-2xl font-semibold text-ink-800">Books &amp; Past Questions</h1>
+
+      <Card className="mt-6 space-y-3 p-5">
+        <div className="grid grid-cols-2 gap-3">
+          <select
+            value={kind}
+            onChange={(e) => setKind(e.target.value as ResourceKind)}
+            className="rounded-md border border-ink-100 px-3 py-1.5 text-sm"
+          >
+            <option value="book">Book / Slide</option>
+            <option value="past_question_pack">Past Question Pack</option>
+          </select>
+          <select
+            value={pricing}
+            onChange={(e) => setPricing(e.target.value as ResourcePricing)}
+            className="rounded-md border border-ink-100 px-3 py-1.5 text-sm"
+          >
+            <option value="free">Free</option>
+            <option value="paid">Paid</option>
+          </select>
+        </div>
+
+        <input
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          placeholder="Title"
+          className="w-full rounded-md border border-ink-100 px-4 py-2 text-sm focus:border-pulse-400 focus:outline-none"
+        />
+        <textarea
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          placeholder="Description (optional)"
+          rows={2}
+          className="w-full rounded-md border border-ink-100 px-4 py-2 text-sm focus:border-pulse-400 focus:outline-none"
+        />
+        <ImagePicker value={coverImageUrl} onChange={setCoverImageUrl} purpose="resources" label="Cover image (optional — falls back to a default cover if left blank)" />
+        {kind === 'past_question_pack' && (
+          <input
+            value={institutionName}
+            onChange={(e) => setInstitutionName(e.target.value)}
+            placeholder="Institution name (e.g. UBTH School of Nursing)"
+            className="w-full rounded-md border border-ink-100 px-4 py-2 text-sm focus:border-pulse-400 focus:outline-none"
+          />
+        )}
+        <input
+          value={subjectTag}
+          onChange={(e) => setSubjectTag(e.target.value)}
+          placeholder="Subject tag (optional)"
+          className="w-full rounded-md border border-ink-100 px-4 py-2 text-sm focus:border-pulse-400 focus:outline-none"
+        />
+        {pricing === 'paid' && (
+          <input
+            type="number"
+            min={0}
+            value={priceNaira}
+            onChange={(e) => setPriceNaira(Number(e.target.value))}
+            placeholder="Price in Naira"
+            className="w-full rounded-md border border-ink-100 px-4 py-2 text-sm focus:border-pulse-400 focus:outline-none"
+          />
+        )}
+        <input
+          value={driveLink}
+          onChange={(e) => setDriveLink(e.target.value)}
+          placeholder="Google Drive link (never shown to users directly)"
+          className="w-full rounded-md border border-ink-100 px-4 py-2 text-sm focus:border-pulse-400 focus:outline-none"
+        />
+
+        {error && <p className="text-sm text-critical-500">{error}</p>}
+        <Button size="sm" onClick={createResource}>Upload resource</Button>
+      </Card>
+
+      <h2 className="mt-8 font-display text-lg font-semibold text-ink-800">All resources</h2>
+      <div className="mt-4 space-y-3">
+        {resources.map((r) => (
+          <Card key={r.id} className="flex flex-wrap items-center justify-between gap-3 p-4">
+            <div>
+              <p className="font-medium text-ink-800">{r.title}</p>
+              <p className="text-xs text-ink-400">
+                {r.kind === 'past_question_pack' ? 'Past Question Pack' : 'Book'} · {r.pricing}
+                {r.institutionName ? ` · ${r.institutionName}` : ''}
+              </p>
+            </div>
+            <Button size="sm" variant="danger" onClick={() => deleteResource(r.id)}>Delete</Button>
+          </Card>
+        ))}
+      </div>
+
+      {user?.role === 'admin' && (
+        <>
+          <h2 className="mt-10 font-display text-lg font-semibold text-ink-800">Pending payments</h2>
+          <div className="mt-4 space-y-3">
+            {pending.map((p) => (
+              <Card key={p.id} className="flex flex-wrap items-center justify-between gap-3 p-4">
+                <div>
+                  <p className="font-medium text-ink-800">{p.resourceTitle}</p>
+                  {p.proofImageUrl && (
+                    <a href={p.proofImageUrl} target="_blank" rel="noreferrer" className="text-xs text-pulse-600 underline">
+                      View proof
+                    </a>
+                  )}
+                  <p className="text-xs text-ink-400">{new Date(p.createdAt).toLocaleString()}</p>
+                </div>
+                <div className="flex gap-2">
+                  <Button size="sm" onClick={() => confirmPurchase(p.id, 'confirmed')}>Confirm</Button>
+                  <Button size="sm" variant="danger" onClick={() => confirmPurchase(p.id, 'rejected')}>Reject</Button>
+                </div>
+              </Card>
+            ))}
+            {pending.length === 0 && <p className="text-sm text-ink-400">No pending payments.</p>}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}

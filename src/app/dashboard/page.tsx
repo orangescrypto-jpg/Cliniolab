@@ -1,0 +1,251 @@
+'use client';
+
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import Link from 'next/link';
+import { useAuth } from '@/lib/auth/AuthProvider';
+import { Card } from '@/components/ui/Card';
+import { Button } from '@/components/ui/Button';
+import type { Certificate, QuestionReportWithContext, QuizWithStats, UserDashboardStats } from '@/types';
+
+export default function DashboardPage() {
+  const router = useRouter();
+  const { user, loading } = useAuth();
+  const [stats, setStats] = useState<UserDashboardStats | null>(null);
+  const [certificates, setCertificates] = useState<Certificate[]>([]);
+  const [myQuizzes, setMyQuizzes] = useState<QuizWithStats[]>([]);
+  const [flaggedQuestions, setFlaggedQuestions] = useState<QuestionReportWithContext[]>([]);
+  const [dismissingReportId, setDismissingReportId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!user) return;
+    fetch('/api/dashboard')
+      .then((res) => res.json())
+      .then((data) => {
+        setStats(data.stats);
+        setCertificates(data.certificates ?? []);
+      });
+    fetch('/api/quizzes?mine=true')
+      .then((res) => res.json())
+      .then((data) => setMyQuizzes(data.quizzes ?? []));
+    fetch('/api/dashboard/flagged-questions')
+      .then((res) => res.json())
+      .then((data) => setFlaggedQuestions(data.reports ?? []));
+  }, [user]);
+
+  async function regenerateLink(quizId: string) {
+    const res = await fetch(`/api/quizzes/${quizId}/regenerate-link`, { method: 'POST' });
+    if (res.ok) {
+      const res2 = await fetch('/api/quizzes?mine=true');
+      const data = await res2.json();
+      setMyQuizzes(data.quizzes ?? []);
+    }
+  }
+
+  async function toggleVisibility(quizId: string, current: 'public' | 'private') {
+    const next = current === 'public' ? 'private' : 'public';
+    const res = await fetch(`/api/quizzes/${quizId}/visibility`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ visibility: next, linkExpiry: '7d' }),
+    });
+    if (res.ok) {
+      const res2 = await fetch('/api/quizzes?mine=true');
+      const data = await res2.json();
+      setMyQuizzes(data.quizzes ?? []);
+    }
+  }
+
+  async function dismissFlag(reportId: string, status: 'reviewed' | 'dismissed') {
+    setDismissingReportId(reportId);
+    try {
+      const res = await fetch(`/api/dashboard/flagged-questions/${reportId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status }),
+      });
+      if (res.ok) {
+        setFlaggedQuestions((prev) => prev.filter((r) => r.id !== reportId));
+      }
+    } finally {
+      setDismissingReportId(null);
+    }
+  }
+
+  if (loading) return null;
+  if (!user) {
+    return (
+      <div className="mx-auto max-w-xl px-6 py-24 text-center">
+        <h1 className="font-display text-2xl font-semibold text-ink-800">Login required</h1>
+        <Button className="mt-6" onClick={() => router.push('/login')}>Log in</Button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mx-auto max-w-5xl px-6 py-16">
+      <div className="flex items-center justify-between">
+        <h1 className="font-display text-3xl font-semibold text-ink-800">
+          Welcome back, {user.displayName ?? user.email}
+        </h1>
+        <Link href="/dashboard/email-preferences" className="text-sm font-medium text-pulse-600 hover:text-pulse-700">
+          Email preferences
+        </Link>
+      </div>
+
+      {user.currentStreakDays > 0 && (
+        <Card className="mt-6 flex items-center gap-4 p-5">
+          <span className="font-mono text-3xl font-semibold text-flag-500">🔥 {user.currentStreakDays}</span>
+          <div>
+            <p className="text-sm font-medium text-ink-800">day streak</p>
+            <p className="text-xs text-ink-400">Longest: {user.longestStreakDays} days</p>
+          </div>
+        </Card>
+      )}
+
+      <div className="mt-8 grid grid-cols-2 gap-4 sm:grid-cols-4">
+        <Card className="p-5 text-center">
+          <p className="font-mono text-3xl font-semibold text-ink-800">{stats?.totalAttempts ?? 0}</p>
+          <p className="mt-1 text-xs text-ink-400">Attempts</p>
+        </Card>
+        <Card className="p-5 text-center">
+          <p className="font-mono text-3xl font-semibold text-pulse-600">
+            {stats ? Math.round(stats.averagePercentage) : 0}%
+          </p>
+          <p className="mt-1 text-xs text-ink-400">Average score</p>
+        </Card>
+        <Card className="p-5 text-center">
+          <p className="font-mono text-3xl font-semibold text-flag-500">
+            {stats ? Math.round(stats.bestPercentage) : 0}%
+          </p>
+          <p className="mt-1 text-xs text-ink-400">Best score</p>
+        </Card>
+        <Card className="p-5 text-center">
+          <p className="font-mono text-3xl font-semibold text-ink-800">{stats?.certificatesEarned ?? 0}</p>
+          <p className="mt-1 text-xs text-ink-400">Certificates</p>
+        </Card>
+      </div>
+
+      {stats && stats.scoreHistory.length > 0 && (
+        <Card className="mt-8 p-6">
+          <h2 className="font-display text-lg font-semibold text-ink-800">Score history</h2>
+          <div className="mt-4 flex items-end gap-1.5" style={{ height: 120 }}>
+            {stats.scoreHistory.slice(-20).map((h, i) => (
+              <div
+                key={i}
+                title={`${h.quizTitle}: ${Math.round(h.percentage)}%`}
+                className="flex-1 rounded-t bg-pulse-400"
+                style={{ height: `${Math.max(4, h.percentage)}%` }}
+              />
+            ))}
+          </div>
+        </Card>
+      )}
+
+      <div className="mt-10 flex items-center justify-between">
+        <h2 className="font-display text-xl font-semibold text-ink-800">My quizzes</h2>
+        <div className="flex gap-2">
+          <Link href="/quizzes/bulk-upload">
+            <Button size="sm" variant="secondary">Upload many</Button>
+          </Link>
+          <Link href="/quizzes/new"><Button size="sm">+ New quiz</Button></Link>
+        </div>
+      </div>
+      <div className="mt-4 space-y-3">
+        {myQuizzes.map((quiz) => (
+          <Card key={quiz.id} className="flex flex-wrap items-center justify-between gap-3 p-4">
+            <div>
+              <p className="font-medium text-ink-800">{quiz.title}</p>
+              <p className="text-xs text-ink-400">
+                {quiz.visibility === 'public' ? 'Public' : 'Private'} · {quiz.questionCount} questions ·{' '}
+                {quiz.attemptCount} attempts
+              </p>
+              {quiz.visibility === 'private' && quiz.shareSlug && (
+                <p className="mt-1 font-mono text-xs text-ink-400">
+                  /quizzes/shared/{quiz.shareSlug}
+                  {quiz.linkExpiresAt && ` · expires ${new Date(quiz.linkExpiresAt).toLocaleDateString()}`}
+                </p>
+              )}
+            </div>
+            <div className="flex gap-2">
+              <Link href={`/quizzes/${quiz.id}/edit`}>
+                <Button size="sm" variant="secondary">Edit</Button>
+              </Link>
+              {quiz.visibility === 'private' && (
+                <Button size="sm" variant="secondary" onClick={() => regenerateLink(quiz.id)}>
+                  Regenerate link
+                </Button>
+              )}
+              <Button size="sm" variant="secondary" onClick={() => toggleVisibility(quiz.id, quiz.visibility)}>
+                Make {quiz.visibility === 'public' ? 'private' : 'public'}
+              </Button>
+            </div>
+          </Card>
+        ))}
+        {myQuizzes.length === 0 && (
+          <p className="text-sm text-ink-400">You haven&apos;t created any quizzes yet.</p>
+        )}
+      </div>
+
+      {flaggedQuestions.length > 0 && (
+        <div className="mt-10">
+          <h2 className="font-display text-xl font-semibold text-ink-800">Flagged questions</h2>
+          <p className="mt-1 text-sm text-ink-500">
+            Quiz-takers flagged these as possibly wrong or unclear. Edit the quiz to fix a question,
+            or dismiss the flag if it&apos;s fine as-is.
+          </p>
+          <div className="mt-4 space-y-3">
+            {flaggedQuestions.map((report) => (
+              <Card key={report.id} className="p-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-medium uppercase tracking-wide text-flag-600">
+                      {report.quizTitle}
+                    </p>
+                    <p className="mt-1 text-sm font-medium text-ink-800">{report.questionPrompt}</p>
+                    {report.reason && (
+                      <p className="mt-1 text-xs text-ink-500">Reason: {report.reason}</p>
+                    )}
+                    <p className="mt-1 text-xs text-ink-400">
+                      Flagged {new Date(report.createdAt).toLocaleDateString()}
+                      {report.reporterName && ` by ${report.reporterName}`}
+                    </p>
+                  </div>
+                  <div className="flex shrink-0 gap-2">
+                    <Link href={`/quizzes/${report.quizId}/edit`}>
+                      <Button size="sm" variant="secondary">Edit quiz</Button>
+                    </Link>
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      disabled={dismissingReportId === report.id}
+                      onClick={() => dismissFlag(report.id, 'dismissed')}
+                    >
+                      Dismiss
+                    </Button>
+                  </div>
+                </div>
+              </Card>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {certificates.length > 0 && (
+        <div className="mt-10">
+          <h2 className="font-display text-xl font-semibold text-ink-800">Certificates</h2>
+          <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+            {certificates.map((cert) => (
+              <Card key={cert.id} className="p-4">
+                <p className="font-medium text-ink-800">{cert.quizTitle}</p>
+                <p className="text-xs text-ink-400">
+                  Issued {new Date(cert.issuedAt).toLocaleDateString()}
+                </p>
+              </Card>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

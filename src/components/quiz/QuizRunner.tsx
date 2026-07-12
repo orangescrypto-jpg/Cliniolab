@@ -148,12 +148,20 @@ export function QuizRunner({ quiz, questions: rawQuestions, submitEndpoint }: Qu
             </p>
           )}
           <div className="mt-8 space-y-4 text-left">
-            {result.perQuestion.map((pq, i) => (
+            {result.perQuestion.map((pq, i) => {
+              const resolve = (value: string | null) => {
+                if (value === null) return null;
+                const match = pq.options.find((o) => o.id === value);
+                return match ? match.text : value;
+              };
+              const submittedText = resolve(pq.submittedAnswer);
+              const correctText = resolve(pq.correctAnswer);
+              return (
               <div key={pq.questionId} className={`rounded-md border p-4 ${pq.isCorrect ? 'border-pulse-200 bg-pulse-50' : 'border-critical-200 bg-critical-50'}`}>
                 <p className="text-sm font-medium text-ink-700">{i + 1}. {pq.prompt}</p>
-                <p className="mt-1 text-sm text-ink-500">Your answer: {pq.submittedAnswer ?? '—'}</p>
+                <p className="mt-1 text-sm text-ink-500">Your answer: {submittedText ?? '—'}</p>
                 {!pq.isCorrect && (
-                  <p className="text-sm text-ink-500">Correct answer: {pq.correctAnswer}</p>
+                  <p className="text-sm text-ink-500">Correct answer: {correctText}</p>
                 )}
                 {pq.explanation && (
                   <p className="mt-2 whitespace-pre-line text-sm leading-relaxed text-ink-600">
@@ -179,7 +187,8 @@ export function QuizRunner({ quiz, questions: rawQuestions, submitEndpoint }: Qu
                   </div>
                 )}
               </div>
-            ))}
+              );
+            })}
           </div>
           {flagError && <p className="mt-3 text-xs text-critical-500">{flagError}</p>}
           <Button className="mt-8" onClick={() => router.push('/dashboard')}>

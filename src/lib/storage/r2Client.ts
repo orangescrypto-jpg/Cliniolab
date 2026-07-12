@@ -28,9 +28,10 @@ function resolveStorageDriver(): StorageDriver {
 
 function getR2BindingBucket(): R2Bucket {
   // Loaded via indirect eval, not a literal require(...), so Turbopack's
-  // static import analysis doesn't try to resolve/bundle this module on
-  // Vercel, where @cloudflare/next-on-pages is never installed.
-  let getRequestContext: typeof import('@cloudflare/next-on-pages').getRequestContext;
+  // bundler and the TypeScript checker never try to resolve this module
+  // on Vercel, where @cloudflare/next-on-pages is never installed (no
+  // package, no type declarations).
+  let getRequestContext: () => { env: Record<string, unknown> };
   try {
     // eslint-disable-next-line no-eval
     const dynamicRequire = eval('require') as NodeRequire;

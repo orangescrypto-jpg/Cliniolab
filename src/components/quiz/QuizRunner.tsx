@@ -243,12 +243,12 @@ export function QuizRunner({ quiz, questions: rawQuestions, submitEndpoint }: Qu
       />
 
       <Card className="mt-8 p-6">
-        <div className="flex items-start justify-between gap-4">
-          <h2 className="font-display text-lg font-medium text-ink-800">{question.prompt}</h2>
+        <h2 className="font-display text-lg font-medium text-ink-800">{question.prompt}</h2>
+        <div className="mt-3">
           <button
             type="button"
             onClick={() => toggleMarkForReview(question.id)}
-            className={`shrink-0 whitespace-nowrap rounded-md border px-2.5 py-1 text-xs font-medium transition-colors ${
+            className={`rounded-md border px-2.5 py-1 text-xs font-medium transition-colors ${
               markedForReview.has(question.id)
                 ? 'border-flag-400 bg-flag-50 text-flag-600'
                 : 'border-ink-100 text-ink-400 hover:bg-ink-50'

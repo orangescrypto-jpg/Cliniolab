@@ -1,11 +1,21 @@
 'use client';
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { Suspense, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/lib/auth/AuthProvider';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
+
+/**
+ * Only redirect back to same-origin, relative paths - and never back into
+ * an auth page itself, or a returned `next` could loop login <-> login.
+ */
+function sanitizeNextPath(next: string | null): string {
+  if (!next || !next.startsWith('/') || next.startsWith('//')) return '/dashboard';
+  if (next.startsWith('/login') || next.startsWith('/register')) return '/dashboard';
+  return next;
+}
 
 function EyeIcon({ open }: { open: boolean }) {
   if (open) {
@@ -25,8 +35,10 @@ function EyeIcon({ open }: { open: boolean }) {
   );
 }
 
-export default function LoginPage() {
+function LoginForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const nextPath = sanitizeNextPath(searchParams.get('next'));
   const { login } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -40,7 +52,7 @@ export default function LoginPage() {
     setSubmitting(true);
     try {
       await login(email, password);
-      router.push('/dashboard');
+      router.push(nextPath);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to log in');
     } finally {
@@ -90,8 +102,28 @@ export default function LoginPage() {
         </form>
       </Card>
       <p className="mt-4 text-sm text-ink-500">
-        No account? <Link href="/register" className="font-medium text-pulse-600">Sign up</Link>
+        No account?{' '}
+        <Link
+          href={nextPath !== '/dashboard' ? `/register?next=${encodeURIComponent(nextPath)}` : '/register'}
+          className="font-medium text-pulse-600"
+        >
+          Sign up
+        </Link>
       </p>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="mx-auto max-w-sm px-6 py-24">
+          <p className="text-sm text-ink-500">Loading…</p>
+        </div>
+      }
+    >
+      <LoginForm />
+    </Suspense>
   );
 }

@@ -27,10 +27,20 @@ function resolveStorageDriver(): StorageDriver {
 }
 
 function getR2BindingBucket(): R2Bucket {
-  // Lazy require, not a top-level import, so @cloudflare/next-on-pages is
-  // never pulled into the Vercel build path.
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const { getRequestContext } = require('@cloudflare/next-on-pages') as typeof import('@cloudflare/next-on-pages');
+  // Loaded via indirect eval, not a literal require(...), so Turbopack's
+  // static import analysis doesn't try to resolve/bundle this module on
+  // Vercel, where @cloudflare/next-on-pages is never installed.
+  let getRequestContext: typeof import('@cloudflare/next-on-pages').getRequestContext;
+  try {
+    // eslint-disable-next-line no-eval
+    const dynamicRequire = eval('require') as NodeRequire;
+    ({ getRequestContext } = dynamicRequire('@cloudflare/next-on-pages'));
+  } catch {
+    throw new Error(
+      "@cloudflare/next-on-pages is not installed. This code path only runs on Cloudflare Pages; " +
+        'set STORAGE_DRIVER=s3 (or R2_ACCESS_KEY_ID) to use the R2 S3-compatible API instead.'
+    );
+  }
   const env = getRequestContext().env as { IMAGES?: R2Bucket };
   if (!env.IMAGES) {
     throw new Error("R2 binding 'IMAGES' is not configured. Add an [[r2_buckets]] binding named IMAGES in wrangler.toml.");

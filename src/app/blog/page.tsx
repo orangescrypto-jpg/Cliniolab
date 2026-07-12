@@ -1,34 +1,249 @@
 'use client';
 
-import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { Card } from '@/components/ui/Card';
-import type { BlogPost } from '@/types';
+import { Button } from '@/components/ui/Button';
+import { Toggle } from '@/components/ui/Toggle';
+import { ImagePicker } from '@/components/ui/ImagePicker';
+import { RichTextEditor } from '@/components/ui/RichTextEditor';
+import { BLOG_CATEGORIES } from '@/lib/constants/blogCategories';
+import type { BlogContentFormat, BlogPost, BlogStatus } from '@/types';
 
-export default function BlogPage() {
+function slugify(name: string): string {
+  return name.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+}
+
+function countWords(markdownOrHtml: string): number {
+  const text = markdownOrHtml.replace(/<[^>]+>/g, ' ').replace(/[#*_>[\]()!-]/g, ' ');
+  return text.split(/\s+/).filter(Boolean).length;
+}
+
+/** Simple traffic-light guidance matching the convention most SEO plugins (Yoast, RankMath) use. */
+function lengthHint(length: number, ideal: [number, number]): { label: string; color: string } {
+  if (length === 0) return { label: 'Not set — will fall back to an auto-generated value', color: 'text-ink-400' };
+  if (length < ideal[0]) return { label: `${length} characters — a bit short`, color: 'text-flag-600' };
+  if (length > ideal[1]) return { label: `${length} characters — may get truncated in search results`, color: 'text-critical-500' };
+  return { label: `${length} characters — good length`, color: 'text-pulse-600' };
+}
+
+export default function AdminBlogPage() {
   const [posts, setPosts] = useState<BlogPost[]>([]);
+  const [title, setTitle] = useState('');
+  const [slug, setSlug] = useState('');
+  const [slugTouched, setSlugTouched] = useState(false);
+  const [content, setContent] = useState('');
+  const [contentFormat, setContentFormat] = useState<BlogContentFormat>('markdown');
+  const [featuredImageUrl, setFeaturedImageUrl] = useState('');
+  const [category, setCategory] = useState<string>(BLOG_CATEGORIES[0]);
+  const [status, setStatus] = useState<BlogStatus>('draft');
+  const [seoTitle, setSeoTitle] = useState('');
+  const [seoDescription, setSeoDescription] = useState('');
+  const [isSponsored, setIsSponsored] = useState(false);
+  const [isPinned, setIsPinned] = useState(false);
+  const [sendAsNewsletter, setSendAsNewsletter] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    fetch('/api/blog')
+  function load() {
+    fetch('/api/admin/blog')
       .then((res) => res.json())
       .then((data) => setPosts(data.posts ?? []));
-  }, []);
+  }
+
+  useEffect(load, []);
+
+  // Auto-derive the slug from the title until the admin manually edits
+  // the slug field themselves — same UX WordPress uses.
+  useEffect(() => {
+    if (!slugTouched) setSlug(slugify(title));
+  }, [title, slugTouched]);
+
+  async function createPost() {
+    if (!title.trim() || !content.trim()) return;
+    setError(null);
+    const res = await fetch('/api/blog', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        title,
+        slug: slug || slugify(title),
+        content,
+        contentFormat,
+        featuredImageUrl: featuredImageUrl || undefined,
+        category,
+        status,
+        seoTitle: seoTitle || undefined,
+        seoDescription: seoDescription || undefined,
+        isSponsored,
+        isPinned,
+        sendAsNewsletter,
+      }),
+    });
+    if (res.ok) {
+      setTitle('');
+      setSlug('');
+      setSlugTouched(false);
+      setContent('');
+      setContentFormat('markdown');
+      setFeaturedImageUrl('');
+      setSeoTitle('');
+      setSeoDescription('');
+      setIsSponsored(false);
+      setIsPinned(false);
+      setSendAsNewsletter(false);
+      load();
+    } else {
+      const data = await res.json();
+      setError(data.error);
+    }
+  }
+
+  const titleHint = lengthHint((seoTitle || title).length, [40, 60]);
+  const descriptionHint = lengthHint(seoDescription.length, [120, 160]);
+  const wordCount = countWords(content);
+
+  const seoChecklist = [
+    { done: title.trim().length >= 30 && title.trim().length <= 70, label: 'Title 30–70 characters' },
+    { done: wordCount >= 300, label: `Content 300+ words (${wordCount} so far)` },
+    { done: !!featuredImageUrl, label: 'Featured image set' },
+    { done: !!seoDescription && seoDescription.length >= 120 && seoDescription.length <= 160, label: 'Meta description 120–160 chars' },
+    { done: !!category, label: 'Category selected' },
+    { done: !!slug, label: 'URL slug set' },
+  ];
 
   return (
-    <div className="mx-auto max-w-3xl px-6 py-16">
-      <h1 className="font-display text-3xl font-semibold text-ink-800">Blog</h1>
-      <div className="mt-8 space-y-4">
+    <div>
+      <h1 className="font-display text-2xl font-semibold text-ink-800">Blog</h1>
+      <p className="mt-1 text-sm text-ink-500">
+        Jobs and Scholarships listings are just posts tagged with those categories — pick them
+        below like any other post.
+      </p>
+
+      <Card className="mt-6 space-y-4 p-5">
+        <div>
+          <label className="text-sm font-medium text-ink-700">Title</label>
+          <input
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="Post title"
+            className="mt-1 w-full rounded-md border border-ink-100 px-4 py-2 text-sm focus:border-pulse-400 focus:outline-none"
+          />
+        </div>
+
+        <div>
+          <label className="text-sm font-medium text-ink-700">URL slug</label>
+          <div className="mt-1 flex items-center gap-1 text-sm text-ink-400">
+            <span>/blog/</span>
+            <input
+              value={slug}
+              onChange={(e) => { setSlug(slugify(e.target.value)); setSlugTouched(true); }}
+              className="flex-1 rounded-md border border-ink-100 px-3 py-1.5 text-sm text-ink-700 focus:border-pulse-400 focus:outline-none"
+            />
+          </div>
+        </div>
+
+        <ImagePicker value={featuredImageUrl} onChange={setFeaturedImageUrl} purpose="blog" label="Featured image" />
+
+        <div>
+          <label className="text-sm font-medium text-ink-700">Content</label>
+          <div className="mt-1">
+            <RichTextEditor
+              value={content}
+              onChange={setContent}
+              format={contentFormat}
+              onFormatChange={setContentFormat}
+            />
+          </div>
+        </div>
+
+        {/* SEO panel — WordPress/Yoast-style overrides, separate from the post title/content itself */}
+        <div className="rounded-md border border-ink-100 p-4">
+          <p className="text-sm font-semibold text-ink-700">Search appearance (SEO)</p>
+          <div className="mt-3">
+            <label className="text-xs font-medium text-ink-600">SEO title</label>
+            <input
+              value={seoTitle}
+              onChange={(e) => setSeoTitle(e.target.value)}
+              placeholder={title || 'Falls back to the post title above'}
+              className="mt-1 w-full rounded-md border border-ink-100 px-3 py-1.5 text-sm focus:border-pulse-400 focus:outline-none"
+            />
+            <p className={`mt-1 text-xs ${titleHint.color}`}>{titleHint.label}</p>
+          </div>
+          <div className="mt-3">
+            <label className="text-xs font-medium text-ink-600">Meta description</label>
+            <textarea
+              value={seoDescription}
+              onChange={(e) => setSeoDescription(e.target.value)}
+              rows={2}
+              placeholder="What shows up under the title in Google search results"
+              className="mt-1 w-full rounded-md border border-ink-100 px-3 py-1.5 text-sm focus:border-pulse-400 focus:outline-none"
+            />
+            <p className={`mt-1 text-xs ${descriptionHint.color}`}>{descriptionHint.label}</p>
+          </div>
+        </div>
+
+        {/* SEO Checklist — same at-a-glance guidance Homverax's editor shows */}
+        <div className="rounded-md bg-ink-50/60 p-4">
+          <p className="text-xs font-semibold text-ink-700">SEO Checklist</p>
+          <ul className="mt-2 space-y-1.5">
+            {seoChecklist.map((check) => (
+              <li
+                key={check.label}
+                className={`flex items-center gap-2 text-xs ${check.done ? 'text-pulse-600' : 'text-ink-400'}`}
+              >
+                <span className={`inline-block h-1.5 w-1.5 rounded-full ${check.done ? 'bg-pulse-500' : 'bg-ink-300'}`} />
+                {check.label}
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-3">
+          <select
+            value={category}
+            onChange={(e) => setCategory(e.target.value)}
+            className="rounded-md border border-ink-100 px-3 py-1.5 text-sm"
+          >
+            {BLOG_CATEGORIES.map((c) => (
+              <option key={c} value={c}>{c}</option>
+            ))}
+          </select>
+          <select
+            value={status}
+            onChange={(e) => setStatus(e.target.value as BlogStatus)}
+            className="rounded-md border border-ink-100 px-3 py-1.5 text-sm"
+          >
+            <option value="draft">Draft</option>
+            <option value="published">Published</option>
+          </select>
+          <Toggle checked={isSponsored} onChange={setIsSponsored} label="Sponsored" />
+          <Toggle checked={isPinned} onChange={setIsPinned} label="Pinned" />
+          <Toggle checked={sendAsNewsletter} onChange={setSendAsNewsletter} label="Send as newsletter" />
+          <Button size="sm" onClick={createPost}>Save post</Button>
+        </div>
+        {sendAsNewsletter && status === 'draft' && (
+          <p className="text-xs text-flag-600">
+            Newsletter only sends when status is Published — saving as Draft now won&apos;t email anyone yet.
+          </p>
+        )}
+        {error && <p className="text-sm text-critical-500">{error}</p>}
+      </Card>
+
+      <div className="mt-8 space-y-3">
         {posts.map((post) => (
-          <Link key={post.id} href={`/blog/${post.slug}`}>
-            <Card className="p-5 transition-shadow hover:shadow-md">
-              <h2 className="font-display text-lg font-semibold text-ink-800">{post.title}</h2>
-              <p className="mt-1 text-xs text-ink-400">
-                {new Date(post.createdAt).toLocaleDateString()}
-              </p>
-            </Card>
-          </Link>
+          <Card key={post.id} className="p-4">
+            <div className="flex items-center gap-2">
+              <p className="font-medium text-ink-800">{post.title}</p>
+              {post.isPinned && <span className="rounded bg-flag-50 px-2 py-0.5 text-xs text-flag-600">Pinned</span>}
+              {post.isSponsored && <span className="rounded bg-pulse-50 px-2 py-0.5 text-xs text-pulse-600">Sponsored</span>}
+              {post.contentFormat === 'html' && (
+                <span className="rounded bg-ink-50 px-2 py-0.5 text-xs text-ink-500">HTML</span>
+              )}
+            </div>
+            <p className="text-xs text-ink-400">
+              {post.category ?? 'Uncategorized'} · {post.status} · {new Date(post.createdAt).toLocaleDateString()}
+            </p>
+          </Card>
         ))}
-        {posts.length === 0 && <p className="text-sm text-ink-400">No posts published yet.</p>}
       </div>
     </div>
   );

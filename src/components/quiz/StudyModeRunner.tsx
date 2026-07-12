@@ -71,14 +71,6 @@ export function StudyModeRunner({ quiz, questions }: StudyModeRunnerProps) {
         />
       </div>
 
-      <QuestionNavigator
-        total={questions.length}
-        current={current}
-        states={navigatorStates}
-        onJump={goToQuestion}
-        className="mt-6"
-      />
-
       <Card className="mt-8 p-6">
         <h2 className="font-display text-lg font-medium text-ink-800">{question.prompt}</h2>
 
@@ -150,6 +142,14 @@ export function StudyModeRunner({ quiz, questions }: StudyModeRunnerProps) {
           {isLast ? 'Finish studying' : 'Next question'}
         </Button>
       </div>
+
+      <QuestionNavigator
+        total={questions.length}
+        current={current}
+        states={navigatorStates}
+        onJump={goToQuestion}
+        className="mt-6"
+      />
     </div>
   );
 }

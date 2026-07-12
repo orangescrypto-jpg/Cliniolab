@@ -806,11 +806,20 @@ export async function updateQuizStatus(
 export async function deleteQuiz(quizId: string): Promise<void> {
   const db = getDb();
   await db.batch([
+    // question_reports references questions, so it must be cleared before
+    // the questions themselves - previously missing, which caused deletes
+    // to fail (FK violation) for any quiz with at least one reported question.
+    db.prepare('DELETE FROM question_reports WHERE question_id IN (SELECT id FROM questions WHERE quiz_id = ?)').bind(quizId),
     db.prepare('DELETE FROM attempt_answers WHERE question_id IN (SELECT id FROM questions WHERE quiz_id = ?)').bind(quizId),
     db.prepare('DELETE FROM questions WHERE quiz_id = ?').bind(quizId),
     db.prepare('DELETE FROM quiz_attempts WHERE quiz_id = ?').bind(quizId),
     db.prepare('DELETE FROM comment_reactions WHERE comment_id IN (SELECT id FROM comments WHERE quiz_id = ?)').bind(quizId),
     db.prepare('DELETE FROM comments WHERE quiz_id = ?').bind(quizId),
+    // certificates and quiz_purchases also reference quizzes directly and
+    // were previously left out, blocking deletion of any quiz that had
+    // ever issued a certificate or been purchased.
+    db.prepare('DELETE FROM certificates WHERE quiz_id = ?').bind(quizId),
+    db.prepare('DELETE FROM quiz_purchases WHERE quiz_id = ?').bind(quizId),
     db.prepare('DELETE FROM quizzes WHERE id = ?').bind(quizId),
   ]);
 }

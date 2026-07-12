@@ -7,6 +7,8 @@ import type { QuizWithStats } from '@/types';
 
 export default function AdminQuizzesPage() {
   const [quizzes, setQuizzes] = useState<QuizWithStats[]>([]);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   function load() {
     fetch('/api/admin/quizzes')
@@ -18,13 +20,31 @@ export default function AdminQuizzesPage() {
 
   async function deleteQuiz(id: string) {
     if (!confirm('Delete this quiz permanently? This cannot be undone.')) return;
-    const res = await fetch(`/api/quizzes/${id}`, { method: 'DELETE' });
-    if (res.ok) load();
+    setError(null);
+    setDeletingId(id);
+    try {
+      const res = await fetch(`/api/quizzes/${id}`, { method: 'DELETE' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(data.error ?? `Failed to delete quiz (${res.status})`);
+        return;
+      }
+      load();
+    } catch {
+      setError('Network error while deleting. Please try again.');
+    } finally {
+      setDeletingId(null);
+    }
   }
 
   return (
     <div>
       <h1 className="font-display text-2xl font-semibold text-ink-800">All quizzes</h1>
+      {error && (
+        <p className="mt-4 rounded-md border border-critical-200 bg-critical-50 px-4 py-3 text-sm text-critical-600">
+          {error}
+        </p>
+      )}
       <div className="mt-6 space-y-3">
         {quizzes.map((quiz) => (
           <Card key={quiz.id} className="flex flex-wrap items-center justify-between gap-3 p-4">
@@ -35,8 +55,13 @@ export default function AdminQuizzesPage() {
                 {quiz.attemptCount} attempts
               </p>
             </div>
-            <Button size="sm" variant="danger" onClick={() => deleteQuiz(quiz.id)}>
-              Delete
+            <Button
+              size="sm"
+              variant="danger"
+              onClick={() => deleteQuiz(quiz.id)}
+              disabled={deletingId === quiz.id}
+            >
+              {deletingId === quiz.id ? 'Deleting…' : 'Delete'}
             </Button>
           </Card>
         ))}

@@ -1,12 +1,12 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 import { QuizCard } from '@/components/quiz/QuizCard';
 import { LeaderboardList } from '@/components/quiz/LeaderboardList';
 import type { Category, LeaderboardEntry, QuizWithStats, Subcategory } from '@/types';
 
-export default function SubcategoryPage() {
+function SubcategoryPageContent() {
   const params = useParams<{ slug: string }>();
   const searchParams = useSearchParams();
   const categorySlug = searchParams.get('category');
@@ -67,5 +67,19 @@ export default function SubcategoryPage() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function SubcategoryPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="mx-auto max-w-7xl px-6 py-16">
+          <p className="text-sm text-ink-400">Loading…</p>
+        </div>
+      }
+    >
+      <SubcategoryPageContent />
+    </Suspense>
   );
 }

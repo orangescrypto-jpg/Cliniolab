@@ -130,6 +130,7 @@ export async function submitAttempt(
       correctAnswer: q.correctAnswer,
       isCorrect,
       explanation: q.explanation,
+      options: q.options ?? [],
     };
   });
 

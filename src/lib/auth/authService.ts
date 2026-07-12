@@ -8,11 +8,15 @@ export interface SessionUser {
   displayName: string | null;
 }
 
+export interface SignUpResult extends SessionUser {
+  needsEmailConfirmation: boolean;
+}
+
 export async function signUp(
   email: string,
   password: string,
   displayName: string
-): Promise<SessionUser> {
+): Promise<SignUpResult> {
   const supabase = getSupabaseBrowserClient();
   const { data, error } = await supabase.auth.signUp({
     email,
@@ -22,11 +26,13 @@ export async function signUp(
   if (error) throw new Error(error.message);
   if (!data.user) throw new Error('Sign up did not return a user.');
 
-  // Ensure the corresponding D1 users row exists via the API route, since
-  // the browser has no direct D1 access.
-  await fetch('/api/auth/sync-user', { method: 'POST' });
+  const needsEmailConfirmation = !data.session;
 
-  return { id: data.user.id, email: data.user.email ?? email, displayName };
+  if (!needsEmailConfirmation) {
+    await fetch('/api/auth/sync-user', { method: 'POST' });
+  }
+
+  return { id: data.user.id, email: data.user.email ?? email, displayName, needsEmailConfirmation };
 }
 
 export async function signIn(email: string, password: string): Promise<SessionUser> {

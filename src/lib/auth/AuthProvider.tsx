@@ -15,7 +15,7 @@ interface AuthContextValue {
   user: FullSessionUser | null;
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
-  register: (email: string, password: string, displayName: string) => Promise<void>;
+  register: (email: string, password: string, displayName: string) => Promise<{ needsEmailConfirmation: boolean }>;
   logout: () => Promise<void>;
 }
 
@@ -66,9 +66,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const register = useCallback(async (email: string, password: string, displayName: string) => {
-    await signUp(email, password, displayName);
+    const result = await signUp(email, password, displayName);
+    if (result.needsEmailConfirmation) {
+      // No session yet — user must confirm their email before they can log in.
+      return { needsEmailConfirmation: true };
+    }
     const appUser = await fetchAppUser();
     setUser(appUser);
+    return { needsEmailConfirmation: false };
   }, []);
 
   const logout = useCallback(async () => {

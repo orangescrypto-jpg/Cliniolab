@@ -53,12 +53,13 @@ function resolveDriver(): DbDriver {
 
 function getD1BindingDb(): D1Database {
   // Loaded via indirect eval, not a literal require(...), so Turbopack's
-  // static import analysis doesn't try to resolve/bundle this module on
-  // Vercel, where @cloudflare/next-on-pages is never installed. Kept
-  // synchronous deliberately: getDb() is called from ~150 sites across
-  // every service file, and making it async would require awaiting all
-  // of them.
-  let getRequestContext: typeof import('@cloudflare/next-on-pages').getRequestContext;
+  // bundler and the TypeScript checker never try to resolve this module
+  // on Vercel, where @cloudflare/next-on-pages is never installed (no
+  // package, no type declarations). Kept synchronous deliberately:
+  // getDb() is called from ~150 sites across every service file, and
+  // making it async would require awaiting all of them.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let getRequestContext: () => { env: Record<string, unknown> };
   try {
     // eslint-disable-next-line no-eval
     const dynamicRequire = eval('require') as NodeRequire;

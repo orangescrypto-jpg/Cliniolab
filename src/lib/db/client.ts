@@ -3,19 +3,22 @@
  *
  * This is the ONLY file in the codebase allowed to talk to the database
  * directly. Every service module in src/lib/db/services/* imports `getDb`
- * from here instead of touching D1 or Postgres itself. This keeps the
- * database swappable and testable, and stops raw queries leaking into
+ * from here instead of touching D1 itself. This keeps the database
+ * swappable and testable, and stops raw queries leaking into
  * components/routes.
  *
- * Two backends are supported behind the same D1Database interface:
- *  - Cloudflare D1 (production, via @cloudflare/next-on-pages bindings)
- *  - Postgres/Supabase (Vercel preview/testing, via the `pg` package)
+ * D1 is accessed two ways behind the same D1Database interface:
+ *  - Workers binding (Cloudflare Pages production, via
+ *    @cloudflare/next-on-pages / wrangler.toml [[d1_databases]])
+ *  - HTTP API (Vercel testing, via Cloudflare's REST API) — hits the
+ *    SAME D1 database as production, just over HTTPS instead of a
+ *    binding, since Vercel can't reach Workers bindings directly.
  *
- * Which one is used is controlled by DB_DRIVER ('d1' | 'postgres').
- * Defaults to 'postgres' when DB_DRIVER is unset and DATABASE_URL is
+ * Which one is used is controlled by DB_DRIVER ('d1' | 'http').
+ * Defaults to 'http' when DB_DRIVER is unset and D1_API_TOKEN is
  * present (typical on Vercel), otherwise 'd1'.
  *
- * Service files never need to know which backend is active.
+ * Service files never need to know which access method is active.
  */
 
 export interface D1Result<T = unknown> {
@@ -40,17 +43,17 @@ export interface D1PreparedStatement {
   all<T = unknown>(): Promise<D1Result<T>>;
 }
 
-type DbDriver = 'd1' | 'postgres';
+type DbDriver = 'd1' | 'http';
 
 function resolveDriver(): DbDriver {
   const explicit = process.env.DB_DRIVER as DbDriver | undefined;
-  if (explicit === 'd1' || explicit === 'postgres') return explicit;
-  return process.env.DATABASE_URL ? 'postgres' : 'd1';
+  if (explicit === 'd1' || explicit === 'http') return explicit;
+  return process.env.D1_API_TOKEN ? 'http' : 'd1';
 }
 
-function getD1Db(): D1Database {
+function getD1BindingDb(): D1Database {
   // Lazy require (not a top-level import) so @cloudflare/next-on-pages is
-  // never pulled into the Vercel/Postgres build path. Kept synchronous
+  // never pulled into the Vercel build path. Kept synchronous
   // deliberately: getDb() is called from ~150 sites across every service
   // file, and making it async would require awaiting all of them.
   // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -64,23 +67,23 @@ function getD1Db(): D1Database {
   return env.DB;
 }
 
-let pgDbSingleton: D1Database | undefined;
+let d1HttpSingleton: D1Database | undefined;
 
-function getPostgresDb(): D1Database {
-  if (!pgDbSingleton) {
+function getD1HttpDb(): D1Database {
+  if (!d1HttpSingleton) {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const { createPostgresD1Adapter } = require('@/lib/db/postgresAdapter') as typeof import('@/lib/db/postgresAdapter');
-    pgDbSingleton = createPostgresD1Adapter();
+    const { createD1HttpAdapter } = require('@/lib/db/d1HttpAdapter') as typeof import('@/lib/db/d1HttpAdapter');
+    d1HttpSingleton = createD1HttpAdapter();
   }
-  return pgDbSingleton;
+  return d1HttpSingleton;
 }
 
 /**
  * Returns the active database, implementing the same D1Database interface
- * regardless of backend. Throws a descriptive error if not configured.
+ * regardless of access method. Throws a descriptive error if not configured.
  */
 export function getDb(): D1Database {
-  return resolveDriver() === 'postgres' ? getPostgresDb() : getD1Db();
+  return resolveDriver() === 'http' ? getD1HttpDb() : getD1BindingDb();
 }
 
 /**

@@ -6,8 +6,9 @@ import { Button } from '@/components/ui/Button';
 import { Toggle } from '@/components/ui/Toggle';
 import { ImagePicker } from '@/components/ui/ImagePicker';
 import { RichTextEditor } from '@/components/ui/RichTextEditor';
-import { BLOG_CATEGORIES } from '@/lib/constants/blogCategories';
 import type { BlogContentFormat, BlogPost, BlogStatus } from '@/types';
+
+interface BlogCategoryOption { id: string; name: string; slug: string; sortOrder: number }
 
 function slugify(name: string): string {
   return name.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
@@ -29,7 +30,9 @@ export default function AdminBlogPage() {
   const [content, setContent] = useState('');
   const [contentFormat, setContentFormat] = useState<BlogContentFormat>('markdown');
   const [featuredImageUrl, setFeaturedImageUrl] = useState('');
-  const [category, setCategory] = useState<string>(BLOG_CATEGORIES[0]);
+  const [blogCategories, setBlogCategories] = useState<BlogCategoryOption[]>([]);
+  const [category, setCategory] = useState<string>('');
+  const [newBlogCategoryName, setNewBlogCategoryName] = useState('');
   const [status, setStatus] = useState<BlogStatus>('draft');
   const [seoTitle, setSeoTitle] = useState('');
   const [seoDescription, setSeoDescription] = useState('');
@@ -45,6 +48,35 @@ export default function AdminBlogPage() {
   }
 
   useEffect(load, []);
+
+  function loadBlogCategories() {
+    fetch('/api/blog-categories')
+      .then((res) => res.json())
+      .then((data) => {
+        const cats: BlogCategoryOption[] = data.categories ?? [];
+        setBlogCategories(cats);
+        setCategory((current) => current || cats[0]?.name || '');
+      });
+  }
+
+  useEffect(loadBlogCategories, []);
+
+  async function addBlogCategory() {
+    if (!newBlogCategoryName.trim()) return;
+    setError(null);
+    const res = await fetch('/api/admin/blog-categories', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: newBlogCategoryName, slug: slugify(newBlogCategoryName) }),
+    });
+    if (res.ok) {
+      setNewBlogCategoryName('');
+      loadBlogCategories();
+    } else {
+      const data = await res.json();
+      setError(data.error);
+    }
+  }
 
   // Auto-derive the slug from the title until the admin manually edits
   // the slug field themselves — same UX WordPress uses.
@@ -172,10 +204,17 @@ export default function AdminBlogPage() {
             onChange={(e) => setCategory(e.target.value)}
             className="rounded-md border border-ink-100 px-3 py-1.5 text-sm"
           >
-            {BLOG_CATEGORIES.map((c) => (
-              <option key={c} value={c}>{c}</option>
+            {blogCategories.map((c) => (
+              <option key={c.id} value={c.name}>{c.name}</option>
             ))}
           </select>
+          <input
+            value={newBlogCategoryName}
+            onChange={(e) => setNewBlogCategoryName(e.target.value)}
+            placeholder="New category name"
+            className="rounded-md border border-ink-100 px-3 py-1.5 text-sm"
+          />
+          <Button size="sm" variant="secondary" onClick={addBlogCategory}>Add category</Button>
           <select
             value={status}
             onChange={(e) => setStatus(e.target.value as BlogStatus)}

@@ -234,14 +234,6 @@ export function QuizRunner({ quiz, questions: rawQuestions, submitEndpoint }: Qu
         <div className="h-1 rounded-full bg-pulse-500 transition-all" style={{ width: `${progressPercent}%` }} />
       </div>
 
-      <QuestionNavigator
-        total={questions.length}
-        current={current}
-        states={navigatorStates}
-        onJump={(i) => setCurrent(i)}
-        className="mt-6"
-      />
-
       <Card className="mt-8 p-6">
         <h2 className="font-display text-lg font-medium text-ink-800">{question.prompt}</h2>
         <div className="mt-3">
@@ -321,6 +313,14 @@ export function QuizRunner({ quiz, questions: rawQuestions, submitEndpoint }: Qu
           </Button>
         )}
       </div>
+
+      <QuestionNavigator
+        total={questions.length}
+        current={current}
+        states={navigatorStates}
+        onJump={(i) => setCurrent(i)}
+        className="mt-6"
+      />
     </div>
   );
 }

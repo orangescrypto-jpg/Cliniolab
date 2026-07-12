@@ -1,11 +1,11 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 
-export default function PurchaseSuccessPage() {
+function PurchaseSuccessContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   // Flutterwave appends tx_ref, transaction_id, and status to the redirect
@@ -56,5 +56,21 @@ export default function PurchaseSuccessPage() {
         )}
       </Card>
     </div>
+  );
+}
+
+export default function PurchaseSuccessPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="mx-auto max-w-md px-6 py-24 text-center">
+          <Card className="p-8">
+            <p className="text-sm text-ink-500">Loading…</p>
+          </Card>
+        </div>
+      }
+    >
+      <PurchaseSuccessContent />
+    </Suspense>
   );
 }

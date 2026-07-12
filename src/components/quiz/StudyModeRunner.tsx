@@ -1,9 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
+import { QuestionNavigator } from '@/components/quiz/QuestionNavigator';
 import type { Quiz, QuizQuestion } from '@/types';
 
 interface StudyModeRunnerProps {
@@ -22,16 +23,31 @@ export function StudyModeRunner({ quiz, questions }: StudyModeRunnerProps) {
   const [current, setCurrent] = useState(0);
   const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null);
   const [revealed, setRevealed] = useState(false);
+  // Tracks which questions have already been answered in this session, so
+  // the navigator grid stays accurate when the user jumps back and forth.
+  const [answeredIds, setAnsweredIds] = useState<Set<string>>(new Set());
 
   const question = questions[current];
   const isLast = current === questions.length - 1;
   const isCorrect = selectedAnswer !== null &&
     selectedAnswer.trim().toLowerCase() === question.correctAnswer.trim().toLowerCase();
 
+  const navigatorStates = useMemo(
+    () => questions.map((q) => ({ answered: answeredIds.has(q.id) })),
+    [questions, answeredIds]
+  );
+
   function selectAnswer(answer: string) {
     if (revealed) return; // lock in the answer once revealed
     setSelectedAnswer(answer);
     setRevealed(true);
+    setAnsweredIds((prev) => new Set(prev).add(question.id));
+  }
+
+  function goToQuestion(index: number) {
+    setCurrent(index);
+    setSelectedAnswer(null);
+    setRevealed(false);
   }
 
   function goNext() {
@@ -39,9 +55,7 @@ export function StudyModeRunner({ quiz, questions }: StudyModeRunnerProps) {
       router.push(`/quizzes/${quiz.id}`);
       return;
     }
-    setCurrent((c) => c + 1);
-    setSelectedAnswer(null);
-    setRevealed(false);
+    goToQuestion(current + 1);
   }
 
   return (
@@ -56,6 +70,14 @@ export function StudyModeRunner({ quiz, questions }: StudyModeRunnerProps) {
           style={{ width: `${((current + 1) / questions.length) * 100}%` }}
         />
       </div>
+
+      <QuestionNavigator
+        total={questions.length}
+        current={current}
+        states={navigatorStates}
+        onJump={goToQuestion}
+        className="mt-6"
+      />
 
       <Card className="mt-8 p-6">
         <h2 className="font-display text-lg font-medium text-ink-800">{question.prompt}</h2>

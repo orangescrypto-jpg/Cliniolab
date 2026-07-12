@@ -1,11 +1,21 @@
 'use client';
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { Suspense, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/lib/auth/AuthProvider';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
+
+/**
+ * Only redirect back to same-origin, relative paths - and never back into
+ * an auth page itself, or a returned `next` could loop register <-> login.
+ */
+function sanitizeNextPath(next: string | null): string {
+  if (!next || !next.startsWith('/') || next.startsWith('//')) return '/dashboard';
+  if (next.startsWith('/login') || next.startsWith('/register')) return '/dashboard';
+  return next;
+}
 
 function EyeIcon({ open }: { open: boolean }) {
   if (open) {
@@ -25,8 +35,10 @@ function EyeIcon({ open }: { open: boolean }) {
   );
 }
 
-export default function RegisterPage() {
+function RegisterForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const nextPath = sanitizeNextPath(searchParams.get('next'));
   const { register } = useAuth();
   const [displayName, setDisplayName] = useState('');
   const [email, setEmail] = useState('');
@@ -51,7 +63,7 @@ export default function RegisterPage() {
       if (needsEmailConfirmation) {
         setNeedsEmailConfirmation(true);
       } else {
-        router.push('/dashboard');
+        router.push(nextPath);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to sign up');
@@ -74,7 +86,12 @@ export default function RegisterPage() {
           </p>
         </Card>
         <p className="mt-4 text-sm text-ink-500">
-          <Link href="/login" className="font-medium text-pulse-600">Go to login</Link>
+          <Link
+            href={nextPath !== '/dashboard' ? `/login?next=${encodeURIComponent(nextPath)}` : '/login'}
+            className="font-medium text-pulse-600"
+          >
+            Go to login
+          </Link>
         </p>
       </div>
     );
@@ -153,8 +170,28 @@ export default function RegisterPage() {
         </form>
       </Card>
       <p className="mt-4 text-sm text-ink-500">
-        Already have an account? <Link href="/login" className="font-medium text-pulse-600">Log in</Link>
+        Already have an account?{' '}
+        <Link
+          href={nextPath !== '/dashboard' ? `/login?next=${encodeURIComponent(nextPath)}` : '/login'}
+          className="font-medium text-pulse-600"
+        >
+          Log in
+        </Link>
       </p>
     </div>
+  );
+}
+
+export default function RegisterPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="mx-auto max-w-sm px-6 py-24">
+          <p className="text-sm text-ink-500">Loading…</p>
+        </div>
+      }
+    >
+      <RegisterForm />
+    </Suspense>
   );
 }

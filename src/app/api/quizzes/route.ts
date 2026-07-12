@@ -11,6 +11,7 @@ export async function GET(request: Request) {
   const mine = searchParams.get('mine');
   const limitParam = searchParams.get('limit');
   const limit = limitParam ? Number(limitParam) : undefined;
+  const pageParam = searchParams.get('page');
 
   if (mine === 'true') {
     const user = await getCurrentUser();
@@ -27,6 +28,14 @@ export async function GET(request: Request) {
   if (categoryId) {
     const quizzes = await quizService.listQuizzesByCategory(categoryId, limit);
     return NextResponse.json({ quizzes });
+  }
+
+  // Paginated browse mode (used by the /quizzes page) — opt in via ?page=
+  if (pageParam) {
+    const page = Math.max(1, Number(pageParam) || 1);
+    const pageSize = Math.min(50, Math.max(1, Number(searchParams.get('pageSize') ?? 12) || 12));
+    const result = await quizService.listLatestPublicQuizzesPaginated(page, pageSize);
+    return NextResponse.json(result);
   }
 
   const quizzes = await quizService.listLatestPublicQuizzes(limit);

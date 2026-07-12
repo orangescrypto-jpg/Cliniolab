@@ -11,11 +11,13 @@ import { BannerSlot } from '@/components/layout/BannerSlot';
 import { ScholarOfTheDayCard } from '@/components/layout/ScholarOfTheDayCard';
 import { AbbreviationsTeaser } from '@/components/layout/AbbreviationsTeaser';
 import { Button } from '@/components/ui/Button';
-import { BLOG_CATEGORIES } from '@/lib/constants/blogCategories';
 import type { Category, LeaderboardEntry, Resource } from '@/types';
+
+interface BlogCategoryOption { id: string; name: string; slug: string; sortOrder: number }
 
 export default function HomePage() {
   const [categories, setCategories] = useState<Category[]>([]);
+  const [blogCategories, setBlogCategories] = useState<BlogCategoryOption[]>([]);
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
   const [leaderboardEnabled, setLeaderboardEnabled] = useState(true);
   const [leaderboardLabel, setLeaderboardLabel] = useState('Top Quiz Takers');
@@ -26,6 +28,10 @@ export default function HomePage() {
     fetch('/api/categories')
       .then((res) => res.json())
       .then((data) => setCategories(data.categories ?? []));
+
+    fetch('/api/blog-categories')
+      .then((res) => res.json())
+      .then((data) => setBlogCategories(data.categories ?? []));
 
     fetch('/api/leaderboard/general')
       .then((res) => res.json())
@@ -78,8 +84,8 @@ export default function HomePage() {
       <DailyQuizBanner />
 
       {/* Blog / education content, one section per fixed category */}
-      {BLOG_CATEGORIES.map((category) => (
-        <CategoryBlogSection key={category} category={category} />
+      {blogCategories.map((category) => (
+        <CategoryBlogSection key={category.id} category={category.name} />
       ))}
 
       <div className="chart-strip mx-auto max-w-7xl text-ink-200" aria-hidden />

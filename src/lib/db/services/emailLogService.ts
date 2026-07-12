@@ -7,7 +7,8 @@ export type EmailType =
   | 'quiz_result'
   | 'comment_reply'
   | 'inactivity_nudge'
-  | 'password_reset';
+  | 'password_reset'
+  | 'certificate_issued';
 
 export async function logEmailSent(
   userId: string | null,

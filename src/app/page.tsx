@@ -11,11 +11,13 @@ import { BannerSlot } from '@/components/layout/BannerSlot';
 import { ScholarOfTheDayCard } from '@/components/layout/ScholarOfTheDayCard';
 import { AbbreviationsTeaser } from '@/components/layout/AbbreviationsTeaser';
 import { Button } from '@/components/ui/Button';
+import { useAuth } from '@/lib/auth/AuthProvider';
 import type { Category, LeaderboardEntry, Resource } from '@/types';
 
 interface BlogCategoryOption { id: string; name: string; slug: string; sortOrder: number }
 
 export default function HomePage() {
+  const { user } = useAuth();
   const [categories, setCategories] = useState<Category[]>([]);
   const [blogCategories, setBlogCategories] = useState<BlogCategoryOption[]>([]);
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
@@ -62,19 +64,21 @@ export default function HomePage() {
       <section className="border-b border-ink-100 bg-white">
         <div className="mx-auto max-w-7xl px-6 py-20">
           <p className="font-mono text-xs uppercase tracking-widest text-pulse-600">
-            Clinical &amp; Nursing CBT Practice
+            Clinical &amp; Nursing Learning Hub
           </p>
           <h1 className="mt-4 max-w-2xl font-display text-4xl font-semibold leading-tight text-ink-800 sm:text-5xl">
-            Study smarter for your clinical and nursing exams.
+            Learn, revise, and test yourself for your clinical and nursing exams.
           </h1>
           <p className="mt-4 max-w-xl text-lg text-ink-500">
-            Quizzes and computer-based test (CBT) simulations across core sciences, clinical
-            specialties, nursing practice, and board exam prep — built and shared by students
-            like you.
+            In-depth articles and study guides across core sciences, clinical specialties, and
+            nursing practice, paired with quizzes and computer-based test (CBT) simulations to
+            put that knowledge to the test — built and shared by students like you.
           </p>
           <div className="mt-8 flex gap-4">
             <Link href="/categories"><Button size="lg">Browse categories</Button></Link>
-            <Link href="/register"><Button size="lg" variant="secondary">Create a quiz</Button></Link>
+            <Link href={user ? '/quizzes/new' : '/login?next=%2Fquizzes%2Fnew'}>
+              <Button size="lg" variant="secondary">Create a quiz</Button>
+            </Link>
           </div>
         </div>
       </section>

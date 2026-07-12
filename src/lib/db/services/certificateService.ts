@@ -51,6 +51,22 @@ export async function issueCertificateIfEligible(
   return { id, userId, quizId, quizTitle: quiz.title, issuedAt };
 }
 
+export async function getCertificateById(certificateId: string): Promise<(Certificate & { displayName: string | null }) | null> {
+  const db = getDb();
+  const row = await db
+    .prepare(
+      `SELECT cert.*, q.title as quiz_title, u.display_name as user_display_name
+       FROM certificates cert
+       JOIN quizzes q ON q.id = cert.quiz_id
+       JOIN users u ON u.id = cert.user_id
+       WHERE cert.id = ?`
+    )
+    .bind(certificateId)
+    .first<CertificateRow & { user_display_name: string | null }>();
+  if (!row) return null;
+  return { ...mapCertificate(row), displayName: row.user_display_name };
+}
+
 export async function listCertificatesForUser(userId: string): Promise<Certificate[]> {
   const db = getDb();
   const { results } = await db

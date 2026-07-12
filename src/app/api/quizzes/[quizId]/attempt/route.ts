@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getCurrentUser } from '@/lib/auth/currentUser';
 import { attemptService, certificateService, featureFlagService, quizService, userService, RetakeNotAllowedError } from '@/lib/db';
-import { sendQuizResultEmail } from '@/lib/email/emailService';
+import { sendQuizResultEmail, sendCertificateIssuedEmail } from '@/lib/email/emailService';
 import type { AttemptSubmission } from '@/types';
 
 interface RouteParams {
@@ -46,6 +46,11 @@ export async function POST(request: Request, { params }: RouteParams) {
         70,
         result.percentage
       );
+      if (certificate) {
+        // Fire-and-forget: an email failure shouldn't fail the attempt
+        // response the user is waiting on for their result screen.
+        sendCertificateIssuedEmail(user, certificate.quizTitle, certificate.id).catch(() => {});
+      }
     }
 
     // Fire-and-forget: an email failure shouldn't fail the attempt

@@ -109,6 +109,13 @@ export async function DELETE(_request: Request, { params }: RouteParams) {
     return NextResponse.json({ error: 'Not permitted to delete this quiz' }, { status: 403 });
   }
 
-  await quizService.deleteQuiz(quizId);
-  return NextResponse.json({ success: true });
+  try {
+    await quizService.deleteQuiz(quizId);
+    return NextResponse.json({ success: true });
+  } catch (err) {
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : 'Failed to delete quiz' },
+      { status: 500 }
+    );
+  }
 }

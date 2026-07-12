@@ -62,6 +62,7 @@ INSERT INTO feature_flags (key, enabled, label) VALUES
 ('email_quiz_results', 1, 'Quiz Result Emails'),
 ('email_comment_reply', 1, 'Comment Reply Emails'),
 ('email_inactivity_nudge', 1, 'Inactivity Nudge Emails'),
+('email_certificate_issued', 1, 'Certificate Issued Emails'),
 ('daily_quiz', 1, 'Question of the Day'),
 ('jobs_page', 1, 'Jobs Page'),
 ('scholarships_page', 1, 'Scholarships Page'),

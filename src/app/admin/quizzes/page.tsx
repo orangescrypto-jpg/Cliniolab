@@ -3,20 +3,34 @@
 import { useEffect, useState } from 'react';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
+import { Pagination } from '@/components/ui/Pagination';
 import type { QuizWithStats } from '@/types';
+
+const PAGE_SIZE = 20;
 
 export default function AdminQuizzesPage() {
   const [quizzes, setQuizzes] = useState<QuizWithStats[]>([]);
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  function load() {
-    fetch('/api/admin/quizzes')
+  function load(targetPage = page) {
+    setLoading(true);
+    fetch(`/api/admin/quizzes?page=${targetPage}&pageSize=${PAGE_SIZE}`)
       .then((res) => res.json())
-      .then((data) => setQuizzes(data.quizzes ?? []));
+      .then((data) => {
+        setQuizzes(data.quizzes ?? []);
+        setTotal(data.total ?? 0);
+      })
+      .finally(() => setLoading(false));
   }
 
-  useEffect(load, []);
+  useEffect(() => {
+    load(page);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page]);
 
   async function deleteQuiz(id: string) {
     if (!confirm('Delete this quiz permanently? This cannot be undone.')) return;
@@ -29,7 +43,13 @@ export default function AdminQuizzesPage() {
         setError(data.error ?? `Failed to delete quiz (${res.status})`);
         return;
       }
-      load();
+      // If we just deleted the last item on this page (and it's not page
+      // 1), step back a page so the view doesn't show an empty list.
+      if (quizzes.length === 1 && page > 1) {
+        setPage((p) => p - 1);
+      } else {
+        load(page);
+      }
     } catch {
       setError('Network error while deleting. Please try again.');
     } finally {
@@ -46,6 +66,7 @@ export default function AdminQuizzesPage() {
         </p>
       )}
       <div className="mt-6 space-y-3">
+        {loading && quizzes.length === 0 && <p className="text-sm text-ink-400">Loading…</p>}
         {quizzes.map((quiz) => (
           <Card key={quiz.id} className="flex flex-wrap items-center justify-between gap-3 p-4">
             <div>
@@ -65,8 +86,9 @@ export default function AdminQuizzesPage() {
             </Button>
           </Card>
         ))}
-        {quizzes.length === 0 && <p className="text-sm text-ink-400">No quizzes yet.</p>}
+        {!loading && quizzes.length === 0 && <p className="text-sm text-ink-400">No quizzes yet.</p>}
       </div>
+      <Pagination page={page} pageSize={PAGE_SIZE} total={total} onPageChange={setPage} className="mt-8" />
     </div>
   );
 }

@@ -1,0 +1,844 @@
+import { getDb, generateId, nowIso } from '@/lib/db/client';
+import type {
+  Quiz,
+  QuizWithStats,
+  QuizQuestion,
+  QuizInput,
+  LinkExpiryOption,
+  QuizVisibility,
+} from '@/types';
+
+interface QuizRow {
+  id: string;
+  subcategory_id: string;
+  creator_id: string;
+  title: string;
+  description: string | null;
+  mode: string;
+  difficulty: string;
+  visibility: string;
+  share_slug: string | null;
+  link_expires_at: string | null;
+  time_limit_seconds: number | null;
+  shuffle_questions: number;
+  shuffle_options: number;
+  anti_cheat_enabled: number;
+  retake_policy: string;
+  retake_limit: number | null;
+  status: string;
+  pricing: string;
+  price_kobo: number | null;
+  allow_flagging: number;
+  created_at: string;
+  updated_at: string;
+}
+
+interface QuestionRow {
+  id: string;
+  quiz_id: string;
+  type: string;
+  prompt: string;
+  options: string | null;
+  correct_answer: string;
+  explanation: string | null;
+  sort_order: number;
+}
+
+function mapQuiz(row: QuizRow): Quiz {
+  return {
+    id: row.id,
+    subcategoryId: row.subcategory_id,
+    creatorId: row.creator_id,
+    title: row.title,
+    description: row.description,
+    mode: row.mode as Quiz['mode'],
+    difficulty: row.difficulty as Quiz['difficulty'],
+    visibility: row.visibility as Quiz['visibility'],
+    shareSlug: row.share_slug,
+    linkExpiresAt: row.link_expires_at,
+    timeLimitSeconds: row.time_limit_seconds,
+    shuffleQuestions: row.shuffle_questions === 1,
+    shuffleOptions: row.shuffle_options === 1,
+    antiCheatEnabled: row.anti_cheat_enabled === 1,
+    retakePolicy: row.retake_policy as Quiz['retakePolicy'],
+    retakeLimit: row.retake_limit,
+    status: row.status as Quiz['status'],
+    pricing: row.pricing as Quiz['pricing'],
+    priceKobo: row.price_kobo,
+    allowFlagging: row.allow_flagging === 1,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+function mapQuestion(row: QuestionRow): QuizQuestion {
+  return {
+    id: row.id,
+    quizId: row.quiz_id,
+    type: row.type as QuizQuestion['type'],
+    prompt: row.prompt,
+    options: row.options ? JSON.parse(row.options) : null,
+    correctAnswer: row.correct_answer,
+    explanation: row.explanation,
+    sortOrder: row.sort_order,
+  };
+}
+
+/** Computes an ISO expiry timestamp from a link-expiry option. */
+export function computeExpiryDate(
+  option: LinkExpiryOption | undefined,
+  customDate?: string
+): string | null {
+  if (!option) return null;
+  const now = new Date();
+  switch (option) {
+    case '1d':
+      now.setDate(now.getDate() + 1);
+      return now.toISOString();
+    case '3d':
+      now.setDate(now.getDate() + 3);
+      return now.toISOString();
+    case '7d':
+      now.setDate(now.getDate() + 7);
+      return now.toISOString();
+    case 'custom':
+      if (!customDate) throw new Error('customExpiryDate is required when linkExpiry is "custom"');
+      return new Date(customDate).toISOString();
+    default:
+      return null;
+  }
+}
+
+function generateShareSlug(): string {
+  return crypto.randomUUID().replace(/-/g, '').slice(0, 12);
+}
+
+/**
+ * Creates a quiz plus its questions in a single batch. Handles the
+ * public/private visibility + expiry logic described by the product spec:
+ * - public quizzes have no expiry and show in "Latest Quizzes"
+ * - private quizzes get a share slug + expiry computed from linkExpiry
+ */
+export async function createQuiz(creatorId: string, input: QuizInput): Promise<Quiz> {
+  const db = getDb();
+  const id = generateId('quiz');
+  const now = nowIso();
+
+  const shareSlug = input.visibility === 'private' ? generateShareSlug() : null;
+  const linkExpiresAt =
+    input.visibility === 'private'
+      ? computeExpiryDate(input.linkExpiry, input.customExpiryDate)
+      : null;
+
+  const quizStatement = db
+    .prepare(
+      `INSERT INTO quizzes (
+        id, subcategory_id, creator_id, title, description, mode, difficulty,
+        visibility, share_slug, link_expires_at, time_limit_seconds,
+        shuffle_questions, shuffle_options,
+        anti_cheat_enabled, retake_policy, retake_limit, status, pricing, price_kobo,
+        allow_flagging, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    )
+    .bind(
+      id,
+      input.subcategoryId,
+      creatorId,
+      input.title,
+      input.description ?? null,
+      input.mode,
+      input.difficulty,
+      input.visibility,
+      shareSlug,
+      linkExpiresAt,
+      input.timeLimitSeconds ?? null,
+      input.shuffleQuestions ? 1 : 0,
+      input.shuffleOptions ? 1 : 0,
+      input.antiCheatEnabled ? 1 : 0,
+      input.retakePolicy,
+      input.retakeLimit ?? null,
+      'published',
+      input.pricing ?? 'free',
+      input.pricing === 'paid' ? input.priceKobo ?? null : null,
+      input.allowFlagging ?? true ? 1 : 0,
+      now,
+      now
+    );
+
+  const questionStatements = input.questions.map((q, index) =>
+    db
+      .prepare(
+        `INSERT INTO questions (id, quiz_id, type, prompt, options, correct_answer, explanation, sort_order)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+      .bind(
+        generateId('q'),
+        id,
+        q.type,
+        q.prompt,
+        q.options ? JSON.stringify(q.options) : null,
+        q.correctAnswer,
+        q.explanation ?? null,
+        index
+      )
+  );
+
+  await db.batch([quizStatement, ...questionStatements]);
+
+  return {
+    id,
+    subcategoryId: input.subcategoryId,
+    creatorId,
+    title: input.title,
+    description: input.description ?? null,
+    mode: input.mode,
+    difficulty: input.difficulty,
+    visibility: input.visibility,
+    shareSlug,
+    linkExpiresAt,
+    timeLimitSeconds: input.timeLimitSeconds ?? null,
+    shuffleQuestions: input.shuffleQuestions ?? false,
+    shuffleOptions: input.shuffleOptions ?? false,
+    antiCheatEnabled: input.antiCheatEnabled,
+    retakePolicy: input.retakePolicy,
+    retakeLimit: input.retakeLimit ?? null,
+    status: 'published',
+    pricing: input.pricing ?? 'free',
+    priceKobo: input.pricing === 'paid' ? input.priceKobo ?? null : null,
+    allowFlagging: input.allowFlagging ?? true,
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
+/**
+ * Updates an existing quiz's metadata and replaces its full question set.
+ * Works identically for study, quiz, and exam mode since all three share
+ * the same QuizInput shape as createQuiz. Existing attempt history,
+ * leaderboard standing, and comments are preserved — only the quizzes and
+ * questions tables are touched, unlike deleteQuiz which cascades further.
+ *
+ * Questions are replaced wholesale (delete then re-insert) rather than
+ * diffed, matching the simple insert-only pattern createQuiz already uses.
+ * This means existing attempts still show their originally-submitted
+ * answers/scores; only future attempts see the updated question set.
+ */
+export async function updateQuiz(quizId: string, input: QuizInput): Promise<Quiz> {
+  const db = getDb();
+  const now = nowIso();
+
+  const existing = await getQuizById(quizId);
+  if (!existing) throw new Error('Quiz not found');
+
+  // Visibility/share-slug changes go through setQuizVisibility (called
+  // separately by the API route) so we preserve whatever slug/expiry is
+  // already set here rather than silently resetting it on every edit.
+  const shareSlug = existing.shareSlug;
+  const linkExpiresAt = existing.linkExpiresAt;
+
+  const quizStatement = db
+    .prepare(
+      `UPDATE quizzes SET
+        subcategory_id = ?, title = ?, description = ?, mode = ?, difficulty = ?,
+        time_limit_seconds = ?, shuffle_questions = ?, shuffle_options = ?,
+        anti_cheat_enabled = ?, retake_policy = ?, retake_limit = ?,
+        pricing = ?, price_kobo = ?, allow_flagging = ?, updated_at = ?
+      WHERE id = ?`
+    )
+    .bind(
+      input.subcategoryId,
+      input.title,
+      input.description ?? null,
+      input.mode,
+      input.difficulty,
+      input.timeLimitSeconds ?? null,
+      input.shuffleQuestions ? 1 : 0,
+      input.shuffleOptions ? 1 : 0,
+      input.antiCheatEnabled ? 1 : 0,
+      input.retakePolicy,
+      input.retakeLimit ?? null,
+      input.pricing ?? 'free',
+      input.pricing === 'paid' ? input.priceKobo ?? null : null,
+      input.allowFlagging ?? true ? 1 : 0,
+      now,
+      quizId
+    );
+
+  const deleteQuestionsStatement = db.prepare('DELETE FROM questions WHERE quiz_id = ?').bind(quizId);
+
+  const questionStatements = input.questions.map((q, index) =>
+    db
+      .prepare(
+        `INSERT INTO questions (id, quiz_id, type, prompt, options, correct_answer, explanation, sort_order)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+      .bind(
+        generateId('q'),
+        quizId,
+        q.type,
+        q.prompt,
+        q.options ? JSON.stringify(q.options) : null,
+        q.correctAnswer,
+        q.explanation ?? null,
+        index
+      )
+  );
+
+  await db.batch([quizStatement, deleteQuestionsStatement, ...questionStatements]);
+
+  return {
+    ...existing,
+    subcategoryId: input.subcategoryId,
+    title: input.title,
+    description: input.description ?? null,
+    mode: input.mode,
+    difficulty: input.difficulty,
+    shareSlug,
+    linkExpiresAt,
+    timeLimitSeconds: input.timeLimitSeconds ?? null,
+    shuffleQuestions: input.shuffleQuestions ?? false,
+    shuffleOptions: input.shuffleOptions ?? false,
+    antiCheatEnabled: input.antiCheatEnabled,
+    retakePolicy: input.retakePolicy,
+    retakeLimit: input.retakeLimit ?? null,
+    pricing: input.pricing ?? 'free',
+    priceKobo: input.pricing === 'paid' ? input.priceKobo ?? null : null,
+    allowFlagging: input.allowFlagging ?? true,
+    updatedAt: now,
+  };
+}
+
+/** Bulk creation - allows uploading many quizzes in one request. */
+export async function bulkCreateQuizzes(creatorId: string, inputs: QuizInput[]): Promise<Quiz[]> {
+  const created: Quiz[] = [];
+  for (const input of inputs) {
+    // Sequential awaits (not Promise.all) to keep each quiz's batch insert
+    // isolated and to surface which specific quiz failed validation.
+    created.push(await createQuiz(creatorId, input));
+  }
+  return created;
+}
+
+export async function getQuizById(id: string): Promise<Quiz | null> {
+  const db = getDb();
+  const row = await db.prepare('SELECT * FROM quizzes WHERE id = ?').bind(id).first<QuizRow>();
+  return row ? mapQuiz(row) : null;
+}
+
+/**
+ * Resolves a private quiz by its share slug, honoring expiry.
+ * Returns null if not found, not private, or expired.
+ */
+export async function getQuizByShareSlug(slug: string): Promise<Quiz | null> {
+  const db = getDb();
+  const row = await db
+    .prepare("SELECT * FROM quizzes WHERE share_slug = ? AND visibility = 'private'")
+    .bind(slug)
+    .first<QuizRow>();
+  if (!row) return null;
+  const quiz = mapQuiz(row);
+  if (quiz.linkExpiresAt && new Date(quiz.linkExpiresAt).getTime() < Date.now()) {
+    return null; // expired
+  }
+  return quiz;
+}
+
+/** Regenerates a private quiz's share link, invalidating the old one. */
+export async function regenerateShareLink(
+  quizId: string,
+  linkExpiry?: LinkExpiryOption,
+  customExpiryDate?: string
+): Promise<{ shareSlug: string; linkExpiresAt: string | null }> {
+  const db = getDb();
+  const shareSlug = generateShareSlug();
+  const linkExpiresAt = computeExpiryDate(linkExpiry, customExpiryDate);
+  await db
+    .prepare('UPDATE quizzes SET share_slug = ?, link_expires_at = ?, updated_at = ? WHERE id = ?')
+    .bind(shareSlug, linkExpiresAt, nowIso(), quizId)
+    .run();
+  return { shareSlug, linkExpiresAt };
+}
+
+/** Flips a quiz between public and private, updating slug/expiry accordingly. */
+export async function setQuizVisibility(
+  quizId: string,
+  visibility: QuizVisibility,
+  linkExpiry?: LinkExpiryOption,
+  customExpiryDate?: string
+): Promise<void> {
+  const db = getDb();
+  if (visibility === 'public') {
+    await db
+      .prepare(
+        "UPDATE quizzes SET visibility = 'public', share_slug = NULL, link_expires_at = NULL, updated_at = ? WHERE id = ?"
+      )
+      .bind(nowIso(), quizId)
+      .run();
+  } else {
+    const shareSlug = generateShareSlug();
+    const linkExpiresAt = computeExpiryDate(linkExpiry, customExpiryDate);
+    await db
+      .prepare(
+        "UPDATE quizzes SET visibility = 'private', share_slug = ?, link_expires_at = ?, updated_at = ? WHERE id = ?"
+      )
+      .bind(shareSlug, linkExpiresAt, nowIso(), quizId)
+      .run();
+  }
+}
+
+export async function getQuizQuestions(quizId: string): Promise<QuizQuestion[]> {
+  const db = getDb();
+  const { results } = await db
+    .prepare('SELECT * FROM questions WHERE quiz_id = ? ORDER BY sort_order ASC')
+    .bind(quizId)
+    .all<QuestionRow>();
+  return results.map(mapQuestion);
+}
+
+/** Public quizzes for the "Latest Quizzes" homepage section. */
+export async function listLatestPublicQuizzes(limit = 20): Promise<QuizWithStats[]> {
+  const db = getDb();
+  const { results } = await db
+    .prepare(
+      `SELECT
+        q.*,
+        (SELECT COUNT(*) FROM questions WHERE quiz_id = q.id) as question_count,
+        (SELECT COUNT(*) FROM quiz_attempts WHERE quiz_id = q.id) as attempt_count,
+        (SELECT AVG(CAST(score AS REAL) / total_questions * 100) FROM quiz_attempts WHERE quiz_id = q.id) as avg_score,
+        (SELECT COUNT(*) FROM comments WHERE quiz_id = q.id) as comment_count,
+        c.name as category_name,
+        s.name as subcategory_name,
+        u.display_name as creator_name
+      FROM quizzes q
+      JOIN subcategories s ON s.id = q.subcategory_id
+      JOIN categories c ON c.id = s.category_id
+      JOIN users u ON u.id = q.creator_id
+      WHERE q.visibility = 'public' AND q.status = 'published'
+      ORDER BY q.created_at DESC
+      LIMIT ?`
+    )
+    .bind(limit)
+    .all<QuizRow & { question_count: number; attempt_count: number; avg_score: number | null; comment_count: number; category_name: string; subcategory_name: string; creator_name: string | null }>();
+
+  return results.map((row) => ({
+    ...mapQuiz(row),
+    questionCount: row.question_count,
+    attemptCount: row.attempt_count,
+    averageScorePercent: row.avg_score,
+    commentCount: row.comment_count,
+    categoryName: row.category_name,
+    subcategoryName: row.subcategory_name,
+    creatorName: row.creator_name ?? 'Anonymous',
+  }));
+}
+
+/**
+ * Fetches specific quizzes by id with the same stats shape as the listing
+ * queries — used by the bookmarks page. Deliberately does NOT filter by
+ * visibility/status like the public listing queries do, since a quiz the
+ * user bookmarked should still show even if it was later made private or
+ * unpublished; the bookmarks page just won't be able to link into it.
+ */
+export async function getQuizzesWithStatsByIds(ids: string[]): Promise<QuizWithStats[]> {
+  if (ids.length === 0) return [];
+  const db = getDb();
+  const placeholders = ids.map(() => '?').join(',');
+  const { results } = await db
+    .prepare(
+      `SELECT
+        q.*,
+        (SELECT COUNT(*) FROM questions WHERE quiz_id = q.id) as question_count,
+        (SELECT COUNT(*) FROM quiz_attempts WHERE quiz_id = q.id) as attempt_count,
+        (SELECT AVG(CAST(score AS REAL) / total_questions * 100) FROM quiz_attempts WHERE quiz_id = q.id) as avg_score,
+        (SELECT COUNT(*) FROM comments WHERE quiz_id = q.id) as comment_count,
+        c.name as category_name,
+        s.name as subcategory_name,
+        u.display_name as creator_name
+      FROM quizzes q
+      JOIN subcategories s ON s.id = q.subcategory_id
+      JOIN categories c ON c.id = s.category_id
+      JOIN users u ON u.id = q.creator_id
+      WHERE q.id IN (${placeholders})`
+    )
+    .bind(...ids)
+    .all<QuizRow & { question_count: number; attempt_count: number; avg_score: number | null; comment_count: number; category_name: string; subcategory_name: string; creator_name: string | null }>();
+
+  return results.map((row) => ({
+    ...mapQuiz(row),
+    questionCount: row.question_count,
+    attemptCount: row.attempt_count,
+    averageScorePercent: row.avg_score,
+    commentCount: row.comment_count,
+    categoryName: row.category_name,
+    subcategoryName: row.subcategory_name,
+    creatorName: row.creator_name ?? 'Anonymous',
+  }));
+}
+
+export async function listQuizzesByCategory(categoryId: string, limit?: number): Promise<QuizWithStats[]> {
+  const db = getDb();
+  const query = `SELECT
+      q.*,
+      (SELECT COUNT(*) FROM questions WHERE quiz_id = q.id) as question_count,
+      (SELECT COUNT(*) FROM quiz_attempts WHERE quiz_id = q.id) as attempt_count,
+      (SELECT AVG(CAST(score AS REAL) / total_questions * 100) FROM quiz_attempts WHERE quiz_id = q.id) as avg_score,
+      (SELECT COUNT(*) FROM comments WHERE quiz_id = q.id) as comment_count,
+      u.display_name as creator_name
+    FROM quizzes q
+    JOIN subcategories s ON s.id = q.subcategory_id
+    JOIN users u ON u.id = q.creator_id
+    WHERE s.category_id = ? AND q.visibility = 'public' AND q.status = 'published'
+    ORDER BY q.created_at DESC${limit ? ' LIMIT ?' : ''}`;
+
+  const stmt = limit ? db.prepare(query).bind(categoryId, limit) : db.prepare(query).bind(categoryId);
+  const { results } = await stmt.all<QuizRow & { question_count: number; attempt_count: number; avg_score: number | null; comment_count: number; creator_name: string | null }>();
+
+  return results.map((row) => ({
+    ...mapQuiz(row),
+    questionCount: row.question_count,
+    attemptCount: row.attempt_count,
+    averageScorePercent: row.avg_score,
+    commentCount: row.comment_count,
+    creatorName: row.creator_name ?? 'Anonymous',
+  }));
+}
+
+export async function listQuizzesBySubcategory(subcategoryId: string): Promise<QuizWithStats[]> {
+  const db = getDb();
+  const { results } = await db
+    .prepare(
+      `SELECT
+        q.*,
+        (SELECT COUNT(*) FROM questions WHERE quiz_id = q.id) as question_count,
+        (SELECT COUNT(*) FROM quiz_attempts WHERE quiz_id = q.id) as attempt_count,
+        (SELECT AVG(CAST(score AS REAL) / total_questions * 100) FROM quiz_attempts WHERE quiz_id = q.id) as avg_score,
+        (SELECT COUNT(*) FROM comments WHERE quiz_id = q.id) as comment_count,
+        u.display_name as creator_name
+      FROM quizzes q
+      JOIN users u ON u.id = q.creator_id
+      WHERE q.subcategory_id = ? AND q.visibility = 'public' AND q.status = 'published'
+      ORDER BY q.created_at DESC`
+    )
+    .bind(subcategoryId)
+    .all<QuizRow & { question_count: number; attempt_count: number; avg_score: number | null; comment_count: number; creator_name: string | null }>();
+
+  return results.map((row) => ({
+    ...mapQuiz(row),
+    questionCount: row.question_count,
+    attemptCount: row.attempt_count,
+    averageScorePercent: row.avg_score,
+    commentCount: row.comment_count,
+    creatorName: row.creator_name ?? 'Anonymous',
+  }));
+}
+
+/**
+ * Related quizzes for "you might also like" sections on the quiz detail
+ * page and blog posts. Prefers same-subcategory quizzes (most relevant),
+ * backfills with same-category quizzes if the subcategory doesn't have
+ * enough, then backfills with the latest public quizzes overall so the
+ * section is never empty. Always excludes the quiz/subcategory itself
+ * where applicable, and only ever returns public + published quizzes.
+ */
+export async function listRelatedQuizzes(
+  subcategoryId: string,
+  excludeQuizId: string | null,
+  limit = 3
+): Promise<QuizWithStats[]> {
+  const db = getDb();
+
+  const baseSelect = `
+    q.*,
+    (SELECT COUNT(*) FROM questions WHERE quiz_id = q.id) as question_count,
+    (SELECT COUNT(*) FROM quiz_attempts WHERE quiz_id = q.id) as attempt_count,
+    (SELECT AVG(CAST(score AS REAL) / total_questions * 100) FROM quiz_attempts WHERE quiz_id = q.id) as avg_score,
+    (SELECT COUNT(*) FROM comments WHERE quiz_id = q.id) as comment_count,
+    u.display_name as creator_name
+  `;
+  type Row = QuizRow & {
+    question_count: number;
+    attempt_count: number;
+    avg_score: number | null;
+    comment_count: number;
+    creator_name: string | null;
+  };
+
+  function toQuizWithStats(row: Row): QuizWithStats {
+    return {
+      ...mapQuiz(row),
+      questionCount: row.question_count,
+      attemptCount: row.attempt_count,
+      averageScorePercent: row.avg_score,
+      commentCount: row.comment_count,
+      creatorName: row.creator_name ?? 'Anonymous',
+    };
+  }
+
+  const excludeClause = excludeQuizId ? 'AND q.id != ?' : '';
+  const excludeArgs = excludeQuizId ? [excludeQuizId] : [];
+
+  // Pass 1: same subcategory.
+  const { results: sameSubcategory } = await db
+    .prepare(
+      `SELECT ${baseSelect}
+       FROM quizzes q
+       JOIN users u ON u.id = q.creator_id
+       WHERE q.subcategory_id = ? AND q.visibility = 'public' AND q.status = 'published' ${excludeClause}
+       ORDER BY q.created_at DESC
+       LIMIT ?`
+    )
+    .bind(subcategoryId, ...excludeArgs, limit)
+    .all<Row>();
+
+  const picked = sameSubcategory.map(toQuizWithStats);
+  if (picked.length >= limit) return picked.slice(0, limit);
+
+  const pickedIds = new Set(picked.map((q) => q.id));
+  const remaining = limit - picked.length;
+
+  // Pass 2: same category, different subcategory.
+  const { results: sameCategory } = await db
+    .prepare(
+      `SELECT ${baseSelect}
+       FROM quizzes q
+       JOIN users u ON u.id = q.creator_id
+       JOIN subcategories s ON s.id = q.subcategory_id
+       WHERE s.category_id = (SELECT category_id FROM subcategories WHERE id = ?)
+         AND q.subcategory_id != ?
+         AND q.visibility = 'public' AND q.status = 'published' ${excludeClause}
+       ORDER BY q.created_at DESC
+       LIMIT ?`
+    )
+    .bind(subcategoryId, subcategoryId, ...excludeArgs, remaining)
+    .all<Row>();
+
+  for (const row of sameCategory) {
+    if (picked.length >= limit) break;
+    if (!pickedIds.has(row.id)) {
+      picked.push(toQuizWithStats(row));
+      pickedIds.add(row.id);
+    }
+  }
+  if (picked.length >= limit) return picked.slice(0, limit);
+
+  // Pass 3: latest public quizzes overall, as a last-resort backfill so
+  // the section is never empty even for a brand-new/sparse category.
+  const stillNeeded = limit - picked.length;
+  const { results: latest } = await db
+    .prepare(
+      `SELECT ${baseSelect}
+       FROM quizzes q
+       JOIN users u ON u.id = q.creator_id
+       WHERE q.visibility = 'public' AND q.status = 'published' ${excludeClause}
+       ORDER BY q.created_at DESC
+       LIMIT ?`
+    )
+    .bind(...excludeArgs, stillNeeded + picked.length)
+    .all<Row>();
+
+  for (const row of latest) {
+    if (picked.length >= limit) break;
+    if (!pickedIds.has(row.id)) {
+      picked.push(toQuizWithStats(row));
+      pickedIds.add(row.id);
+    }
+  }
+
+  return picked.slice(0, limit);
+}
+
+/**
+ * Related quizzes for content that only has a free-text category label
+ * (blog posts store `category` as plain text, not a structured
+ * subcategory_id). Tries to match that label against a subcategory name
+ * first, then a category name, and falls back to the latest public
+ * quizzes overall if nothing matches — so a blog post in an unmatched
+ * category still shows something relevant-ish rather than an empty
+ * section.
+ */
+export async function listRelatedQuizzesByLabel(
+  categoryLabel: string | null,
+  limit = 3
+): Promise<QuizWithStats[]> {
+  const db = getDb();
+
+  const baseSelect = `
+    q.*,
+    (SELECT COUNT(*) FROM questions WHERE quiz_id = q.id) as question_count,
+    (SELECT COUNT(*) FROM quiz_attempts WHERE quiz_id = q.id) as attempt_count,
+    (SELECT AVG(CAST(score AS REAL) / total_questions * 100) FROM quiz_attempts WHERE quiz_id = q.id) as avg_score,
+    (SELECT COUNT(*) FROM comments WHERE quiz_id = q.id) as comment_count,
+    u.display_name as creator_name
+  `;
+  type Row = QuizRow & {
+    question_count: number;
+    attempt_count: number;
+    avg_score: number | null;
+    comment_count: number;
+    creator_name: string | null;
+  };
+
+  function toQuizWithStats(row: Row): QuizWithStats {
+    return {
+      ...mapQuiz(row),
+      questionCount: row.question_count,
+      attemptCount: row.attempt_count,
+      averageScorePercent: row.avg_score,
+      commentCount: row.comment_count,
+      creatorName: row.creator_name ?? 'Anonymous',
+    };
+  }
+
+  const picked: QuizWithStats[] = [];
+  const pickedIds = new Set<string>();
+
+  if (categoryLabel && categoryLabel.trim()) {
+    const label = categoryLabel.trim();
+
+    // Pass 1: match a subcategory name (case-insensitive).
+    const { results: bySubcategory } = await db
+      .prepare(
+        `SELECT ${baseSelect}
+         FROM quizzes q
+         JOIN users u ON u.id = q.creator_id
+         JOIN subcategories s ON s.id = q.subcategory_id
+         WHERE LOWER(s.name) = LOWER(?) AND q.visibility = 'public' AND q.status = 'published'
+         ORDER BY q.created_at DESC
+         LIMIT ?`
+      )
+      .bind(label, limit)
+      .all<Row>();
+
+    for (const row of bySubcategory) {
+      if (picked.length >= limit) break;
+      picked.push(toQuizWithStats(row));
+      pickedIds.add(row.id);
+    }
+
+    // Pass 2: match a parent category name.
+    if (picked.length < limit) {
+      const { results: byCategory } = await db
+        .prepare(
+          `SELECT ${baseSelect}
+           FROM quizzes q
+           JOIN users u ON u.id = q.creator_id
+           JOIN subcategories s ON s.id = q.subcategory_id
+           JOIN categories c ON c.id = s.category_id
+           WHERE LOWER(c.name) = LOWER(?) AND q.visibility = 'public' AND q.status = 'published'
+           ORDER BY q.created_at DESC
+           LIMIT ?`
+        )
+        .bind(label, limit - picked.length)
+        .all<Row>();
+
+      for (const row of byCategory) {
+        if (picked.length >= limit) break;
+        if (!pickedIds.has(row.id)) {
+          picked.push(toQuizWithStats(row));
+          pickedIds.add(row.id);
+        }
+      }
+    }
+  }
+
+  // Fallback: latest public quizzes overall, so the section is never
+  // empty even when the blog post's category label matches nothing.
+  if (picked.length < limit) {
+    const excludeClause = pickedIds.size > 0 ? `AND q.id NOT IN (${[...pickedIds].map(() => '?').join(',')})` : '';
+    const { results: latest } = await db
+      .prepare(
+        `SELECT ${baseSelect}
+         FROM quizzes q
+         JOIN users u ON u.id = q.creator_id
+         WHERE q.visibility = 'public' AND q.status = 'published' ${excludeClause}
+         ORDER BY q.created_at DESC
+         LIMIT ?`
+      )
+      .bind(...pickedIds, limit - picked.length)
+      .all<Row>();
+
+    for (const row of latest) {
+      if (picked.length >= limit) break;
+      picked.push(toQuizWithStats(row));
+    }
+  }
+
+  return picked.slice(0, limit);
+}
+
+export async function listQuizzesByCreator(creatorId: string): Promise<QuizWithStats[]> {
+  const db = getDb();
+  const { results } = await db
+    .prepare(
+      `SELECT
+        q.*,
+        (SELECT COUNT(*) FROM questions WHERE quiz_id = q.id) as question_count,
+        (SELECT COUNT(*) FROM quiz_attempts WHERE quiz_id = q.id) as attempt_count,
+        (SELECT AVG(CAST(score AS REAL) / total_questions * 100) FROM quiz_attempts WHERE quiz_id = q.id) as avg_score,
+        (SELECT COUNT(*) FROM comments WHERE quiz_id = q.id) as comment_count
+      FROM quizzes q
+      WHERE q.creator_id = ?
+      ORDER BY q.created_at DESC`
+    )
+    .bind(creatorId)
+    .all<QuizRow & { question_count: number; attempt_count: number; avg_score: number | null; comment_count: number }>();
+
+  return results.map((row) => ({
+    ...mapQuiz(row),
+    questionCount: row.question_count,
+    attemptCount: row.attempt_count,
+    averageScorePercent: row.avg_score,
+    commentCount: row.comment_count,
+  }));
+}
+
+export async function updateQuizStatus(
+  quizId: string,
+  status: Quiz['status']
+): Promise<void> {
+  const db = getDb();
+  await db
+    .prepare('UPDATE quizzes SET status = ?, updated_at = ? WHERE id = ?')
+    .bind(status, nowIso(), quizId)
+    .run();
+}
+
+export async function deleteQuiz(quizId: string): Promise<void> {
+  const db = getDb();
+  await db.batch([
+    db.prepare('DELETE FROM attempt_answers WHERE question_id IN (SELECT id FROM questions WHERE quiz_id = ?)').bind(quizId),
+    db.prepare('DELETE FROM questions WHERE quiz_id = ?').bind(quizId),
+    db.prepare('DELETE FROM quiz_attempts WHERE quiz_id = ?').bind(quizId),
+    db.prepare('DELETE FROM comment_reactions WHERE comment_id IN (SELECT id FROM comments WHERE quiz_id = ?)').bind(quizId),
+    db.prepare('DELETE FROM comments WHERE quiz_id = ?').bind(quizId),
+    db.prepare('DELETE FROM quizzes WHERE id = ?').bind(quizId),
+  ]);
+}
+
+/**
+ * Admin-wide listing across all quizzes regardless of visibility/status,
+ * for the admin control panel.
+ */
+export async function adminListAllQuizzes(): Promise<QuizWithStats[]> {
+  const db = getDb();
+  const { results } = await db
+    .prepare(
+      `SELECT
+        q.*,
+        (SELECT COUNT(*) FROM questions WHERE quiz_id = q.id) as question_count,
+        (SELECT COUNT(*) FROM quiz_attempts WHERE quiz_id = q.id) as attempt_count,
+        (SELECT AVG(CAST(score AS REAL) / total_questions * 100) FROM quiz_attempts WHERE quiz_id = q.id) as avg_score,
+        (SELECT COUNT(*) FROM comments WHERE quiz_id = q.id) as comment_count
+      FROM quizzes q
+      ORDER BY q.created_at DESC`
+    )
+    .all<QuizRow & { question_count: number; attempt_count: number; avg_score: number | null; comment_count: number }>();
+
+  return results.map((row) => ({
+    ...mapQuiz(row),
+    questionCount: row.question_count,
+    attemptCount: row.attempt_count,
+    averageScorePercent: row.avg_score,
+    commentCount: row.comment_count,
+  }));
+}

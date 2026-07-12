@@ -1,0 +1,24 @@
+import { emailShell } from './shell';
+
+const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || 'https://cliniolab.com';
+
+export function quizResultEmail(
+  displayName: string,
+  quizTitle: string,
+  percentage: number,
+  unsubscribeUrl: string
+): { subject: string; html: string } {
+  const body = `
+    <h1 style="font-family: Georgia, serif; font-size: 22px; color: #0B1F2E; margin: 0 0 12px;">
+      ${Math.round(percentage)}% on ${quizTitle}
+    </h1>
+    <p style="font-size: 14px; color: #1E3A4C; line-height: 1.6;">
+      Nice work, ${displayName}. Check your dashboard for the full breakdown and your progress
+      over time.
+    </p>
+    <a href="${BASE_URL}/dashboard" style="display:inline-block; margin-top: 16px; background:#2F8F7A; color:#fff; padding: 10px 20px; border-radius: 6px; text-decoration:none; font-size: 14px; font-weight:600;">
+      View dashboard
+    </a>
+  `;
+  return { subject: `Your result: ${Math.round(percentage)}% on ${quizTitle}`, html: emailShell(body, unsubscribeUrl) };
+}

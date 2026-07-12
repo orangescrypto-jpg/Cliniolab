@@ -1,0 +1,49 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --font-fraunces: 'Fraunces', Georgia, serif;
+  --font-inter: 'Inter', system-ui, sans-serif;
+  --font-plex-mono: 'IBM Plex Mono', ui-monospace, monospace;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  @apply bg-paper text-ink-800 antialiased;
+  font-family: var(--font-inter);
+}
+
+h1, h2, h3, h4 {
+  font-family: var(--font-fraunces);
+}
+
+.font-tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Chart-strip divider: a thin tick-marked rule evoking an ECG baseline,
+   used instead of generic borders between sections. */
+.chart-strip {
+  height: 1px;
+  background-image: repeating-linear-gradient(
+    90deg,
+    currentColor 0,
+    currentColor 1px,
+    transparent 1px,
+    transparent 8px
+  );
+  opacity: 0.35;
+}
+
+/* Difficulty edge tabs for quiz cards */
+.difficulty-edge-easy { @apply border-l-4 border-pulse-400; }
+.difficulty-edge-medium { @apply border-l-4 border-flag-400; }
+.difficulty-edge-hard { @apply border-l-4 border-critical-400; }
+
+::selection {
+  background-color: theme('colors.pulse.200');
+}

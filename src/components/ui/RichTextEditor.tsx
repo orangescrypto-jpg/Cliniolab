@@ -51,6 +51,16 @@ export function RichTextEditor({ value, onChange, rows = 12, format = 'markdown'
     onChange(newValue);
   }
 
+  function insertBlock(text: string) {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    const { selectionStart } = textarea;
+    const needsLeadingNewline = selectionStart > 0 && value[selectionStart - 1] !== '\n';
+    const insert = (needsLeadingNewline ? '\n' : '') + text + '\n';
+    const newValue = value.slice(0, selectionStart) + insert + value.slice(selectionStart);
+    onChange(newValue);
+  }
+
   function insertLink() {
     const url = window.prompt('Link URL:');
     if (!url) return;
@@ -71,11 +81,13 @@ export function RichTextEditor({ value, onChange, rows = 12, format = 'markdown'
     { label: 'B', title: 'Bold', action: () => wrapSelection('**') },
     { label: 'I', title: 'Italic', action: () => wrapSelection('_') },
     { label: 'H2', title: 'Heading', action: () => insertLinePrefix('## ') },
+    { label: 'H3', title: 'Sub-heading', action: () => insertLinePrefix('### ') },
     { label: '"', title: 'Quote', action: () => insertLinePrefix('> ') },
     { label: '•', title: 'Bullet list', action: () => insertLinePrefix('- ') },
     { label: '1.', title: 'Numbered list', action: () => insertLinePrefix('1. ') },
     { label: '🔗', title: 'Link', action: insertLink },
     { label: '🖼', title: 'Image', action: insertImage },
+    { label: '―', title: 'Divider', action: () => insertBlock('---') },
   ];
 
   const previewHtml = format === 'html' ? sanitizeHtml(value) : markdownToHtml(value);
@@ -186,9 +198,15 @@ export function markdownToHtml(markdown: string): string {
   }
 
   for (const line of lines) {
-    if (line.startsWith('## ')) {
+    if (line.startsWith('### ')) {
+      closeList();
+      htmlLines.push(`<h3>${inlineFormat(line.slice(4))}</h3>`);
+    } else if (line.startsWith('## ')) {
       closeList();
       htmlLines.push(`<h2>${inlineFormat(line.slice(3))}</h2>`);
+    } else if (line.trim() === '---') {
+      closeList();
+      htmlLines.push('<hr />');
     } else if (line.startsWith('> ')) {
       closeList();
       htmlLines.push(`<blockquote>${inlineFormat(line.slice(2))}</blockquote>`);

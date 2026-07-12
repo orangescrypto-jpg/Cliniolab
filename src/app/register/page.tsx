@@ -1,95 +1,160 @@
 'use client';
 
-import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
-import { getSupabaseBrowserClient } from '@/lib/auth/supabaseClient';
-import { signIn, signOut, signUp, type SessionUser } from '@/lib/auth/authService';
-import type { UserRole } from '@/types';
+import { useState } from 'react';
+import { useRouter } from 'next/navigation';
+import Link from 'next/link';
+import { useAuth } from '@/lib/auth/AuthProvider';
+import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
 
-interface FullSessionUser extends SessionUser {
-  role: UserRole;
-  currentStreakDays: number;
-  longestStreakDays: number;
-}
-
-interface AuthContextValue {
-  user: FullSessionUser | null;
-  loading: boolean;
-  login: (email: string, password: string) => Promise<void>;
-  register: (email: string, password: string, displayName: string) => Promise<{ needsEmailConfirmation: boolean }>;
-  logout: () => Promise<void>;
-}
-
-const AuthContext = createContext<AuthContextValue | null>(null);
-
-async function fetchAppUser(): Promise<FullSessionUser | null> {
-  const res = await fetch('/api/auth/sync-user', { method: 'POST' });
-  if (!res.ok) return null;
-  const data = await res.json();
-  return {
-    id: data.user.id,
-    email: data.user.email,
-    displayName: data.user.displayName,
-    role: data.user.role,
-    currentStreakDays: data.user.currentStreakDays ?? 0,
-    longestStreakDays: data.user.longestStreakDays ?? 0,
-  };
-}
-
-export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<FullSessionUser | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    const supabase = getSupabaseBrowserClient();
-
-    fetchAppUser().then((u) => {
-      setUser(u);
-      setLoading(false);
-    });
-
-    const { data: subscription } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      if (!session) {
-        setUser(null);
-        return;
-      }
-      const appUser = await fetchAppUser();
-      setUser(appUser);
-    });
-
-    return () => subscription.subscription.unsubscribe();
-  }, []);
-
-  const login = useCallback(async (email: string, password: string) => {
-    await signIn(email, password);
-    const appUser = await fetchAppUser();
-    setUser(appUser);
-  }, []);
-
-  const register = useCallback(async (email: string, password: string, displayName: string) => {
-    const result = await signUp(email, password, displayName);
-    if (result.needsEmailConfirmation) {
-      // No session yet — user must confirm their email before they can log in.
-      return { needsEmailConfirmation: true };
-    }
-    const appUser = await fetchAppUser();
-    setUser(appUser);
-    return { needsEmailConfirmation: false };
-  }, []);
-
-  const logout = useCallback(async () => {
-    await signOut();
-    setUser(null);
-  }, []);
-
+function EyeIcon({ open }: { open: boolean }) {
+  if (open) {
+    return (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z" />
+        <circle cx="12" cy="12" r="3" />
+      </svg>
+    );
+  }
   return (
-    <AuthContext.Provider value={{ user, loading, login, register, logout }}>
-      {children}
-    </AuthContext.Provider>
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M9.9 4.24A10.94 10.94 0 0 1 12 4c6.5 0 10 7 10 7a17.4 17.4 0 0 1-3.4 4.6M6.6 6.6C3.5 8.5 2 12 2 12s3.5 7 10 7a10.8 10.8 0 0 0 4.2-.85" />
+      <path d="M14.12 14.12a3 3 0 1 1-4.24-4.24" />
+      <path d="M1 1l22 22" />
+    </svg>
   );
 }
 
-export function useAuth(): AuthContextValue {
-  const ctx = useContext(AuthContext);
-  if (!ctx) throw new Error('useAuth must be used inside AuthProvider');
-  return ctx;
+export default function RegisterPage() {
+  const router = useRouter();
+  const { register } = useAuth();
+  const [displayName, setDisplayName] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [needsEmailConfirmation, setNeedsEmailConfirmation] = useState(false);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    if (password !== confirmPassword) {
+      setError('Passwords do not match');
+      return;
+    }
+    setSubmitting(true);
+    try {
+      const { needsEmailConfirmation } = await register(email, password, displayName);
+      if (needsEmailConfirmation) {
+        setNeedsEmailConfirmation(true);
+      } else {
+        router.push('/dashboard');
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to sign up');
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  if (needsEmailConfirmation) {
+    return (
+      <div className="mx-auto max-w-sm px-6 py-24">
+        <h1 className="font-display text-2xl font-semibold text-ink-800">Check your email</h1>
+        <Card className="mt-6 p-6">
+          <p className="text-sm text-ink-700">
+            We&apos;ve sent a confirmation link to <span className="font-medium">{email}</span>.
+            Please confirm your email address before logging in.
+          </p>
+          <p className="mt-3 text-sm text-ink-500">
+            Didn&apos;t get it? Check your spam folder, or try logging in again once confirmed.
+          </p>
+        </Card>
+        <p className="mt-4 text-sm text-ink-500">
+          <Link href="/login" className="font-medium text-pulse-600">Go to login</Link>
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mx-auto max-w-sm px-6 py-24">
+      <h1 className="font-display text-2xl font-semibold text-ink-800">Create your account</h1>
+      <Card className="mt-6 p-6">
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="text-sm font-medium text-ink-700">Display name</label>
+            <input
+              value={displayName}
+              onChange={(e) => setDisplayName(e.target.value)}
+              required
+              className="mt-1 w-full rounded-md border border-ink-100 px-4 py-2 text-sm focus:border-pulse-400 focus:outline-none"
+            />
+          </div>
+          <div>
+            <label className="text-sm font-medium text-ink-700">Email</label>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+              className="mt-1 w-full rounded-md border border-ink-100 px-4 py-2 text-sm focus:border-pulse-400 focus:outline-none"
+            />
+          </div>
+          <div>
+            <label className="text-sm font-medium text-ink-700">Password</label>
+            <div className="relative mt-1">
+              <input
+                type={showPassword ? 'text' : 'password'}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                minLength={8}
+                className="w-full rounded-md border border-ink-100 px-4 py-2 pr-11 text-sm focus:border-pulse-400 focus:outline-none"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((v) => !v)}
+                className="absolute inset-y-0 right-0 flex items-center px-3 text-ink-400 hover:text-ink-600"
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
+              >
+                <EyeIcon open={showPassword} />
+              </button>
+            </div>
+          </div>
+          <div>
+            <label className="text-sm font-medium text-ink-700">Confirm password</label>
+            <div className="relative mt-1">
+              <input
+                type={showConfirmPassword ? 'text' : 'password'}
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                required
+                minLength={8}
+                className="w-full rounded-md border border-ink-100 px-4 py-2 pr-11 text-sm focus:border-pulse-400 focus:outline-none"
+              />
+              <button
+                type="button"
+                onClick={() => setShowConfirmPassword((v) => !v)}
+                className="absolute inset-y-0 right-0 flex items-center px-3 text-ink-400 hover:text-ink-600"
+                aria-label={showConfirmPassword ? 'Hide password' : 'Show password'}
+              >
+                <EyeIcon open={showConfirmPassword} />
+              </button>
+            </div>
+          </div>
+          {error && <p className="text-sm text-critical-500">{error}</p>}
+          <Button type="submit" className="w-full" disabled={submitting}>
+            {submitting ? 'Creating account…' : 'Sign up'}
+          </Button>
+        </form>
+      </Card>
+      <p className="mt-4 text-sm text-ink-500">
+        Already have an account? <Link href="/login" className="font-medium text-pulse-600">Log in</Link>
+      </p>
+    </div>
+  );
 }

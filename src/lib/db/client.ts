@@ -52,12 +52,23 @@ function resolveDriver(): DbDriver {
 }
 
 function getD1BindingDb(): D1Database {
-  // Lazy require (not a top-level import) so @cloudflare/next-on-pages is
-  // never pulled into the Vercel build path. Kept synchronous
-  // deliberately: getDb() is called from ~150 sites across every service
-  // file, and making it async would require awaiting all of them.
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const { getRequestContext } = require('@cloudflare/next-on-pages') as typeof import('@cloudflare/next-on-pages');
+  // Loaded via indirect eval, not a literal require(...), so Turbopack's
+  // static import analysis doesn't try to resolve/bundle this module on
+  // Vercel, where @cloudflare/next-on-pages is never installed. Kept
+  // synchronous deliberately: getDb() is called from ~150 sites across
+  // every service file, and making it async would require awaiting all
+  // of them.
+  let getRequestContext: typeof import('@cloudflare/next-on-pages').getRequestContext;
+  try {
+    // eslint-disable-next-line no-eval
+    const dynamicRequire = eval('require') as NodeRequire;
+    ({ getRequestContext } = dynamicRequire('@cloudflare/next-on-pages'));
+  } catch {
+    throw new Error(
+      "@cloudflare/next-on-pages is not installed. This code path only runs on Cloudflare Pages; " +
+        'set DB_DRIVER=http (or D1_API_TOKEN) to use the D1 HTTP API instead.'
+    );
+  }
   const env = getRequestContext().env as { DB?: D1Database };
   if (!env.DB) {
     throw new Error(

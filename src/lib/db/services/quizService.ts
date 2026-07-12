@@ -433,6 +433,66 @@ export async function listLatestPublicQuizzes(limit = 20): Promise<QuizWithStats
 }
 
 /**
+ * Paginated version of listLatestPublicQuizzes for the browse-quizzes page.
+ * Kept separate from listLatestPublicQuizzes (rather than adding an offset
+ * param there) because that function has several existing callers
+ * (daily-quiz, sitemap) that just want "the latest N" with no paging UI.
+ */
+export async function listLatestPublicQuizzesPaginated(
+  page = 1,
+  pageSize = 12
+): Promise<{ quizzes: QuizWithStats[]; total: number; page: number; pageSize: number }> {
+  const db = getDb();
+  const offset = Math.max(0, (page - 1) * pageSize);
+
+  const [{ results }, countRow] = await Promise.all([
+    db
+      .prepare(
+        `SELECT
+          q.*,
+          (SELECT COUNT(*) FROM questions WHERE quiz_id = q.id) as question_count,
+          (SELECT COUNT(*) FROM quiz_attempts WHERE quiz_id = q.id) as attempt_count,
+          (SELECT AVG(CAST(score AS REAL) / total_questions * 100) FROM quiz_attempts WHERE quiz_id = q.id) as avg_score,
+          (SELECT COUNT(*) FROM comments WHERE quiz_id = q.id) as comment_count,
+          c.name as category_name,
+          s.name as subcategory_name,
+          u.display_name as creator_name
+        FROM quizzes q
+        JOIN subcategories s ON s.id = q.subcategory_id
+        JOIN categories c ON c.id = s.category_id
+        JOIN users u ON u.id = q.creator_id
+        WHERE q.visibility = 'public' AND q.status = 'published'
+        ORDER BY q.created_at DESC
+        LIMIT ? OFFSET ?`
+      )
+      .bind(pageSize, offset)
+      .all<QuizRow & { question_count: number; attempt_count: number; avg_score: number | null; comment_count: number; category_name: string; subcategory_name: string; creator_name: string | null }>(),
+    db
+      .prepare(
+        `SELECT COUNT(*) as total FROM quizzes q
+         WHERE q.visibility = 'public' AND q.status = 'published'`
+      )
+      .first<{ total: number }>(),
+  ]);
+
+  return {
+    quizzes: results.map((row) => ({
+      ...mapQuiz(row),
+      questionCount: row.question_count,
+      attemptCount: row.attempt_count,
+      averageScorePercent: row.avg_score,
+      commentCount: row.comment_count,
+      categoryName: row.category_name,
+      subcategoryName: row.subcategory_name,
+      creatorName: row.creator_name ?? 'Anonymous',
+    })),
+    total: countRow?.total ?? 0,
+    page,
+    pageSize,
+  };
+}
+
+/**
  * Fetches specific quizzes by id with the same stats shape as the listing
  * queries — used by the bookmarks page. Deliberately does NOT filter by
  * visibility/status like the public listing queries do, since a quiz the
@@ -805,49 +865,94 @@ export async function updateQuizStatus(
 
 export async function deleteQuiz(quizId: string): Promise<void> {
   const db = getDb();
-  await db.batch([
-    // question_reports references questions, so it must be cleared before
-    // the questions themselves - previously missing, which caused deletes
-    // to fail (FK violation) for any quiz with at least one reported question.
-    db.prepare('DELETE FROM question_reports WHERE question_id IN (SELECT id FROM questions WHERE quiz_id = ?)').bind(quizId),
-    db.prepare('DELETE FROM attempt_answers WHERE question_id IN (SELECT id FROM questions WHERE quiz_id = ?)').bind(quizId),
-    db.prepare('DELETE FROM questions WHERE quiz_id = ?').bind(quizId),
-    db.prepare('DELETE FROM quiz_attempts WHERE quiz_id = ?').bind(quizId),
-    db.prepare('DELETE FROM comment_reactions WHERE comment_id IN (SELECT id FROM comments WHERE quiz_id = ?)').bind(quizId),
-    db.prepare('DELETE FROM comments WHERE quiz_id = ?').bind(quizId),
-    // certificates and quiz_purchases also reference quizzes directly and
-    // were previously left out, blocking deletion of any quiz that had
-    // ever issued a certificate or been purchased.
-    db.prepare('DELETE FROM certificates WHERE quiz_id = ?').bind(quizId),
-    db.prepare('DELETE FROM quiz_purchases WHERE quiz_id = ?').bind(quizId),
-    db.prepare('DELETE FROM quizzes WHERE id = ?').bind(quizId),
-  ]);
+
+  // Deliberately NOT using nested `DELETE ... WHERE x IN (SELECT ...)`
+  // subqueries here. On Vercel, db.batch() runs each statement as a
+  // separate call to Cloudflare's D1 HTTP query endpoint (see
+  // d1HttpAdapter.ts) rather than a single atomic binding-level batch,
+  // and that endpoint has been unreliable with correlated subqueries in
+  // DELETE statements, causing 500s. Resolving child IDs explicitly first
+  // and deleting by an IN (?, ?, ...) list of literal IDs is safer across
+  // both the D1 binding and the HTTP adapter.
+  const { results: questionRows } = await db
+    .prepare('SELECT id FROM questions WHERE quiz_id = ?')
+    .bind(quizId)
+    .all<{ id: string }>();
+  const questionIds = questionRows.map((r) => r.id);
+
+  const { results: commentRows } = await db
+    .prepare('SELECT id FROM comments WHERE quiz_id = ?')
+    .bind(quizId)
+    .all<{ id: string }>();
+  const commentIds = commentRows.map((r) => r.id);
+
+  const placeholders = (n: number) => Array(n).fill('?').join(', ');
+
+  if (questionIds.length > 0) {
+    await db
+      .prepare(`DELETE FROM question_reports WHERE question_id IN (${placeholders(questionIds.length)})`)
+      .bind(...questionIds)
+      .run();
+    await db
+      .prepare(`DELETE FROM attempt_answers WHERE question_id IN (${placeholders(questionIds.length)})`)
+      .bind(...questionIds)
+      .run();
+  }
+
+  if (commentIds.length > 0) {
+    await db
+      .prepare(`DELETE FROM comment_reactions WHERE comment_id IN (${placeholders(commentIds.length)})`)
+      .bind(...commentIds)
+      .run();
+  }
+
+  await db.prepare('DELETE FROM questions WHERE quiz_id = ?').bind(quizId).run();
+  await db.prepare('DELETE FROM quiz_attempts WHERE quiz_id = ?').bind(quizId).run();
+  await db.prepare('DELETE FROM comments WHERE quiz_id = ?').bind(quizId).run();
+  await db.prepare('DELETE FROM certificates WHERE quiz_id = ?').bind(quizId).run();
+  await db.prepare('DELETE FROM quiz_purchases WHERE quiz_id = ?').bind(quizId).run();
+  await db.prepare('DELETE FROM quizzes WHERE id = ?').bind(quizId).run();
 }
 
 /**
  * Admin-wide listing across all quizzes regardless of visibility/status,
  * for the admin control panel.
  */
-export async function adminListAllQuizzes(): Promise<QuizWithStats[]> {
+export async function adminListAllQuizzes(
+  page = 1,
+  pageSize = 20
+): Promise<{ quizzes: QuizWithStats[]; total: number; page: number; pageSize: number }> {
   const db = getDb();
-  const { results } = await db
-    .prepare(
-      `SELECT
-        q.*,
-        (SELECT COUNT(*) FROM questions WHERE quiz_id = q.id) as question_count,
-        (SELECT COUNT(*) FROM quiz_attempts WHERE quiz_id = q.id) as attempt_count,
-        (SELECT AVG(CAST(score AS REAL) / total_questions * 100) FROM quiz_attempts WHERE quiz_id = q.id) as avg_score,
-        (SELECT COUNT(*) FROM comments WHERE quiz_id = q.id) as comment_count
-      FROM quizzes q
-      ORDER BY q.created_at DESC`
-    )
-    .all<QuizRow & { question_count: number; attempt_count: number; avg_score: number | null; comment_count: number }>();
+  const offset = Math.max(0, (page - 1) * pageSize);
 
-  return results.map((row) => ({
-    ...mapQuiz(row),
-    questionCount: row.question_count,
-    attemptCount: row.attempt_count,
-    averageScorePercent: row.avg_score,
-    commentCount: row.comment_count,
-  }));
+  const [{ results }, countRow] = await Promise.all([
+    db
+      .prepare(
+        `SELECT
+          q.*,
+          (SELECT COUNT(*) FROM questions WHERE quiz_id = q.id) as question_count,
+          (SELECT COUNT(*) FROM quiz_attempts WHERE quiz_id = q.id) as attempt_count,
+          (SELECT AVG(CAST(score AS REAL) / total_questions * 100) FROM quiz_attempts WHERE quiz_id = q.id) as avg_score,
+          (SELECT COUNT(*) FROM comments WHERE quiz_id = q.id) as comment_count
+        FROM quizzes q
+        ORDER BY q.created_at DESC
+        LIMIT ? OFFSET ?`
+      )
+      .bind(pageSize, offset)
+      .all<QuizRow & { question_count: number; attempt_count: number; avg_score: number | null; comment_count: number }>(),
+    db.prepare('SELECT COUNT(*) as total FROM quizzes').first<{ total: number }>(),
+  ]);
+
+  return {
+    quizzes: results.map((row) => ({
+      ...mapQuiz(row),
+      questionCount: row.question_count,
+      attemptCount: row.attempt_count,
+      averageScorePercent: row.avg_score,
+      commentCount: row.comment_count,
+    })),
+    total: countRow?.total ?? 0,
+    page,
+    pageSize,
+  };
 }

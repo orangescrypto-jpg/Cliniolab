@@ -270,12 +270,15 @@ export default function DashboardPage() {
           <h2 className="font-display text-xl font-semibold text-ink-800">Certificates</h2>
           <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
             {certificates.map((cert) => (
-              <Card key={cert.id} className="p-4">
-                <p className="font-medium text-ink-800">{cert.quizTitle}</p>
-                <p className="text-xs text-ink-400">
-                  Issued {new Date(cert.issuedAt).toLocaleDateString()}
-                </p>
-              </Card>
+              <Link key={cert.id} href={`/certificates/${cert.id}`}>
+                <Card className="p-4 transition-colors hover:bg-ink-50">
+                  <p className="font-medium text-ink-800">{cert.quizTitle}</p>
+                  <p className="text-xs text-ink-400">
+                    Issued {new Date(cert.issuedAt).toLocaleDateString()}
+                  </p>
+                  <p className="mt-2 text-xs font-medium text-pulse-600">View certificate →</p>
+                </Card>
+              </Link>
             ))}
           </div>
         </div>

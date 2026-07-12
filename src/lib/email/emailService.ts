@@ -5,6 +5,7 @@ import { newsletterEmail } from '@/lib/email/templates/newsletterEmail';
 import { quizResultEmail } from '@/lib/email/templates/quizResultEmail';
 import { commentReplyEmail } from '@/lib/email/templates/commentReplyEmail';
 import { inactivityNudgeEmail } from '@/lib/email/templates/inactivityNudgeEmail';
+import { certificateIssuedEmail } from '@/lib/email/templates/certificateIssuedEmail';
 import { emailLogService, featureFlagService, userService } from '@/lib/db';
 import type { AppUser } from '@/types';
 
@@ -114,6 +115,25 @@ export async function sendCommentReplyEmail(
   );
   await sendEmailViaResend({ to: recipient.email, subject, html });
   await emailLogService.logEmailSent(recipient.id, 'comment_reply');
+}
+
+export async function sendCertificateIssuedEmail(
+  user: AppUser,
+  quizTitle: string,
+  certificateId: string
+): Promise<void> {
+  const enabled = await featureFlagService.isFeatureEnabled('email_certificate_issued');
+  if (!enabled) return;
+  if (await emailLogService.hasEmailBeenSent(user.id, 'certificate_issued', certificateId)) return;
+
+  const { subject, html } = certificateIssuedEmail(
+    user.displayName ?? user.email,
+    quizTitle,
+    certificateId,
+    unsubscribeUrl(user.id)
+  );
+  await sendEmailViaResend({ to: user.email, subject, html });
+  await emailLogService.logEmailSent(user.id, 'certificate_issued', certificateId);
 }
 
 export async function sendInactivityNudgeEmail(user: AppUser, daysInactive: number): Promise<void> {

@@ -16,6 +16,8 @@ export default function DashboardPage() {
   const [myQuizzes, setMyQuizzes] = useState<QuizWithStats[]>([]);
   const [flaggedQuestions, setFlaggedQuestions] = useState<QuestionReportWithContext[]>([]);
   const [dismissingReportId, setDismissingReportId] = useState<string | null>(null);
+  const [deletingQuizId, setDeletingQuizId] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!user) return;
@@ -53,6 +55,25 @@ export default function DashboardPage() {
       const res2 = await fetch('/api/quizzes?mine=true');
       const data = await res2.json();
       setMyQuizzes(data.quizzes ?? []);
+    }
+  }
+
+  async function deleteQuiz(quizId: string) {
+    if (!confirm('Delete this quiz permanently? This cannot be undone.')) return;
+    setDeleteError(null);
+    setDeletingQuizId(quizId);
+    try {
+      const res = await fetch(`/api/quizzes/${quizId}`, { method: 'DELETE' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setDeleteError(data.error ?? `Failed to delete quiz (${res.status})`);
+        return;
+      }
+      setMyQuizzes((prev) => prev.filter((q) => q.id !== quizId));
+    } catch {
+      setDeleteError('Network error while deleting. Please try again.');
+    } finally {
+      setDeletingQuizId(null);
     }
   }
 
@@ -152,6 +173,11 @@ export default function DashboardPage() {
         </div>
       </div>
       <div className="mt-4 space-y-3">
+        {deleteError && (
+          <p className="rounded-md border border-critical-200 bg-critical-50 px-4 py-3 text-sm text-critical-600">
+            {deleteError}
+          </p>
+        )}
         {myQuizzes.map((quiz) => (
           <Card key={quiz.id} className="flex flex-wrap items-center justify-between gap-3 p-4">
             <div>
@@ -167,7 +193,7 @@ export default function DashboardPage() {
                 </p>
               )}
             </div>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
               <Link href={`/quizzes/${quiz.id}/edit`}>
                 <Button size="sm" variant="secondary">Edit</Button>
               </Link>
@@ -178,6 +204,14 @@ export default function DashboardPage() {
               )}
               <Button size="sm" variant="secondary" onClick={() => toggleVisibility(quiz.id, quiz.visibility)}>
                 Make {quiz.visibility === 'public' ? 'private' : 'public'}
+              </Button>
+              <Button
+                size="sm"
+                variant="danger"
+                onClick={() => deleteQuiz(quiz.id)}
+                disabled={deletingQuizId === quiz.id}
+              >
+                {deletingQuizId === quiz.id ? 'Deleting…' : 'Delete'}
               </Button>
             </div>
           </Card>

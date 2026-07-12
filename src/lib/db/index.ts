@@ -32,3 +32,4 @@ export * as abbreviationService from './services/abbreviationService';
 export * as scholarService from './services/scholarService';
 
 export { RetakeNotAllowedError } from './services/attemptService';
+export * as blogCategoryService from './services/blogCategoryService';

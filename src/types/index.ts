@@ -179,6 +179,7 @@ export interface AttemptResult {
     correctAnswer: string;
     isCorrect: boolean;
     explanation: string | null;
+    options: QuestionOption[];
   }[];
 }
 

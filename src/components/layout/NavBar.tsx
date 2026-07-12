@@ -127,30 +127,41 @@ export function NavBar() {
         <nav className="border-t border-ink-100 bg-paper px-4 py-4 md:hidden">
           <div className="flex flex-col gap-3">
             {navLinks.map((link) => (
-              <Link key={link.href} href={link.href} className="text-sm font-medium text-ink-600">
+              <Link
+                key={link.href}
+                href={link.href}
+                onClick={() => setMobileOpen(false)}
+                className="text-sm font-medium text-ink-600"
+              >
                 {link.label}
               </Link>
             ))}
             {user ? (
               <>
-                <Link href="/dashboard" className="text-sm font-medium text-ink-600">
+                <Link href="/dashboard" onClick={() => setMobileOpen(false)} className="text-sm font-medium text-ink-600">
                   Dashboard
                 </Link>
                 {(user.role === 'admin' || user.role === 'moderator') && (
-                  <Link href="/admin" className="text-sm font-medium text-ink-600">
+                  <Link href="/admin" onClick={() => setMobileOpen(false)} className="text-sm font-medium text-ink-600">
                     Admin
                   </Link>
                 )}
-                <button onClick={() => logout()} className="text-left text-sm font-medium text-critical-500">
+                <button
+                  onClick={() => {
+                    setMobileOpen(false);
+                    logout();
+                  }}
+                  className="text-left text-sm font-medium text-critical-500"
+                >
                   Log out
                 </button>
               </>
             ) : (
               <>
-                <Link href="/login" className="text-sm font-medium text-ink-600">
+                <Link href="/login" onClick={() => setMobileOpen(false)} className="text-sm font-medium text-ink-600">
                   Log in
                 </Link>
-                <Link href="/register" className="text-sm font-medium text-pulse-600">
+                <Link href="/register" onClick={() => setMobileOpen(false)} className="text-sm font-medium text-pulse-600">
                   Sign up
                 </Link>
               </>

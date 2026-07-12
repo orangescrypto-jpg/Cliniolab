@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
+import { QuestionNavigator } from '@/components/quiz/QuestionNavigator';
 import type { AttemptResult, Quiz, QuizQuestion } from '@/types';
 
 interface QuizRunnerProps {
@@ -49,6 +50,18 @@ export function QuizRunner({ quiz, questions: rawQuestions, submitEndpoint }: Qu
   const [flaggedQuestionIds, setFlaggedQuestionIds] = useState<Set<string>>(new Set());
   const [flaggingQuestionId, setFlaggingQuestionId] = useState<string | null>(null);
   const [flagError, setFlagError] = useState<string | null>(null);
+  // "Mark for review" during the attempt (CBT-style), distinct from the
+  // post-result "report this question" flag above.
+  const [markedForReview, setMarkedForReview] = useState<Set<string>>(new Set());
+
+  function toggleMarkForReview(questionId: string) {
+    setMarkedForReview((prev) => {
+      const next = new Set(prev);
+      if (next.has(questionId)) next.delete(questionId);
+      else next.add(questionId);
+      return next;
+    });
+  }
 
   // Whether this attempt is timed — true for exam mode (always) and for
   // quiz mode when the creator opted into a time limit for a speed-drill.
@@ -74,6 +87,14 @@ export function QuizRunner({ quiz, questions: rawQuestions, submitEndpoint }: Qu
   const progressPercent = useMemo(
     () => Math.round(((current + 1) / questions.length) * 100),
     [current, questions.length]
+  );
+  const navigatorStates = useMemo(
+    () =>
+      questions.map((q) => ({
+        answered: answers[q.id] !== undefined && answers[q.id] !== '',
+        flagged: markedForReview.has(q.id),
+      })),
+    [questions, answers, markedForReview]
   );
 
   async function handleSubmit() {
@@ -213,8 +234,29 @@ export function QuizRunner({ quiz, questions: rawQuestions, submitEndpoint }: Qu
         <div className="h-1 rounded-full bg-pulse-500 transition-all" style={{ width: `${progressPercent}%` }} />
       </div>
 
+      <QuestionNavigator
+        total={questions.length}
+        current={current}
+        states={navigatorStates}
+        onJump={(i) => setCurrent(i)}
+        className="mt-6"
+      />
+
       <Card className="mt-8 p-6">
-        <h2 className="font-display text-lg font-medium text-ink-800">{question.prompt}</h2>
+        <div className="flex items-start justify-between gap-4">
+          <h2 className="font-display text-lg font-medium text-ink-800">{question.prompt}</h2>
+          <button
+            type="button"
+            onClick={() => toggleMarkForReview(question.id)}
+            className={`shrink-0 whitespace-nowrap rounded-md border px-2.5 py-1 text-xs font-medium transition-colors ${
+              markedForReview.has(question.id)
+                ? 'border-flag-400 bg-flag-50 text-flag-600'
+                : 'border-ink-100 text-ink-400 hover:bg-ink-50'
+            }`}
+          >
+            {markedForReview.has(question.id) ? 'Marked ✓' : 'Mark for review'}
+          </button>
+        </div>
 
         <div className="mt-6 space-y-2">
           {question.type === 'mcq' &&

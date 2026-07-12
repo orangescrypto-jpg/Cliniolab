@@ -9,14 +9,14 @@ interface ToggleProps {
 
 export function Toggle({ checked, onChange, label, disabled }: ToggleProps) {
   return (
-    <label className="flex items-center gap-3 select-none">
+    <label className="flex items-start gap-3 select-none">
       <button
         type="button"
         role="switch"
         aria-checked={checked}
         disabled={disabled}
         onClick={() => onChange(!checked)}
-        className={`relative h-6 w-11 rounded-full transition-colors disabled:opacity-50 ${
+        className={`relative mt-0.5 h-6 w-11 shrink-0 rounded-full transition-colors disabled:opacity-50 ${
           checked ? 'bg-pulse-500' : 'bg-ink-200'
         }`}
       >
@@ -26,7 +26,7 @@ export function Toggle({ checked, onChange, label, disabled }: ToggleProps) {
           }`}
         />
       </button>
-      {label && <span className="text-sm font-medium text-ink-700">{label}</span>}
+      {label && <span className="text-sm font-medium leading-snug text-ink-700">{label}</span>}
     </label>
   );
 }

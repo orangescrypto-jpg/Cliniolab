@@ -5,7 +5,7 @@ import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Toggle } from '@/components/ui/Toggle';
 import { ImagePicker } from '@/components/ui/ImagePicker';
-import { RichTextEditor } from '@/components/ui/RichTextEditor';
+import { TiptapEditor } from '@/components/ui/TiptapEditor';
 import type { BlogContentFormat, BlogPost, BlogStatus } from '@/types';
 
 interface BlogCategoryOption { id: string; name: string; slug: string; sortOrder: number }
@@ -28,7 +28,10 @@ export default function AdminBlogPage() {
   const [slug, setSlug] = useState('');
   const [slugTouched, setSlugTouched] = useState(false);
   const [content, setContent] = useState('');
-  const [contentFormat, setContentFormat] = useState<BlogContentFormat>('markdown');
+  // Tiptap always authors real HTML, so new/edited posts are always saved
+  // as 'html'. Existing 'markdown' posts already in the DB are unaffected
+  // and still render via the old markdown path on the public blog page.
+  const [contentFormat, setContentFormat] = useState<BlogContentFormat>('html');
   const [featuredImageUrl, setFeaturedImageUrl] = useState('');
   const [blogCategories, setBlogCategories] = useState<BlogCategoryOption[]>([]);
   const [category, setCategory] = useState<string>('');
@@ -163,11 +166,11 @@ export default function AdminBlogPage() {
         <div>
           <label className="text-sm font-medium text-ink-700">Content</label>
           <div className="mt-1">
-            <RichTextEditor
+            <TiptapEditor
               value={content}
               onChange={setContent}
-              format={contentFormat}
-              onFormatChange={setContentFormat}
+              uploadPurpose="blog"
+              placeholder="Write your post…"
             />
           </div>
         </div>

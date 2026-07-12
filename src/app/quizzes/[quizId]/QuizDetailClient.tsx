@@ -1,6 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth/AuthProvider';
 import { QuizRunner } from '@/components/quiz/QuizRunner';
 import { StudyModeRunner } from '@/components/quiz/StudyModeRunner';
@@ -23,7 +24,7 @@ function formatNaira(kobo: number): string {
 }
 
 export function QuizDetailClient({ quizId }: { quizId: string }) {
-  
+  const router = useRouter();
   const { user, loading } = useAuth();
   const [quiz, setQuiz] = useState<Quiz | null>(null);
   const [questions, setQuestions] = useState<Omit<QuizQuestion, 'correctAnswer'>[]>([]);
@@ -33,6 +34,42 @@ export function QuizDetailClient({ quizId }: { quizId: string }) {
   const [fetching, setFetching] = useState(false);
   const [requiresPurchase, setRequiresPurchase] = useState(false);
   const [purchasing, setPurchasing] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  // Lightweight preview load so the owner sees a Delete option before
+  // committing to "Start" (which pulls full question sets).
+  useEffect(() => {
+    if (!user) return;
+    fetch(`/api/quizzes/${quizId}`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.quiz) setQuiz((prev) => prev ?? data.quiz);
+      })
+      .catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [quizId, user]);
+
+  const isOwner = !!user && !!quiz && (quiz.creatorId === user.id || user.role === 'admin' || user.role === 'moderator');
+
+  async function handleDelete() {
+    if (!confirm('Delete this quiz permanently? This cannot be undone.')) return;
+    setDeleteError(null);
+    setDeleting(true);
+    try {
+      const res = await fetch(`/api/quizzes/${quizId}`, { method: 'DELETE' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setDeleteError(data.error ?? `Failed to delete quiz (${res.status})`);
+        return;
+      }
+      router.push('/quizzes');
+    } catch {
+      setDeleteError('Network error while deleting. Please try again.');
+    } finally {
+      setDeleting(false);
+    }
+  }
 
   async function handleStart() {
     setFetching(true);
@@ -136,6 +173,22 @@ export function QuizDetailClient({ quizId }: { quizId: string }) {
         </div>
         {quiz?.description && <p className="mt-2 text-ink-500">{quiz.description}</p>}
         {error && <p className="mt-4 text-sm text-critical-500">{error}</p>}
+        {deleteError && <p className="mt-4 text-sm text-critical-500">{deleteError}</p>}
+
+        {isOwner && (
+          <div className="mt-4 flex flex-wrap gap-2">
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => router.push(`/quizzes/${quizId}/edit`)}
+            >
+              Edit
+            </Button>
+            <Button variant="danger" size="sm" onClick={handleDelete} disabled={deleting}>
+              {deleting ? 'Deleting…' : 'Delete permanently'}
+            </Button>
+          </div>
+        )}
 
         {requiresPurchase && quiz ? (
           <div className="mt-6 rounded-md border border-flag-200 bg-flag-50 p-4">

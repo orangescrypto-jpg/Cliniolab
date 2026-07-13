@@ -89,27 +89,32 @@ function looksLikeHtml(content: string): boolean {
  */
 const RESPONSIVE_OVERRIDE_CSS = `
 <style>
-  html, body { max-width: 100% !important; overflow-x: hidden !important; }
-  body > * { max-width: 100% !important; }
+  html, body {
+    max-width: 100% !important;
+    overflow-x: hidden !important;
+    background: #F7F5F0 !important;
+    margin: 0 !important;
+  }
+  /* Flatten the common "boxed card" pattern: a wrapper div (or the body
+     itself) with its own white/light background, box-shadow, border,
+     border-radius, or outer margin. This is what makes pasted HTML read
+     as a floating rectangle instead of flowing text. Padding is left
+     alone so inner spacing/readability isn't disturbed. */
+  body, body > * {
+    max-width: 100% !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+    border: none !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+  }
   img, video, iframe, canvas, svg { max-width: 100% !important; height: auto !important; }
   table { display: block !important; max-width: 100% !important; overflow-x: auto !important; }
   pre { max-width: 100% !important; overflow-x: auto !important; }
   * { box-sizing: border-box !important; }
 </style>
 `;
-
-/**
- * Most pasted documents don't set an explicit background — browsers
- * default <body> to opaque white. Against the site's cream page
- * background, that reads as a floating white "card" even once the width
- * is fixed (this is what the person is seeing: full-width, just visually
- * boxed). We only force transparency when the author didn't deliberately
- * set a background, so an intentionally-styled post (e.g. a dark-mode
- * code post) keeps its own look.
- */
-function hasExplicitBackground(html: string): boolean {
-  return /body\s*{[^}]*background/i.test(html) || /<body[^>]+style=["'][^"']*background/i.test(html);
-}
 
 function ensureViewportMeta(html: string): string {
   if (/<meta[^>]+name=["']viewport["']/i.test(html)) return html;
@@ -123,19 +128,15 @@ function ensureViewportMeta(html: string): string {
   return `${viewportTag}${html}`;
 }
 
-/** Injects the responsive override stylesheet (and, if the author didn't set their own background, a page-matching background) right before </head> so it loads after and wins against the author's own styles. */
+/** Injects the responsive override stylesheet right before </head> so it loads after, and wins the cascade against, the author's own styles — flattening any boxed/card look into flush, full-width, page-matching content. */
 function injectResponsiveOverrides(html: string): string {
-  const backgroundOverride = hasExplicitBackground(html)
-    ? ''
-    : '<style>html, body { background: #F7F5F0 !important; }</style>';
-  const combined = `${RESPONSIVE_OVERRIDE_CSS}${backgroundOverride}`;
   if (/<\/head>/i.test(html)) {
-    return html.replace(/<\/head>/i, `${combined}</head>`);
+    return html.replace(/<\/head>/i, `${RESPONSIVE_OVERRIDE_CSS}</head>`);
   }
   if (/<\/html>/i.test(html)) {
-    return html.replace(/<\/html>/i, `${combined}</html>`);
+    return html.replace(/<\/html>/i, `${RESPONSIVE_OVERRIDE_CSS}</html>`);
   }
-  return `${html}${combined}`;
+  return `${html}${RESPONSIVE_OVERRIDE_CSS}`;
 }
 
 function RawHtmlFrame({ html }: { html: string }) {

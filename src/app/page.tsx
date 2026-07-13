@@ -16,6 +16,10 @@ import type { Category, LeaderboardEntry, Resource } from '@/types';
 
 interface BlogCategoryOption { id: string; name: string; slug: string; sortOrder: number }
 
+// Job/Scholarship get their own dedicated pages (/jobs, /scholarships)
+// instead of a homepage section, so they're filtered out here.
+const HOMEPAGE_EXCLUDED_SLUGS = new Set(['job', 'scholarship']);
+
 export default function HomePage() {
   const { user } = useAuth();
   const [categories, setCategories] = useState<Category[]>([]);
@@ -58,6 +62,8 @@ export default function HomePage() {
       .catch(() => {});
   }, []);
 
+  const homepageBlogCategories = blogCategories.filter((c) => !HOMEPAGE_EXCLUDED_SLUGS.has(c.slug));
+
   return (
     <div>
       {/* Hero */}
@@ -87,9 +93,14 @@ export default function HomePage() {
 
       <DailyQuizBanner />
 
-      {/* Blog / education content, one section per fixed category */}
-      {blogCategories.map((category) => (
-        <CategoryBlogSection key={category.id} category={category.name} />
+      {/* Blog / education content, one section per fixed category (excluding Job/Scholarship) */}
+      {homepageBlogCategories.map((category) => (
+        <CategoryBlogSection
+          key={category.id}
+          categoryId={category.id}
+          categorySlug={category.slug}
+          categoryName={category.name}
+        />
       ))}
 
       <div className="chart-strip mx-auto max-w-7xl text-ink-200" aria-hidden />

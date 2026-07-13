@@ -34,6 +34,9 @@ export default async function CertificatePage({ params }: RouteParams) {
         </p>
         <p className="mt-6 text-sm text-ink-400">has successfully completed</p>
         <p className="mt-2 font-display text-xl font-medium text-ink-800">{certificate.quizTitle}</p>
+        <p className="mt-4 font-display text-lg font-semibold text-pulse-600">
+          with a score of {certificate.scorePercentage}%
+        </p>
 
         <div className="mt-10 flex flex-col items-center gap-1">
           <p className="text-sm text-ink-600">Issued {issuedDate}</p>

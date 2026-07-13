@@ -47,7 +47,7 @@ export function CommentThread({ endpoint, placeholder = 'Share your thoughts on 
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
   function loadComments() {
-    fetch(endpoint)
+    fetch(endpoint, { cache: 'no-store' })
       .then((res) => res.json())
       .then((data) => {
         setEnabled(data.enabled);

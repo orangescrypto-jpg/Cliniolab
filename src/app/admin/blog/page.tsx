@@ -28,6 +28,7 @@ export default function AdminBlogPage() {
   const [slug, setSlug] = useState('');
   const [slugTouched, setSlugTouched] = useState(false);
   const [content, setContent] = useState('');
+  const [excerpt, setExcerpt] = useState('');
   // Tiptap always authors real HTML, so new/edited posts are always saved
   // as 'html'. Existing 'markdown' posts already in the DB are unaffected
   // and still render via the old markdown path on the public blog page.
@@ -98,6 +99,7 @@ export default function AdminBlogPage() {
         slug: slug || slugify(title),
         content,
         contentFormat,
+        excerpt: excerpt || undefined,
         featuredImageUrl: featuredImageUrl || undefined,
         category,
         status,
@@ -113,6 +115,7 @@ export default function AdminBlogPage() {
       setSlug('');
       setSlugTouched(false);
       setContent('');
+      setExcerpt('');
       setContentFormat('markdown');
       setFeaturedImageUrl('');
       setSeoTitle('');
@@ -173,6 +176,18 @@ export default function AdminBlogPage() {
               placeholder="Write your post…"
             />
           </div>
+        </div>
+
+        <div>
+          <label className="text-sm font-medium text-ink-700">Excerpt</label>
+          <textarea
+            value={excerpt}
+            onChange={(e) => setExcerpt(e.target.value)}
+            rows={3}
+            placeholder="Short summary shown on the blog listing page, in newsletters, and social previews. Falls back to an auto-generated excerpt from the content if left blank."
+            className="mt-1 w-full rounded-md border border-ink-100 px-4 py-2 text-sm focus:border-pulse-400 focus:outline-none"
+          />
+          <p className="mt-1 text-xs text-ink-400">{excerpt.length} characters</p>
         </div>
 
         {/* SEO panel — WordPress/Yoast-style overrides, separate from the post title/content itself */}

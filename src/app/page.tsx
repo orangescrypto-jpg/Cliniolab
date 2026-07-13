@@ -78,7 +78,7 @@ export default function HomePage() {
           <p className="mt-4 max-w-xl text-lg text-ink-500">
             In-depth articles and study guides across core sciences, clinical specialties, and
             nursing practice, paired with quizzes and computer-based test (CBT) simulations to
-            put that knowledge to the test — built and shared by students like you.
+            put that knowledge to the test built and shared by students like you.
           </p>
           <div className="mt-8 flex gap-4">
             <Link href="/categories"><Button size="lg">Browse categories</Button></Link>

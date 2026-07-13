@@ -37,7 +37,7 @@ function mapBlog(row: BlogRow): BlogPost {
     title: row.title,
     slug: row.slug,
     content: row.content,
-    contentFormat: (row.content_format as BlogContentFormat) ?? 'markdown',
+    contentFormat: row.content_format === 'html' ? 'html' : 'markdown',
     excerpt: row.excerpt,
     category: row.category,
     blogCategoryId: row.blog_category_id,

@@ -30,6 +30,7 @@ export async function POST(request: Request) {
     slug: string;
     content: string;
     contentFormat?: 'markdown' | 'html';
+    excerpt?: string;
     status: BlogStatus;
     category?: string;
     featuredImageUrl?: string;
@@ -54,6 +55,7 @@ export async function POST(request: Request) {
     slug: body.slug,
     content: body.content,
     contentFormat: body.contentFormat,
+    excerpt: body.excerpt,
     status: body.status ?? 'draft',
     category: body.category,
     featuredImageUrl: body.featuredImageUrl,
@@ -67,7 +69,7 @@ export async function POST(request: Request) {
   // Only ever send once, and only for posts actually published (not drafts).
   if (post.sendAsNewsletter && post.status === 'published') {
     const recipients = await userService.adminListUsers();
-    const excerpt = post.content.replace(/[#*_>[\]()!-]/g, '').slice(0, 160) + '…';
+    const excerpt = post.excerpt || post.content.replace(/[#*_>[\]()!-]/g, '').slice(0, 160) + '…';
     sendNewsletterForPost(post.id, post.title, post.slug, excerpt, recipients)
       .then(() => cmsService.markNewsletterSent(post.id))
       .catch(() => {});

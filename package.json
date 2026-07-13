@@ -31,7 +31,8 @@
     "@tiptap/extension-highlight": "^2.11.5",
     "@tiptap/extension-color": "^2.11.5",
     "@tiptap/extension-text-style": "^2.11.5",
-    "@tiptap/extension-character-count": "^2.11.5"
+    "@tiptap/extension-character-count": "^2.11.5",
+    "lucide-react": "^0.475.0"
   },
   "devDependencies": {
     "@types/node": "^20.10.0",

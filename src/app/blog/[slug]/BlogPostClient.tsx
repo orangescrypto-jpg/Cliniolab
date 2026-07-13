@@ -99,8 +99,14 @@ const RESPONSIVE_OVERRIDE_CSS = `
      itself) with its own white/light background, box-shadow, border,
      border-radius, or outer margin. This is what makes pasted HTML read
      as a floating rectangle instead of flowing text. Padding is left
-     alone so inner spacing/readability isn't disturbed. */
-  body, body > * {
+     alone so inner spacing/readability isn't disturbed.
+     Applied to every element (not just direct children of body) since
+     authors commonly nest the boxed wrapper a level or two deeper, e.g.
+     body > .page-wrapper > .card. Only the outer box chrome is stripped
+     -- background/shadow/border/radius/horizontal margin -- so inline
+     card-style elements the author actually wants (e.g. a callout box)
+     aren't visually destroyed, just prevented from constraining width. */
+  body, body * {
     max-width: 100% !important;
     background: transparent !important;
     box-shadow: none !important;
@@ -108,6 +114,13 @@ const RESPONSIVE_OVERRIDE_CSS = `
     border: none !important;
     margin-left: 0 !important;
     margin-right: 0 !important;
+  }
+  /* Only block-level containers get width:auto -- this is what actually
+     collapses a fixed-width boxed card (e.g. style="width:960px") back
+     to fluid. Left off other elements (buttons, spans, images, badges)
+     so intentional sizing on inline/inline-block content still works. */
+  body div, body section, body article, body main, body header, body footer {
+    width: auto !important;
   }
   img, video, iframe, canvas, svg { max-width: 100% !important; height: auto !important; }
   table { display: block !important; max-width: 100% !important; overflow-x: auto !important; }

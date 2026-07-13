@@ -43,15 +43,17 @@ export function Footer() {
               </ul>
             </div>
             <div>
-              <h4 className="text-sm font-semibold text-white">Blog Categories</h4>
+              <h4 className="text-sm font-semibold text-white">Learning Content</h4>
               <ul className="mt-3 space-y-2 text-sm text-ink-300">
-                {blogCategories.map((c) => (
-                  <li key={c.id}>
-                    <Link href={`/blog/category/${c.slug}`} className="hover:text-white">
-                      {c.name}
-                    </Link>
-                  </li>
-                ))}
+                {blogCategories
+                  .filter((c) => c.slug !== 'job' && c.slug !== 'scholarship')
+                  .map((c) => (
+                    <li key={c.id}>
+                      <Link href={`/blog/category/${c.slug}`} className="hover:text-white">
+                        {c.name}
+                      </Link>
+                    </li>
+                  ))}
               </ul>
             </div>
             <div>

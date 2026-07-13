@@ -138,9 +138,12 @@ export function RichTextEditor({ value, onChange, rows = 12, format = 'markdown'
 
       {format === 'html' && !showPreview && (
         <p className="border-b border-ink-100 bg-amber-50 px-4 py-2 text-xs text-amber-700">
-          Raw HTML mode — paste code samples, embeds, or custom markup. It&apos;s sanitized before
-          publishing (scripts and event handlers are stripped), but double-check the Preview tab
-          before saving.
+          Raw HTML mode — paste code samples, embeds, custom markup, or a{' '}
+          <code>&lt;style&gt;</code> block. It&apos;s sanitized before publishing (scripts and
+          event handlers are always stripped); any <code>&lt;style&gt;</code> block is kept but
+          scoped to this post only — selectors like <code>html</code>, <code>body</code>, or site
+          navigation classes are dropped so author CSS can never restyle the rest of the site.
+          Double-check the Preview tab before saving.
         </p>
       )}
 
@@ -158,7 +161,7 @@ export function RichTextEditor({ value, onChange, rows = 12, format = 'markdown'
           rows={rows}
           placeholder={
             format === 'html'
-              ? 'Write or paste raw HTML — e.g. <pre><code>...</code></pre> for a code sample'
+              ? 'Write or paste raw HTML — e.g. <pre><code>...</code></pre> for a code sample, or a <style> block for custom CSS (auto-scoped to this post)'
               : 'Write your post using the toolbar above, or plain Markdown...'
           }
           className={`w-full resize-y border-0 p-4 text-sm focus:outline-none ${format === 'html' ? 'font-mono' : ''}`}

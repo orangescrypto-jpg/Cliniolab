@@ -9,11 +9,20 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const limitParam = searchParams.get('limit');
   const limit = limitParam ? Number(limitParam) : undefined;
-  const category = searchParams.get('category');
+  const categoryId = searchParams.get('categoryId');
+  const categorySlug = searchParams.get('categorySlug');
+  const category = searchParams.get('category'); // legacy free-text name, old links
 
-  const posts = category
-    ? await cmsService.getPostsByCategory(category, limit)
-    : await cmsService.listPublishedPosts(limit);
+  let posts;
+  if (categoryId) {
+    posts = await cmsService.getPostsByCategoryId(categoryId, limit);
+  } else if (categorySlug) {
+    posts = await cmsService.getPostsByCategorySlug(categorySlug, limit);
+  } else if (category) {
+    posts = await cmsService.getPostsByCategory(category, limit);
+  } else {
+    posts = await cmsService.listPublishedPosts(limit);
+  }
 
   return NextResponse.json({ posts });
 }
@@ -32,7 +41,8 @@ export async function POST(request: Request) {
     contentFormat?: 'markdown' | 'html';
     excerpt?: string;
     status: BlogStatus;
-    category?: string;
+    blogCategoryId: string;
+    blogSubcategoryId?: string;
     featuredImageUrl?: string;
     seoTitle?: string;
     seoDescription?: string;
@@ -49,6 +59,9 @@ export async function POST(request: Request) {
   if (!body.title || !body.slug || !body.content) {
     return NextResponse.json({ error: 'title, slug, and content are required' }, { status: 400 });
   }
+  if (!body.blogCategoryId) {
+    return NextResponse.json({ error: 'blogCategoryId is required' }, { status: 400 });
+  }
 
   const post = await cmsService.createPost(user.id, {
     title: body.title,
@@ -57,7 +70,8 @@ export async function POST(request: Request) {
     contentFormat: body.contentFormat,
     excerpt: body.excerpt,
     status: body.status ?? 'draft',
-    category: body.category,
+    blogCategoryId: body.blogCategoryId,
+    blogSubcategoryId: body.blogSubcategoryId,
     featuredImageUrl: body.featuredImageUrl,
     seoTitle: body.seoTitle,
     seoDescription: body.seoDescription,

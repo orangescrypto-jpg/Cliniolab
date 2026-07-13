@@ -26,7 +26,8 @@ export async function PUT(request: Request, { params }: RouteParams) {
     contentFormat: BlogContentFormat;
     excerpt: string;
     status: BlogStatus;
-    category: string;
+    blogCategoryId: string;
+    blogSubcategoryId: string | null;
     featuredImageUrl: string;
     seoTitle: string;
     seoDescription: string;

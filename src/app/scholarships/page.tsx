@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { BlogPostCard } from '@/components/cms/BlogPostCard';
+import { SCHOLARSHIP_CATEGORY_SLUG } from '@/lib/constants/blogCategories';
 import type { BlogPost } from '@/types';
 
 export default function ScholarshipsPage() {
@@ -14,7 +15,7 @@ export default function ScholarshipsPage() {
       .then((res) => res.json())
       .then((data) => setEnabled(data.enabled))
       .finally(() => setLoaded(true));
-    fetch('/api/blog?category=Scholarship')
+    fetch(`/api/blog?categorySlug=${SCHOLARSHIP_CATEGORY_SLUG}`)
       .then((res) => res.json())
       .then((data) => setPosts(data.posts ?? []));
   }, []);

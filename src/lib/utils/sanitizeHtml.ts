@@ -20,7 +20,7 @@
  * XSS vector.
  */
 
-const DANGEROUS_TAGS_STRIP_CONTENT = new Set(['script', 'style', 'iframe', 'object', 'embed', 'form']);
+const DANGEROUS_TAGS_STRIP_CONTENT = new Set(['script', 'style', 'object', 'embed', 'form']);
 
 const ALLOWED_TAGS = new Set([
   'p', 'br', 'hr',
@@ -28,19 +28,85 @@ const ALLOWED_TAGS = new Set([
   'strong', 'b', 'em', 'i', 'u', 's', 'mark', 'small', 'sub', 'sup',
   'ul', 'ol', 'li',
   'blockquote', 'pre', 'code',
-  'a', 'img',
+  'a', 'img', 'figure', 'figcaption',
   'table', 'thead', 'tbody', 'tr', 'th', 'td',
-  'div', 'span',
+  'div', 'span', 'iframe',
 ]);
+
+// Only these two video-embed origins are ever allowed through as <iframe>.
+// Every other iframe (including ones with these hostnames buried in a
+// query string or fragment to fool a naive substring check) is stripped.
+// isSafeEmbedSrc() below does a real URL-parse, not a substring match.
+const EMBED_HOST_ALLOWLIST = new Set(['www.youtube.com', 'youtube.com', 'player.vimeo.com']);
 
 const ALLOWED_ATTRS: Record<string, Set<string>> = {
   a: new Set(['href', 'title', 'target', 'rel']),
-  img: new Set(['src', 'alt', 'title', 'width', 'height']),
+  img: new Set(['src', 'alt', 'title', 'width', 'height', 'style']),
   table: new Set(['border']),
-  td: new Set(['colspan', 'rowspan']),
-  th: new Set(['colspan', 'rowspan']),
+  td: new Set(['colspan', 'rowspan', 'style']),
+  th: new Set(['colspan', 'rowspan', 'style']),
+  p: new Set(['style']),
+  h1: new Set(['style']), h2: new Set(['style']), h3: new Set(['style']),
+  h4: new Set(['style']), h5: new Set(['style']), h6: new Set(['style']),
+  span: new Set(['style']),
+  div: new Set(['style']),
+  figure: new Set(['style']),
+  mark: new Set(['style']),
+  // iframe intentionally NOT given a normal attrs entry — it's handled by
+  // a dedicated branch in rebuildOpeningTag() that only ever emits a
+  // fixed, hardcoded set of attributes for a verified embed URL.
 };
 const GLOBAL_ALLOWED_ATTRS = new Set(['class', 'id']);
+
+// Whitelisted CSS *properties* for the `style` attribute, each with its
+// own value validator. This is not "allow the style attribute" — every
+// property must appear here, and every value is checked, so things like
+// `background:url(javascript:...)` or `expression(...)` can't get through
+// even though `style` itself is now permitted on a few tags.
+const STYLE_PROPERTY_VALIDATORS: Record<string, (value: string) => boolean> = {
+  'text-align': (v) => /^(left|right|center|justify)$/.test(v.trim()),
+  color: (v) => isSafeCssColorOrLength(v) && /^(#[0-9a-f]{3,8}|rgb|rgba|hsl|hsla|[a-z]+)/i.test(v.trim()),
+  'background-color': (v) => isSafeCssColorOrLength(v) && /^(#[0-9a-f]{3,8}|rgb|rgba|hsl|hsla|[a-z]+)/i.test(v.trim()),
+  width: (v) => /^\d{1,4}(px|%)$/.test(v.trim()),
+  'max-width': (v) => /^\d{1,4}(px|%)$/.test(v.trim()),
+};
+
+function isSafeCssColorOrLength(value: string): boolean {
+  const v = value.trim().toLowerCase();
+  // Blocks url(), expression(), javascript:, and any other function call
+  // except the handful of legitimate color functions checked separately.
+  if (/url\s*\(|expression\s*\(|javascript:|import/.test(v)) return false;
+  return true;
+}
+
+function sanitizeStyleValue(styleValue: string): string {
+  const kept: string[] = [];
+  for (const decl of styleValue.split(';')) {
+    const idx = decl.indexOf(':');
+    if (idx === -1) continue;
+    const prop = decl.slice(0, idx).trim().toLowerCase();
+    const val = decl.slice(idx + 1).trim();
+    const validator = STYLE_PROPERTY_VALIDATORS[prop];
+    if (validator && val && validator(val)) {
+      kept.push(`${prop}: ${val.replace(/"/g, '')}`);
+    }
+  }
+  return kept.join('; ');
+}
+
+function isSafeEmbedSrc(value: string): { ok: boolean; normalizedSrc?: string } {
+  try {
+    const url = new URL(value.trim());
+    if (url.protocol !== 'https:') return { ok: false };
+    if (!EMBED_HOST_ALLOWLIST.has(url.hostname)) return { ok: false };
+    const isYouTube = url.hostname.endsWith('youtube.com') && url.pathname.startsWith('/embed/');
+    const isVimeo = url.hostname === 'player.vimeo.com' && url.pathname.startsWith('/video/');
+    if (!isYouTube && !isVimeo) return { ok: false };
+    return { ok: true, normalizedSrc: url.toString() };
+  } catch {
+    return { ok: false };
+  }
+}
 
 function isSafeUrlValue(value: string): boolean {
   const trimmed = value.trim().toLowerCase();
@@ -64,6 +130,19 @@ function parseAttributes(attrString: string): { name: string; value: string }[] 
 
 function rebuildOpeningTag(tag: string, attrString: string): string {
   const attrs = parseAttributes(attrString);
+
+  // iframe is never handled by the generic allowlist path below — only a
+  // verified YouTube/Vimeo embed URL produces output, with a fixed,
+  // hardcoded attribute set. Every other iframe attribute the author
+  // wrote (onload, srcdoc, sandbox overrides, etc.) is discarded outright.
+  if (tag === 'iframe') {
+    const srcAttr = attrs.find((a) => a.name.toLowerCase() === 'src');
+    if (!srcAttr) return '';
+    const { ok, normalizedSrc } = isSafeEmbedSrc(srcAttr.value);
+    if (!ok || !normalizedSrc) return '';
+    return `<iframe src="${normalizedSrc.replace(/"/g, '&quot;')}" width="100%" height="360" frameborder="0" sandbox="allow-scripts allow-same-origin allow-presentation" allowfullscreen loading="lazy" title="Embedded video">`;
+  }
+
   const allowedForTag = new Set([...(ALLOWED_ATTRS[tag] ?? []), ...GLOBAL_ALLOWED_ATTRS]);
   const kept: string[] = [];
   let target = '';
@@ -74,6 +153,14 @@ function rebuildOpeningTag(tag: string, attrString: string): string {
     if (!allowedForTag.has(lowerName)) continue;
     if ((lowerName === 'href' || lowerName === 'src') && !isSafeUrlValue(value)) continue;
     if (lowerName === 'target') target = value;
+
+    if (lowerName === 'style') {
+      const cleanStyle = sanitizeStyleValue(value);
+      if (!cleanStyle) continue;
+      kept.push(`style="${cleanStyle.replace(/"/g, '&quot;')}"`);
+      continue;
+    }
+
     const safeValue = value.replace(/&/g, '&amp;').replace(/"/g, '&quot;');
     kept.push(`${lowerName}="${safeValue}"`);
   }
@@ -134,6 +221,22 @@ export function sanitizeHtml(input: string): string {
     }
 
     if (!ALLOWED_TAGS.has(tag)) {
+      i = match.index + fullMatch.length;
+      continue;
+    }
+
+    if (tag === 'iframe' && !isClosing) {
+      const rebuilt = rebuildOpeningTag(tag, attrString);
+      if (!rebuilt) {
+        // Failed embed verification — treat exactly like a dangerous tag:
+        // drop this iframe and everything inside it, including whatever
+        // fallback markup an attacker put between the tags.
+        skippingTag = 'iframe';
+        skipDepth = 1;
+        i = match.index + fullMatch.length;
+        continue;
+      }
+      output += rebuilt;
       i = match.index + fullMatch.length;
       continue;
     }

@@ -10,6 +10,8 @@ interface BlogRow {
   content_format: string;
   excerpt: string | null;
   category: string | null;
+  blog_category_id: string | null;
+  blog_subcategory_id: string | null;
   featured_image_url: string | null;
   seo_title: string | null;
   seo_description: string | null;
@@ -38,6 +40,8 @@ function mapBlog(row: BlogRow): BlogPost {
     contentFormat: (row.content_format as BlogContentFormat) ?? 'markdown',
     excerpt: row.excerpt,
     category: row.category,
+    blogCategoryId: row.blog_category_id,
+    blogSubcategoryId: row.blog_subcategory_id,
     featuredImageUrl: row.featured_image_url,
     seoTitle: row.seo_title,
     seoDescription: row.seo_description,
@@ -67,6 +71,8 @@ export async function listPublishedPosts(limit?: number): Promise<BlogPost[]> {
   return results.map(mapBlog);
 }
 
+/** Legacy: filters by the old free-text `category` column. Kept only so
+ * posts created before the category/subcategory restructure keep working. */
 export async function getPostsByCategory(category: string, limit?: number): Promise<BlogPost[]> {
   const db = getDb();
   const query = `SELECT * FROM blog_posts WHERE status = 'published' AND category = ? ORDER BY is_pinned DESC, created_at DESC${
@@ -75,6 +81,30 @@ export async function getPostsByCategory(category: string, limit?: number): Prom
   const stmt = limit ? db.prepare(query).bind(category, limit) : db.prepare(query).bind(category);
   const { results } = await stmt.all<BlogRow>();
   return results.map(mapBlog);
+}
+
+/** Current: filters by blog_category_id (the fixed top-level category FK). */
+export async function getPostsByCategoryId(blogCategoryId: string, limit?: number): Promise<BlogPost[]> {
+  const db = getDb();
+  const query = `SELECT * FROM blog_posts WHERE status = 'published' AND blog_category_id = ? ORDER BY is_pinned DESC, created_at DESC${
+    limit ? ' LIMIT ?' : ''
+  }`;
+  const stmt = limit ? db.prepare(query).bind(blogCategoryId, limit) : db.prepare(query).bind(blogCategoryId);
+  const { results } = await stmt.all<BlogRow>();
+  return results.map(mapBlog);
+}
+
+/** Convenience wrapper: resolves a category slug to its id, then filters.
+ * Returns an empty list (not an error) if the slug doesn't match any
+ * fixed category, so callers can render an empty state. */
+export async function getPostsByCategorySlug(categorySlug: string, limit?: number): Promise<BlogPost[]> {
+  const db = getDb();
+  const category = await db
+    .prepare('SELECT id FROM blog_categories WHERE slug = ?')
+    .bind(categorySlug)
+    .first<{ id: string }>();
+  if (!category) return [];
+  return getPostsByCategoryId(category.id, limit);
 }
 
 export async function adminListAllPosts(): Promise<BlogPost[]> {
@@ -103,7 +133,8 @@ export async function createPost(
     contentFormat?: BlogContentFormat;
     excerpt?: string;
     status: BlogStatus;
-    category?: string;
+    blogCategoryId: string;
+    blogSubcategoryId?: string;
     featuredImageUrl?: string;
     seoTitle?: string;
     seoDescription?: string;
@@ -118,8 +149,8 @@ export async function createPost(
   await db
     .prepare(
       `INSERT INTO blog_posts
-        (id, author_id, title, slug, content, content_format, excerpt, category, featured_image_url, seo_title, seo_description, status, is_sponsored, is_pinned, send_as_newsletter, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        (id, author_id, title, slug, content, content_format, excerpt, blog_category_id, blog_subcategory_id, featured_image_url, seo_title, seo_description, status, is_sponsored, is_pinned, send_as_newsletter, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .bind(
       id,
@@ -129,7 +160,8 @@ export async function createPost(
       input.content,
       input.contentFormat ?? 'markdown',
       input.excerpt ?? null,
-      input.category ?? null,
+      input.blogCategoryId,
+      input.blogSubcategoryId ?? null,
       input.featuredImageUrl ?? null,
       input.seoTitle ?? null,
       input.seoDescription ?? null,
@@ -148,7 +180,9 @@ export async function createPost(
     content: input.content,
     contentFormat: input.contentFormat ?? 'markdown',
     excerpt: input.excerpt ?? null,
-    category: input.category ?? null,
+    category: null,
+    blogCategoryId: input.blogCategoryId,
+    blogSubcategoryId: input.blogSubcategoryId ?? null,
     featuredImageUrl: input.featuredImageUrl ?? null,
     seoTitle: input.seoTitle ?? null,
     seoDescription: input.seoDescription ?? null,
@@ -170,7 +204,8 @@ export async function updatePost(
     contentFormat: BlogContentFormat;
     excerpt: string;
     status: BlogStatus;
-    category: string;
+    blogCategoryId: string;
+    blogSubcategoryId: string | null;
     featuredImageUrl: string;
     seoTitle: string;
     seoDescription: string;
@@ -187,7 +222,8 @@ export async function updatePost(
   if (input.contentFormat !== undefined) { fields.push('content_format = ?'); values.push(input.contentFormat); }
   if (input.excerpt !== undefined) { fields.push('excerpt = ?'); values.push(input.excerpt); }
   if (input.status !== undefined) { fields.push('status = ?'); values.push(input.status); }
-  if (input.category !== undefined) { fields.push('category = ?'); values.push(input.category); }
+  if (input.blogCategoryId !== undefined) { fields.push('blog_category_id = ?'); values.push(input.blogCategoryId); }
+  if (input.blogSubcategoryId !== undefined) { fields.push('blog_subcategory_id = ?'); values.push(input.blogSubcategoryId); }
   if (input.featuredImageUrl !== undefined) { fields.push('featured_image_url = ?'); values.push(input.featuredImageUrl); }
   if (input.seoTitle !== undefined) { fields.push('seo_title = ?'); values.push(input.seoTitle); }
   if (input.seoDescription !== undefined) { fields.push('seo_description = ?'); values.push(input.seoDescription); }

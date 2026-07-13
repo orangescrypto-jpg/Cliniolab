@@ -406,13 +406,23 @@ export function wrapWithScopeClass(html: string, scopeId?: string | number): str
 function unwrapFullDocument(html: string): string {
   const hasDoctype = /^\s*<!DOCTYPE/i.test(html);
   const bodyMatch = html.match(/<body[^>]*>([\s\S]*)<\/body>/i);
-
-  if (!hasDoctype && !bodyMatch) return html;
-
   const headMatch = html.match(/<head[^>]*>([\s\S]*?)<\/head>/i);
+
+  if (!hasDoctype && !bodyMatch && !headMatch) return html;
+
   const headStyles = headMatch ? [...headMatch[1].matchAll(/<style[^>]*>[\s\S]*?<\/style>/gi)].map((m) => m[0]).join('\n') : '';
 
-  const bodyContent = bodyMatch ? bodyMatch[1] : html.replace(/<!DOCTYPE[^>]*>/i, '').replace(/<\/?html[^>]*>/gi, '');
+  let bodyContent: string;
+  if (bodyMatch) {
+    bodyContent = bodyMatch[1];
+  } else {
+    // No <body> wrapper — strip doctype/html/head entirely and keep
+    // whatever markup follows as the content.
+    bodyContent = html
+      .replace(/<!DOCTYPE[^>]*>/i, '')
+      .replace(/<head[^>]*>[\s\S]*?<\/head>/i, '')
+      .replace(/<\/?html[^>]*>/gi, '');
+  }
 
   return headStyles ? `${headStyles}\n${bodyContent}` : bodyContent;
 }

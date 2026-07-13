@@ -321,6 +321,7 @@ export interface Certificate {
   userId: string;
   quizId: string;
   quizTitle: string;
+  scorePercentage: number;
   issuedAt: string;
 }
 

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { markdownToHtml } from '@/components/ui/RichTextEditor';
-import { sanitizeHtml } from '@/lib/utils/sanitizeHtml';
+import { sanitizeHtml, wrapWithScopeClass } from '@/lib/utils/sanitizeHtml';
 import { ShareButton } from '@/components/quiz/ShareButton';
 import { RelatedQuizzes } from '@/components/quiz/RelatedQuizzes';
 import type { BlogPost } from '@/types';
@@ -65,7 +65,7 @@ export function BlogPostClient({ slug }: { slug: string }) {
               dangerouslySetInnerHTML={{
                 __html:
                   post.contentFormat === 'html'
-                    ? sanitizeHtml(post.content)
+                    ? wrapWithScopeClass(sanitizeHtml(post.content, post.id), post.id)
                     : markdownToHtml(post.content),
               }}
             />

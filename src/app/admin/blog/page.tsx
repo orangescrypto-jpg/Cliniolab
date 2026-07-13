@@ -9,6 +9,7 @@ import { TiptapEditor } from '@/components/ui/TiptapEditor';
 import type { BlogContentFormat, BlogPost, BlogStatus } from '@/types';
 
 interface BlogCategoryOption { id: string; name: string; slug: string; sortOrder: number }
+interface BlogSubcategoryOption { id: string; blogCategoryId: string; name: string; slug: string; sortOrder: number }
 
 function slugify(name: string): string {
   return name.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
@@ -35,9 +36,18 @@ export default function AdminBlogPage() {
   // and still render via the old markdown path on the public blog page.
   const [contentFormat, setContentFormat] = useState<BlogContentFormat>('html');
   const [featuredImageUrl, setFeaturedImageUrl] = useState('');
+
+  // Fixed top-level category (required) — admin cannot add/remove these.
   const [blogCategories, setBlogCategories] = useState<BlogCategoryOption[]>([]);
-  const [category, setCategory] = useState<string>('');
-  const [newBlogCategoryName, setNewBlogCategoryName] = useState('');
+  const [blogCategoryId, setBlogCategoryId] = useState<string>('');
+
+  // Subcategory within the chosen category (optional, freely addable,
+  // reused automatically if the typed name already exists for that
+  // category).
+  const [subcategories, setSubcategories] = useState<BlogSubcategoryOption[]>([]);
+  const [blogSubcategoryId, setBlogSubcategoryId] = useState<string>('');
+  const [newSubcategoryName, setNewSubcategoryName] = useState('');
+
   const [status, setStatus] = useState<BlogStatus>('draft');
   const [seoTitle, setSeoTitle] = useState('');
   const [seoDescription, setSeoDescription] = useState('');
@@ -60,23 +70,44 @@ export default function AdminBlogPage() {
       .then((data) => {
         const cats: BlogCategoryOption[] = data.categories ?? [];
         setBlogCategories(cats);
-        setCategory((current) => current || cats[0]?.name || '');
+        setBlogCategoryId((current) => current || cats[0]?.id || '');
       });
   }
 
   useEffect(loadBlogCategories, []);
 
-  async function addBlogCategory() {
-    if (!newBlogCategoryName.trim()) return;
+  // Reload the subcategory dropdown whenever the chosen top-level
+  // category changes, and reset the selection (a subcategory from a
+  // different category is never valid).
+  function loadSubcategories(categoryId: string) {
+    if (!categoryId) {
+      setSubcategories([]);
+      setBlogSubcategoryId('');
+      return;
+    }
+    fetch(`/api/blog-subcategories?categoryId=${encodeURIComponent(categoryId)}`)
+      .then((res) => res.json())
+      .then((data) => setSubcategories(data.subcategories ?? []));
+  }
+
+  useEffect(() => {
+    loadSubcategories(blogCategoryId);
+    setBlogSubcategoryId('');
+  }, [blogCategoryId]);
+
+  async function addSubcategory() {
+    if (!newSubcategoryName.trim() || !blogCategoryId) return;
     setError(null);
     const res = await fetch('/api/admin/blog-categories', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: newBlogCategoryName, slug: slugify(newBlogCategoryName) }),
+      body: JSON.stringify({ blogCategoryId, name: newSubcategoryName }),
     });
     if (res.ok) {
-      setNewBlogCategoryName('');
-      loadBlogCategories();
+      const data = await res.json();
+      setNewSubcategoryName('');
+      loadSubcategories(blogCategoryId);
+      setBlogSubcategoryId(data.subcategory.id);
     } else {
       const data = await res.json();
       setError(data.error);
@@ -92,7 +123,9 @@ export default function AdminBlogPage() {
     setExcerpt('');
     setContentFormat('html');
     setFeaturedImageUrl('');
-    setCategory((blogCategories[0]?.name) || '');
+    setBlogCategoryId(blogCategories[0]?.id || '');
+    setBlogSubcategoryId('');
+    setNewSubcategoryName('');
     setStatus('draft');
     setSeoTitle('');
     setSeoDescription('');
@@ -111,7 +144,10 @@ export default function AdminBlogPage() {
     setExcerpt(post.excerpt ?? '');
     setContentFormat(post.contentFormat);
     setFeaturedImageUrl(post.featuredImageUrl ?? '');
-    setCategory(post.category ?? blogCategories[0]?.name ?? '');
+    const categoryId = post.blogCategoryId ?? blogCategories[0]?.id ?? '';
+    setBlogCategoryId(categoryId);
+    loadSubcategories(categoryId);
+    setBlogSubcategoryId(post.blogSubcategoryId ?? '');
     setStatus(post.status);
     setSeoTitle(post.seoTitle ?? '');
     setSeoDescription(post.seoDescription ?? '');
@@ -142,6 +178,10 @@ export default function AdminBlogPage() {
 
   async function savePost() {
     if (!title.trim() || !content.trim()) return;
+    if (!blogCategoryId) {
+      setError('Category is required.');
+      return;
+    }
     setError(null);
     const payload = {
       title,
@@ -150,7 +190,8 @@ export default function AdminBlogPage() {
       contentFormat,
       excerpt: excerpt || undefined,
       featuredImageUrl: featuredImageUrl || undefined,
-      category,
+      blogCategoryId,
+      blogSubcategoryId: blogSubcategoryId || undefined,
       status,
       seoTitle: seoTitle || undefined,
       seoDescription: seoDescription || undefined,
@@ -180,6 +221,14 @@ export default function AdminBlogPage() {
 
   const titleHint = lengthHint((seoTitle || title).length, [40, 60]);
   const descriptionHint = lengthHint(seoDescription.length, [120, 160]);
+
+  function categoryNameFor(post: BlogPost): string {
+    if (post.blogCategoryId) {
+      const match = blogCategories.find((c) => c.id === post.blogCategoryId);
+      if (match) return match.name;
+    }
+    return post.category ?? 'Uncategorized';
+  }
 
   return (
     <div>
@@ -266,23 +315,53 @@ export default function AdminBlogPage() {
           </div>
         </div>
 
+        {/* Category (required, fixed 12) + Subcategory (optional, freely addable & reused) */}
+        <div className="rounded-md border border-ink-100 p-4">
+          <p className="text-sm font-semibold text-ink-700">Category</p>
+          <div className="mt-3 flex flex-wrap items-center gap-3">
+            <div>
+              <label className="text-xs font-medium text-ink-600">Category (required)</label>
+              <select
+                value={blogCategoryId}
+                onChange={(e) => setBlogCategoryId(e.target.value)}
+                className="mt-1 block rounded-md border border-ink-100 px-3 py-1.5 text-sm"
+              >
+                {blogCategories.map((c) => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="text-xs font-medium text-ink-600">Subcategory (optional)</label>
+              <select
+                value={blogSubcategoryId}
+                onChange={(e) => setBlogSubcategoryId(e.target.value)}
+                className="mt-1 block rounded-md border border-ink-100 px-3 py-1.5 text-sm"
+              >
+                <option value="">None</option>
+                {subcategories.map((s) => (
+                  <option key={s.id} value={s.id}>{s.name}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div className="mt-3 flex items-center gap-2">
+            <input
+              value={newSubcategoryName}
+              onChange={(e) => setNewSubcategoryName(e.target.value)}
+              placeholder="New subcategory name"
+              className="rounded-md border border-ink-100 px-3 py-1.5 text-sm"
+            />
+            <Button size="sm" variant="secondary" onClick={addSubcategory}>Add subcategory</Button>
+          </div>
+          <p className="mt-2 text-xs text-ink-400">
+            Subcategories you add are saved for this category and can be reused on future posts.
+          </p>
+        </div>
+
         <div className="flex flex-wrap items-center gap-3">
-          <select
-            value={category}
-            onChange={(e) => setCategory(e.target.value)}
-            className="rounded-md border border-ink-100 px-3 py-1.5 text-sm"
-          >
-            {blogCategories.map((c) => (
-              <option key={c.id} value={c.name}>{c.name}</option>
-            ))}
-          </select>
-          <input
-            value={newBlogCategoryName}
-            onChange={(e) => setNewBlogCategoryName(e.target.value)}
-            placeholder="New category name"
-            className="rounded-md border border-ink-100 px-3 py-1.5 text-sm"
-          />
-          <Button size="sm" variant="secondary" onClick={addBlogCategory}>Add category</Button>
           <select
             value={status}
             onChange={(e) => setStatus(e.target.value as BlogStatus)}
@@ -321,7 +400,7 @@ export default function AdminBlogPage() {
                   )}
                 </div>
                 <p className="text-xs text-ink-400">
-                  {post.category ?? 'Uncategorized'} · {post.status} · {new Date(post.createdAt).toLocaleDateString()}
+                  {categoryNameFor(post)} · {post.status} · {new Date(post.createdAt).toLocaleDateString()}
                 </p>
               </div>
               <div className="flex shrink-0 gap-2">

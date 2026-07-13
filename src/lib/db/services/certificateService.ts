@@ -6,6 +6,7 @@ interface CertificateRow {
   user_id: string;
   quiz_id: string;
   quiz_title: string;
+  score_percentage: number;
   issued_at: string;
 }
 
@@ -15,6 +16,7 @@ function mapCertificate(row: CertificateRow): Certificate {
     userId: row.user_id,
     quizId: row.quiz_id,
     quizTitle: row.quiz_title,
+    scorePercentage: row.score_percentage,
     issuedAt: row.issued_at,
   };
 }
@@ -43,12 +45,15 @@ export async function issueCertificateIfEligible(
 
   const id = generateId('cert');
   const issuedAt = nowIso();
+  const scorePercentage = Math.round(achievedPercentage);
   await db
-    .prepare('INSERT INTO certificates (id, user_id, quiz_id, issued_at) VALUES (?, ?, ?, ?)')
-    .bind(id, userId, quizId, issuedAt)
+    .prepare(
+      'INSERT INTO certificates (id, user_id, quiz_id, score_percentage, issued_at) VALUES (?, ?, ?, ?, ?)'
+    )
+    .bind(id, userId, quizId, scorePercentage, issuedAt)
     .run();
 
-  return { id, userId, quizId, quizTitle: quiz.title, issuedAt };
+  return { id, userId, quizId, quizTitle: quiz.title, scorePercentage, issuedAt };
 }
 
 export async function getCertificateById(certificateId: string): Promise<(Certificate & { displayName: string | null }) | null> {

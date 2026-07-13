@@ -23,10 +23,14 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   }
 
   // Admin can override the SEO title/description directly (WordPress/Yoast
-  // style); falls back to the post title and an auto-derived excerpt when
-  // not explicitly set, so older posts without SEO fields still work.
+  // style); falls back to the post excerpt, then an auto-derived excerpt of
+  // the content, when not explicitly set, so older posts without SEO fields
+  // still work.
   const seoTitle = post.seoTitle || post.title;
-  const description = post.seoDescription || post.content.replace(/[#*_>[\]()!-]/g, '').slice(0, 160).trim();
+  const description =
+    post.seoDescription ||
+    post.excerpt ||
+    post.content.replace(/<[^>]*>/g, ' ').replace(/[#*_>[\]()!-]/g, '').slice(0, 160).trim();
 
   return {
     title: seoTitle,

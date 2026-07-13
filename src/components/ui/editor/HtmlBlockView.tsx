@@ -63,7 +63,7 @@ export function HtmlBlockView({ node, updateAttributes, selected }: NodeViewProp
           onChange={(e) => setDraft(e.target.value)}
           rows={6}
           autoFocus
-          placeholder="<div>Paste or write raw HTML — sanitized on save. Scripts, iframes, and event handlers are stripped.</div>"
+          placeholder="<div>Paste or write raw HTML — sanitized on save. Scripts and event handlers are stripped. <style> blocks are supported and auto-scoped to this post.</div>"
           className="w-full resize-y border-0 bg-white p-3 font-mono text-xs text-ink-700 focus:outline-none"
         />
       ) : (

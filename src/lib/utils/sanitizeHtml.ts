@@ -381,8 +381,37 @@ export function wrapWithScopeClass(html: string, scopeId?: string | number): str
   return `<div class="${scopeClassFor(scopeId)}">${html}</div>`;
 }
 
+/**
+ * If the input is a full HTML document (starts with <!DOCTYPE>, <html>,
+ * or contains a <head>/<body> split) rather than a fragment, extract just
+ * the <body> contents. This lets someone paste a complete exported HTML
+ * page (e.g. from an authoring tool) as post content and get the
+ * expected result — the visible body, with its <style> block preserved
+ * and scoped — instead of having the entire document silently stripped
+ * because <html>/<head>/<body>/<title>/<meta> aren't in ALLOWED_TAGS.
+ *
+ * Any <style> tag(s) originally inside <head> are relocated to the front
+ * of the extracted body content so sanitizeHtml's normal style-capture
+ * path still finds and scopes them — <head> itself is never treated as
+ * "inside body" by the tag walker.
+ */
+function unwrapFullDocument(html: string): string {
+  const hasDoctype = /^\s*<!DOCTYPE/i.test(html);
+  const bodyMatch = html.match(/<body[^>]*>([\s\S]*)<\/body>/i);
+
+  if (!hasDoctype && !bodyMatch) return html;
+
+  const headMatch = html.match(/<head[^>]*>([\s\S]*?)<\/head>/i);
+  const headStyles = headMatch ? [...headMatch[1].matchAll(/<style[^>]*>[\s\S]*?<\/style>/gi)].map((m) => m[0]).join('\n') : '';
+
+  const bodyContent = bodyMatch ? bodyMatch[1] : html.replace(/<!DOCTYPE[^>]*>/i, '').replace(/<\/?html[^>]*>/gi, '');
+
+  return headStyles ? `${headStyles}\n${bodyContent}` : bodyContent;
+}
+
 export function sanitizeHtml(input: string, scopeId?: string | number): string {
   const scopeClass = scopeClassFor(scopeId);
+  const unwrapped = unwrapFullDocument(input);
 
   let output = '';
   let i = 0;
@@ -391,21 +420,22 @@ export function sanitizeHtml(input: string, scopeId?: string | number): string {
   let styleCapture: string | null = null; // accumulates raw text inside a <style> block being captured
 
   const tagRegex = /<\/?([a-zA-Z][a-zA-Z0-9]*)((?:[^>"']|"[^"]*"|'[^']*')*)>/g;
+  const source = unwrapped;
 
-  while (i < input.length) {
+  while (i < source.length) {
     tagRegex.lastIndex = i;
-    const match = tagRegex.exec(input);
+    const match = tagRegex.exec(source);
 
     if (!match || match.index !== i) {
       if (styleCapture !== null) {
-        const nextTagIndex = input.indexOf('<', i);
-        const chunkEnd = nextTagIndex === -1 ? input.length : nextTagIndex;
-        styleCapture += input.slice(i, chunkEnd);
+        const nextTagIndex = source.indexOf('<', i);
+        const chunkEnd = nextTagIndex === -1 ? source.length : nextTagIndex;
+        styleCapture += source.slice(i, chunkEnd);
         i = chunkEnd === i ? i + 1 : chunkEnd;
       } else if (!skippingTag) {
-        const nextTagIndex = input.indexOf('<', i);
-        const chunkEnd = nextTagIndex === -1 ? input.length : nextTagIndex;
-        output += escapeStray(input.slice(i, chunkEnd));
+        const nextTagIndex = source.indexOf('<', i);
+        const chunkEnd = nextTagIndex === -1 ? source.length : nextTagIndex;
+        output += escapeStray(source.slice(i, chunkEnd));
         i = chunkEnd === i ? i + 1 : chunkEnd;
       } else {
         i++;

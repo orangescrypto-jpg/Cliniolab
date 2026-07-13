@@ -5,6 +5,7 @@ import { markdownToHtml } from '@/components/ui/RichTextEditor';
 import { sanitizeHtml, wrapWithScopeClass } from '@/lib/utils/sanitizeHtml';
 import { ShareButton } from '@/components/quiz/ShareButton';
 import { RelatedQuizzes } from '@/components/quiz/RelatedQuizzes';
+import { CommentThread } from '@/components/quiz/CommentThread';
 import type { BlogPost } from '@/types';
 
 export function BlogPostClient({ slug }: { slug: string }) {
@@ -71,6 +72,10 @@ export function BlogPostClient({ slug }: { slug: string }) {
             />
           </div>
           <RelatedQuizzes endpoint={`/api/blog/${slug}/related`} title="Practice quizzes for this topic" />
+          <CommentThread
+            endpoint={`/api/blog/${post.id}/comments`}
+            placeholder="Share your thoughts on this post…"
+          />
         </>
       )}
     </div>

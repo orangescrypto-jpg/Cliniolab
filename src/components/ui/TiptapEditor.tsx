@@ -12,6 +12,7 @@ import TableCell from '@tiptap/extension-table-cell';
 import Placeholder from '@tiptap/extension-placeholder';
 import { sanitizeHtml } from '@/lib/utils/sanitizeHtml';
 import { SlashMenu } from './editor/SlashMenu';
+import { HtmlBlock } from './editor/HtmlBlock';
 
 interface TiptapEditorProps {
   value: string;
@@ -91,6 +92,7 @@ export function TiptapEditor({
       TableRow,
       TableHeader,
       TableCell,
+      HtmlBlock,
     ],
     content: value,
     onUpdate: ({ editor }) => {
@@ -224,6 +226,9 @@ function Toolbar({ editor, onInsertImage }: { editor: Editor; onInsertImage: (fi
         onClick={() => editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()}
       >
         ⊞
+      </ToolbarBtn>
+      <ToolbarBtn title="Insert HTML block" onClick={() => editor.chain().focus().insertHtmlBlock().run()}>
+        {'{ }'}
       </ToolbarBtn>
       <label htmlFor={fileInputId} className="cursor-pointer rounded px-2 py-1 text-xs font-semibold text-ink-600 hover:bg-ink-100" title="Insert image">
         🖼

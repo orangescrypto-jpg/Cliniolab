@@ -96,8 +96,8 @@ export async function sendQuizResultEmail(
 export async function sendCommentReplyEmail(
   recipientUserId: string,
   replierName: string,
-  quizTitle: string,
-  quizId: string,
+  contentTitle: string,
+  contentPath: string,
   replyBody: string
 ): Promise<void> {
   const enabled = await featureFlagService.isFeatureEnabled('email_comment_reply');
@@ -109,8 +109,8 @@ export async function sendCommentReplyEmail(
   const { subject, html } = commentReplyEmail(
     recipient.displayName ?? recipient.email,
     replierName,
-    quizTitle,
-    quizId,
+    contentTitle,
+    contentPath,
     replyBody
   );
   await sendEmailViaResend({ to: recipient.email, subject, html });

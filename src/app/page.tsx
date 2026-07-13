@@ -153,6 +153,32 @@ export default function HomePage() {
         </section>
       )}
 
+      {/* Jobs teaser */}
+      <section className="mx-auto max-w-7xl px-6 py-16">
+        <div className="flex items-center justify-between">
+          <h2 className="font-display text-2xl font-semibold text-ink-800">Jobs</h2>
+          <Link href="/jobs" className="text-sm font-medium text-pulse-600 hover:text-pulse-700">
+            See more →
+          </Link>
+        </div>
+        <p className="mt-2 text-sm text-ink-500">
+          Clinical and nursing job openings curated for students and professionals.
+        </p>
+      </section>
+
+      {/* Scholarships teaser */}
+      <section className="mx-auto max-w-7xl px-6 py-16">
+        <div className="flex items-center justify-between">
+          <h2 className="font-display text-2xl font-semibold text-ink-800">Scholarships</h2>
+          <Link href="/scholarships" className="text-sm font-medium text-pulse-600 hover:text-pulse-700">
+            See more →
+          </Link>
+        </div>
+        <p className="mt-2 text-sm text-ink-500">
+          Scholarship opportunities for nursing and clinical students.
+        </p>
+      </section>
+
       <AbbreviationsTeaser />
     </div>
   );

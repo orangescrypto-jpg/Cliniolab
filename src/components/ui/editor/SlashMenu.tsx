@@ -23,6 +23,7 @@ const COMMANDS: Command[] = [
   { label: 'Code block', hint: '</>', run: (e) => e.chain().focus().toggleCodeBlock().run() },
   { label: 'Divider', hint: '―', run: (e) => e.chain().focus().setHorizontalRule().run() },
   { label: 'Table (3×3)', hint: '⊞', run: (e) => e.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run() },
+  { label: 'HTML block', hint: '{ }', run: (e) => e.chain().focus().insertHtmlBlock().run() },
 ];
 
 /**

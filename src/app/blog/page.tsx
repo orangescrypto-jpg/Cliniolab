@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { BlogPostCard } from '@/components/cms/BlogPostCard';
 import type { BlogPost } from '@/types';
@@ -9,7 +10,6 @@ interface BlogCategoryOption { id: string; name: string; slug: string; sortOrder
 export default function BlogPage() {
   const [posts, setPosts] = useState<BlogPost[]>([]);
   const [blogCategories, setBlogCategories] = useState<BlogCategoryOption[]>([]);
-  const [activeCategory, setActiveCategory] = useState<string>('');
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -20,14 +20,11 @@ export default function BlogPage() {
 
   useEffect(() => {
     setLoading(true);
-    const url = activeCategory
-      ? `/api/blog?category=${encodeURIComponent(activeCategory)}`
-      : '/api/blog';
-    fetch(url)
+    fetch('/api/blog')
       .then((res) => res.json())
       .then((data) => setPosts(data.posts ?? []))
       .finally(() => setLoading(false));
-  }, [activeCategory]);
+  }, []);
 
   return (
     <div className="mx-auto max-w-7xl px-6 py-16">
@@ -36,29 +33,16 @@ export default function BlogPage() {
         Clinical tips, exam prep guidance, and news for nursing and clinical students.
       </p>
 
+      {/* Category pills navigate to that category's dedicated page. */}
       <div className="mt-6 flex flex-wrap gap-2">
-        <button
-          onClick={() => setActiveCategory('')}
-          className={`rounded-full px-3 py-1.5 text-sm font-medium transition-colors ${
-            activeCategory === ''
-              ? 'bg-pulse-600 text-white'
-              : 'bg-ink-50 text-ink-600 hover:bg-ink-100'
-          }`}
-        >
-          All
-        </button>
         {blogCategories.map((c) => (
-          <button
+          <Link
             key={c.id}
-            onClick={() => setActiveCategory(c.name)}
-            className={`rounded-full px-3 py-1.5 text-sm font-medium transition-colors ${
-              activeCategory === c.name
-                ? 'bg-pulse-600 text-white'
-                : 'bg-ink-50 text-ink-600 hover:bg-ink-100'
-            }`}
+            href={`/blog/category/${c.slug}`}
+            className="rounded-full bg-ink-50 px-3 py-1.5 text-sm font-medium text-ink-600 transition-colors hover:bg-ink-100"
           >
             {c.name}
-          </button>
+          </Link>
         ))}
       </div>
 

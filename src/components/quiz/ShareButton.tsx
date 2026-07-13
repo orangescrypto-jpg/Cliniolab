@@ -29,7 +29,7 @@ export function ShareButton({ url, title }: { url: string; title: string }) {
   }
 
   return (
-    <div className="inline-flex gap-2">
+    <div className="inline-flex flex-col gap-2 sm:flex-row">
       <button
         onClick={handleShare}
         className="inline-flex items-center gap-1.5 rounded-md border border-ink-100 px-3 py-1.5 text-xs font-medium text-ink-600 hover:bg-ink-50"

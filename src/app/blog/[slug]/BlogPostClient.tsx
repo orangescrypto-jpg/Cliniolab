@@ -60,9 +60,33 @@ function looksLikeHtml(content: string): boolean {
  * window. This is what lets us skip sanitizeHtml entirely for this path
  * without reopening the XSS/session-theft risk it exists to prevent.
  */
+/**
+ * Many authors paste a full HTML document that was never designed with a
+ * mobile viewport in mind (no <meta name="viewport">, or fixed pixel
+ * widths). Without a viewport meta tag, phones render the iframe's
+ * document at a default desktop-width viewport (~980px) and then scale
+ * it down, which is what makes pasted posts look cramped/tiny on mobile.
+ * We inject one if the author didn't include their own, so the page
+ * lays out at the actual device width instead of a shrunken desktop view.
+ */
+function ensureViewportMeta(html: string): string {
+  if (/<meta[^>]+name=["']viewport["']/i.test(html)) return html;
+  const viewportTag = '<meta name="viewport" content="width=device-width, initial-scale=1">';
+  if (/<head[^>]*>/i.test(html)) {
+    return html.replace(/<head[^>]*>/i, (match) => `${match}${viewportTag}`);
+  }
+  if (/<html[^>]*>/i.test(html)) {
+    return html.replace(/<html[^>]*>/i, (match) => `${match}<head>${viewportTag}</head>`);
+  }
+  // No <html> wrapper at all (shouldn't happen given isFullRawDocument's
+  // check, but fall back safely) — just prepend it.
+  return `${viewportTag}${html}`;
+}
+
 function RawHtmlFrame({ html }: { html: string }) {
   const [height, setHeight] = useState(600);
   const [frameEl, setFrameEl] = useState<HTMLIFrameElement | null>(null);
+  const scopedHtml = ensureViewportMeta(html);
 
   useEffect(() => {
     if (!frameEl) return;
@@ -88,7 +112,7 @@ function RawHtmlFrame({ html }: { html: string }) {
   return (
     <iframe
       ref={setFrameEl}
-      srcDoc={html}
+      srcDoc={scopedHtml}
       sandbox="allow-scripts allow-popups"
       style={{ width: '100%', height, border: 'none', display: 'block' }}
       title="Post content"

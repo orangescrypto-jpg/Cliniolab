@@ -8,6 +8,37 @@ import { RelatedQuizzes } from '@/components/quiz/RelatedQuizzes';
 import { CommentThread } from '@/components/quiz/CommentThread';
 import type { BlogPost } from '@/types';
 
+/**
+ * Safety net for posts whose stored contentFormat is wrong/missing (e.g.
+ * older posts, or ones created before the html/markdown toggle existed).
+ * If the content is clearly markup — a full document, a <style> block, or
+ * just several real HTML tags — route it through the HTML sanitizer
+ * instead of markdownToHtml, which would otherwise escape every tag and
+ * print the raw source as visible text.
+ */
+function looksLikeHtml(content: string): boolean {
+  const sample = content.slice(0, 1000);
+
+  // Full document wrapper (doctype/html/head/body).
+  if (/<!DOCTYPE\s+html/i.test(sample)) return true;
+  if (/<html[\s>]/i.test(sample)) return true;
+  if (/<head[\s>]/i.test(sample)) return true;
+  if (/<body[\s>]/i.test(sample)) return true;
+
+  // A <style> block is a strong signal someone pasted real HTML/CSS
+  // rather than writing markdown.
+  if (/<style[\s>]/i.test(sample)) return true;
+
+  // Otherwise, count real HTML tags (open or self-closing) from a
+  // reasonably broad set of common block/inline elements. Markdown
+  // occasionally contains a stray inline tag, so require a few distinct
+  // matches before treating the whole post as HTML rather than markdown.
+  const tagMatches = sample.match(
+    /<\/?(div|span|p|section|article|header|footer|nav|main|table|tr|td|th|ul|ol|li|h[1-6]|img|a|button|form|label|input|strong|em|br|hr)[\s/>]/gi
+  );
+  return (tagMatches?.length ?? 0) >= 3;
+}
+
 export function BlogPostClient({ slug }: { slug: string }) {
   const [post, setPost] = useState<BlogPost | null>(null);
   const [notFound, setNotFound] = useState(false);
@@ -65,7 +96,7 @@ export function BlogPostClient({ slug }: { slug: string }) {
               className="prose prose-sm mt-6 max-w-none text-ink-700"
               dangerouslySetInnerHTML={{
                 __html:
-                  post.contentFormat === 'html'
+                  post.contentFormat === 'html' || looksLikeHtml(post.content)
                     ? wrapWithScopeClass(sanitizeHtml(post.content, post.id), post.id)
                     : markdownToHtml(post.content),
               }}

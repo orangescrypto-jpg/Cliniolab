@@ -24,6 +24,25 @@ const COMMANDS: Command[] = [
   { label: 'Divider', hint: '―', run: (e) => e.chain().focus().setHorizontalRule().run() },
   { label: 'Table (3×3)', hint: '⊞', run: (e) => e.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run() },
   { label: 'HTML block', hint: '{ }', run: (e) => e.chain().focus().insertHtmlBlock().run() },
+  { label: 'Callout: Info', hint: 'ℹ️', run: (e) => e.chain().focus().insertCallout('info').run() },
+  { label: 'Callout: Tip', hint: '💡', run: (e) => e.chain().focus().insertCallout('tip').run() },
+  { label: 'Callout: Warning', hint: '⚠️', run: (e) => e.chain().focus().insertCallout('warning').run() },
+  {
+    label: 'Video embed',
+    hint: '▶',
+    run: (e) => {
+      const url = window.prompt('Paste a YouTube or Vimeo link:');
+      if (!url) return;
+      import('./Embed').then(({ toEmbedUrl }) => {
+        const embedUrl = toEmbedUrl(url);
+        if (!embedUrl) {
+          window.alert('That link isn\'t a recognized YouTube or Vimeo URL.');
+          return;
+        }
+        e.chain().focus().insertEmbed(embedUrl).run();
+      });
+    },
+  },
 ];
 
 /**

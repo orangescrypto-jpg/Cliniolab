@@ -202,7 +202,8 @@ export interface LeaderboardEntry {
 
 export interface Comment {
   id: string;
-  quizId: string;
+  quizId: string | null;
+  blogPostId: string | null;
   userId: string;
   authorName: string;
   parentCommentId: string | null;

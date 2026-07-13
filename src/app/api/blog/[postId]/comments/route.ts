@@ -3,6 +3,12 @@ import { getCurrentUser } from '@/lib/auth/currentUser';
 import { commentService, cmsService, featureFlagService } from '@/lib/db';
 import { sendCommentReplyEmail } from '@/lib/email/emailService';
 
+// Without this, Next.js can treat this GET handler as a static route
+// (no dynamic request data is read directly), caching the response and
+// serving stale comment lists — including "missing" a comment that was
+// just posted seconds ago. Force it to run fresh on every request.
+export const dynamic = 'force-dynamic';
+
 interface RouteParams {
   params: Promise<{ postId: string }>;
 }

@@ -31,6 +31,10 @@ export function StudyModeRunner({ quiz, questions }: StudyModeRunnerProps) {
   const isLast = current === questions.length - 1;
   const isCorrect = selectedAnswer !== null &&
     selectedAnswer.trim().toLowerCase() === question.correctAnswer.trim().toLowerCase();
+  const correctAnswerDisplay =
+    question.type === 'mcq'
+      ? question.options?.find((o) => o.id === question.correctAnswer)?.text ?? question.correctAnswer
+      : question.correctAnswer;
 
   const navigatorStates = useMemo(
     () => questions.map((q) => ({ answered: answeredIds.has(q.id) })),
@@ -126,7 +130,7 @@ export function StudyModeRunner({ quiz, questions }: StudyModeRunnerProps) {
         {revealed && (
           <div className={`mt-4 rounded-md border p-4 ${isCorrect ? 'border-pulse-200 bg-pulse-50' : 'border-critical-200 bg-critical-50'}`}>
             <p className="text-sm font-medium text-ink-700">
-              {isCorrect ? 'Correct!' : `Correct answer: ${question.correctAnswer}`}
+              {isCorrect ? 'Correct!' : `Correct answer: ${correctAnswerDisplay}`}
             </p>
             {question.explanation && (
               <p className="mt-2 whitespace-pre-line text-sm leading-relaxed text-ink-600">

@@ -71,11 +71,11 @@ export function BlogPostClient({ slug }: { slug: string }) {
               }}
             />
           </div>
-          <RelatedQuizzes endpoint={`/api/blog/${slug}/related`} title="Practice quizzes for this topic" />
           <CommentThread
             endpoint={`/api/blog/${post.id}/comments`}
             placeholder="Share your thoughts on this post…"
           />
+          <RelatedQuizzes endpoint={`/api/blog/${slug}/related`} title="Practice quizzes for this topic" />
         </>
       )}
     </div>

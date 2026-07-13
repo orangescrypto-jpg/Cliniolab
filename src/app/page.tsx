@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import { LeaderboardList } from '@/components/quiz/LeaderboardList';
 import { ResourceCard } from '@/components/resources/ResourceCard';
 import { CategoryBlogSection } from '@/components/cms/CategoryBlogSection';
+import { BlogPostCard } from '@/components/cms/BlogPostCard';
 import { CategoryQuizSection } from '@/components/quiz/CategoryQuizSection';
 import { DailyQuizBanner } from '@/components/layout/DailyQuizBanner';
 import { BannerSlot } from '@/components/layout/BannerSlot';
@@ -12,7 +13,8 @@ import { ScholarOfTheDayCard } from '@/components/layout/ScholarOfTheDayCard';
 import { AbbreviationsTeaser } from '@/components/layout/AbbreviationsTeaser';
 import { Button } from '@/components/ui/Button';
 import { useAuth } from '@/lib/auth/AuthProvider';
-import type { Category, LeaderboardEntry, Resource } from '@/types';
+import { JOB_CATEGORY_SLUG, SCHOLARSHIP_CATEGORY_SLUG } from '@/lib/constants/blogCategories';
+import type { BlogPost, Category, LeaderboardEntry, Resource } from '@/types';
 
 interface BlogCategoryOption { id: string; name: string; slug: string; sortOrder: number }
 
@@ -29,6 +31,8 @@ export default function HomePage() {
   const [leaderboardLabel, setLeaderboardLabel] = useState('Top Quiz Takers');
   const [resources, setResources] = useState<Resource[]>([]);
   const [resourcesEnabled, setResourcesEnabled] = useState(true);
+  const [jobPosts, setJobPosts] = useState<BlogPost[]>([]);
+  const [scholarshipPosts, setScholarshipPosts] = useState<BlogPost[]>([]);
 
   useEffect(() => {
     fetch('/api/categories')
@@ -59,6 +63,16 @@ export default function HomePage() {
         const flag = data?.flags?.find((f: { key: string }) => f.key === 'leaderboard_general');
         if (flag?.label) setLeaderboardLabel(flag.label);
       })
+      .catch(() => {});
+
+    fetch(`/api/blog?categorySlug=${JOB_CATEGORY_SLUG}`)
+      .then((res) => res.json())
+      .then((data) => setJobPosts((data.posts ?? []).slice(0, 2)))
+      .catch(() => {});
+
+    fetch(`/api/blog?categorySlug=${SCHOLARSHIP_CATEGORY_SLUG}`)
+      .then((res) => res.json())
+      .then((data) => setScholarshipPosts((data.posts ?? []).slice(0, 2)))
       .catch(() => {});
   }, []);
 
@@ -164,6 +178,14 @@ export default function HomePage() {
         <p className="mt-2 text-sm text-ink-500">
           Clinical and nursing job openings curated for students and professionals.
         </p>
+        <div className="mt-6 grid grid-cols-1 gap-5 sm:grid-cols-2">
+          {jobPosts.map((post) => (
+            <BlogPostCard key={post.id} post={post} />
+          ))}
+          {jobPosts.length === 0 && (
+            <p className="col-span-full text-sm text-ink-400">No job listings yet — check back soon.</p>
+          )}
+        </div>
       </section>
 
       {/* Scholarships teaser */}
@@ -177,6 +199,14 @@ export default function HomePage() {
         <p className="mt-2 text-sm text-ink-500">
           Scholarship opportunities for nursing and clinical students.
         </p>
+        <div className="mt-6 grid grid-cols-1 gap-5 sm:grid-cols-2">
+          {scholarshipPosts.map((post) => (
+            <BlogPostCard key={post.id} post={post} />
+          ))}
+          {scholarshipPosts.length === 0 && (
+            <p className="col-span-full text-sm text-ink-400">No scholarships yet — check back soon.</p>
+          )}
+        </div>
       </section>
 
       <AbbreviationsTeaser />

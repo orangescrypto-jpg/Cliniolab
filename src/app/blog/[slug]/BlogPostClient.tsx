@@ -139,6 +139,40 @@ function injectResponsiveOverrides(html: string): string {
   return `${html}${RESPONSIVE_OVERRIDE_CSS}`;
 }
 
+const FLATTEN_BOXED_CONTENT_CSS = `
+  .post-content-flatten, .post-content-flatten * {
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+  }
+  .post-content-flatten > div,
+  .post-content-flatten > section,
+  .post-content-flatten > article {
+    width: 100% !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+    border: none !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+  }
+  .post-content-flatten img,
+  .post-content-flatten video,
+  .post-content-flatten iframe,
+  .post-content-flatten svg {
+    max-width: 100% !important;
+    height: auto !important;
+  }
+  .post-content-flatten table {
+    display: block !important;
+    max-width: 100% !important;
+    overflow-x: auto !important;
+  }
+  .post-content-flatten pre {
+    max-width: 100% !important;
+    overflow-x: auto !important;
+  }
+`;
+
 function RawHtmlFrame({ html }: { html: string }) {
   const [height, setHeight] = useState(600);
   const [frameEl, setFrameEl] = useState<HTMLIFrameElement | null>(null);
@@ -234,15 +268,18 @@ export function BlogPostClient({ slug }: { slug: string }) {
                 <RawHtmlFrame html={post.content} />
               </div>
             ) : (
-              <div
-                className="prose prose-sm mt-6 max-w-none text-ink-700"
-                dangerouslySetInnerHTML={{
-                  __html:
-                    post.contentFormat === 'html' || looksLikeHtml(post.content)
-                      ? wrapWithScopeClass(sanitizeHtml(post.content, post.id), post.id)
-                      : markdownToHtml(post.content),
-                }}
-              />
+              <>
+                <style>{FLATTEN_BOXED_CONTENT_CSS}</style>
+                <div
+                  className="post-content-flatten prose prose-sm mt-6 max-w-none text-ink-700"
+                  dangerouslySetInnerHTML={{
+                    __html:
+                      post.contentFormat === 'html' || looksLikeHtml(post.content)
+                        ? wrapWithScopeClass(sanitizeHtml(post.content, post.id), post.id)
+                        : markdownToHtml(post.content),
+                  }}
+                />
+              </>
             )}
           </div>
           <CommentThread

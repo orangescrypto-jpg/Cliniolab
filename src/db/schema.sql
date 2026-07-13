@@ -94,12 +94,17 @@ CREATE TABLE attempt_answers (
 
 CREATE TABLE comments (
   id TEXT PRIMARY KEY,
-  quiz_id TEXT NOT NULL REFERENCES quizzes(id),
+  quiz_id TEXT REFERENCES quizzes(id),
+  blog_post_id TEXT REFERENCES blog_posts(id),
   user_id TEXT NOT NULL REFERENCES users(id),
   parent_comment_id TEXT REFERENCES comments(id),
   body TEXT NOT NULL,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
+
+CREATE INDEX idx_comments_quiz_id ON comments(quiz_id);
+CREATE INDEX idx_comments_blog_post_id ON comments(blog_post_id);
+CREATE INDEX idx_comments_parent_comment_id ON comments(parent_comment_id);
 
 CREATE TABLE comment_reactions (
   id TEXT PRIMARY KEY,

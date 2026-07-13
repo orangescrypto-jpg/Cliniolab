@@ -8,6 +8,7 @@ interface BlogRow {
   slug: string;
   content: string;
   content_format: string;
+  excerpt: string | null;
   category: string | null;
   featured_image_url: string | null;
   seo_title: string | null;
@@ -35,6 +36,7 @@ function mapBlog(row: BlogRow): BlogPost {
     slug: row.slug,
     content: row.content,
     contentFormat: (row.content_format as BlogContentFormat) ?? 'markdown',
+    excerpt: row.excerpt,
     category: row.category,
     featuredImageUrl: row.featured_image_url,
     seoTitle: row.seo_title,
@@ -99,6 +101,7 @@ export async function createPost(
     slug: string;
     content: string;
     contentFormat?: BlogContentFormat;
+    excerpt?: string;
     status: BlogStatus;
     category?: string;
     featuredImageUrl?: string;
@@ -115,8 +118,8 @@ export async function createPost(
   await db
     .prepare(
       `INSERT INTO blog_posts
-        (id, author_id, title, slug, content, content_format, category, featured_image_url, seo_title, seo_description, status, is_sponsored, is_pinned, send_as_newsletter, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        (id, author_id, title, slug, content, content_format, excerpt, category, featured_image_url, seo_title, seo_description, status, is_sponsored, is_pinned, send_as_newsletter, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .bind(
       id,
@@ -125,6 +128,7 @@ export async function createPost(
       input.slug,
       input.content,
       input.contentFormat ?? 'markdown',
+      input.excerpt ?? null,
       input.category ?? null,
       input.featuredImageUrl ?? null,
       input.seoTitle ?? null,
@@ -143,6 +147,7 @@ export async function createPost(
     slug: input.slug,
     content: input.content,
     contentFormat: input.contentFormat ?? 'markdown',
+    excerpt: input.excerpt ?? null,
     category: input.category ?? null,
     featuredImageUrl: input.featuredImageUrl ?? null,
     seoTitle: input.seoTitle ?? null,
@@ -163,6 +168,7 @@ export async function updatePost(
     slug: string;
     content: string;
     contentFormat: BlogContentFormat;
+    excerpt: string;
     status: BlogStatus;
     category: string;
     featuredImageUrl: string;
@@ -179,6 +185,7 @@ export async function updatePost(
   if (input.slug !== undefined) { fields.push('slug = ?'); values.push(input.slug); }
   if (input.content !== undefined) { fields.push('content = ?'); values.push(input.content); }
   if (input.contentFormat !== undefined) { fields.push('content_format = ?'); values.push(input.contentFormat); }
+  if (input.excerpt !== undefined) { fields.push('excerpt = ?'); values.push(input.excerpt); }
   if (input.status !== undefined) { fields.push('status = ?'); values.push(input.status); }
   if (input.category !== undefined) { fields.push('category = ?'); values.push(input.category); }
   if (input.featuredImageUrl !== undefined) { fields.push('featured_image_url = ?'); values.push(input.featuredImageUrl); }

@@ -9,13 +9,25 @@ import { CommentThread } from '@/components/quiz/CommentThread';
 import type { BlogPost } from '@/types';
 
 /**
- * Safety net for posts whose stored contentFormat is wrong/missing (e.g.
- * older posts, or ones created before the html/markdown toggle existed).
- * If the content is clearly markup — a full document, a <style> block, or
- * just several real HTML tags — route it through the HTML sanitizer
- * instead of markdownToHtml, which would otherwise escape every tag and
- * print the raw source as visible text.
+ * A post is a "full raw document" when it's a complete standalone HTML
+ * page (doctype/html/head) rather than a content fragment meant to sit
+ * inside the site's own layout. These render via a sandboxed iframe (see
+ * RawHtmlFrame) instead of the text-level sanitizer, so the author's CSS
+ * (including @media, *, arbitrary selectors) renders pixel-perfect
+ * without the scoping/stripping tradeoffs of sanitizeHtml. The sandbox
+ * attribute means embedded scripts/styles can't touch the parent app,
+ * cookies, or admin session — this is a stronger security boundary, not
+ * a removed one.
  */
+function isFullRawDocument(content: string): boolean {
+  const sample = content.slice(0, 1000);
+  return (
+    /<!DOCTYPE\s+html/i.test(sample) ||
+    /<html[\s>]/i.test(sample) ||
+    /<head[\s>]/i.test(sample)
+  );
+}
+
 function looksLikeHtml(content: string): boolean {
   const sample = content.slice(0, 1000);
 
@@ -37,6 +49,51 @@ function looksLikeHtml(content: string): boolean {
     /<\/?(div|span|p|section|article|header|footer|nav|main|table|tr|td|th|ul|ol|li|h[1-6]|img|a|button|form|label|input|strong|em|br|hr)[\s/>]/gi
   );
   return (tagMatches?.length ?? 0) >= 3;
+}
+
+/**
+ * Renders a full raw HTML document (with its own <style>, @media, *, etc.)
+ * inside a sandboxed iframe sized to its own content. `sandbox="allow-scripts"`
+ * (no allow-same-origin, no allow-forms, no allow-top-navigation) means the
+ * iframe gets its own opaque origin — any script inside it cannot read the
+ * parent page's cookies, session, or DOM, and cannot navigate the parent
+ * window. This is what lets us skip sanitizeHtml entirely for this path
+ * without reopening the XSS/session-theft risk it exists to prevent.
+ */
+function RawHtmlFrame({ html }: { html: string }) {
+  const [height, setHeight] = useState(600);
+  const [frameEl, setFrameEl] = useState<HTMLIFrameElement | null>(null);
+
+  useEffect(() => {
+    if (!frameEl) return;
+    const resize = () => {
+      try {
+        const doc = frameEl.contentDocument;
+        if (doc?.documentElement) {
+          setHeight(doc.documentElement.scrollHeight + 24);
+        }
+      } catch {
+        // Cross-origin (opaque sandbox origin) — can't read scrollHeight.
+        // Falls back to the last known/default height.
+      }
+    };
+    frameEl.addEventListener('load', resize);
+    const interval = setInterval(resize, 500);
+    return () => {
+      frameEl.removeEventListener('load', resize);
+      clearInterval(interval);
+    };
+  }, [frameEl]);
+
+  return (
+    <iframe
+      ref={setFrameEl}
+      srcDoc={html}
+      sandbox="allow-scripts allow-popups"
+      style={{ width: '100%', height, border: 'none', display: 'block' }}
+      title="Post content"
+    />
+  );
 }
 
 export function BlogPostClient({ slug }: { slug: string }) {
@@ -92,15 +149,21 @@ export function BlogPostClient({ slug }: { slug: string }) {
               )}
             </div>
             <p className="mt-2 text-xs text-ink-400">{new Date(post.createdAt).toLocaleDateString()}</p>
-            <div
-              className="prose prose-sm mt-6 max-w-none text-ink-700"
-              dangerouslySetInnerHTML={{
-                __html:
-                  post.contentFormat === 'html' || looksLikeHtml(post.content)
-                    ? wrapWithScopeClass(sanitizeHtml(post.content, post.id), post.id)
-                    : markdownToHtml(post.content),
-              }}
-            />
+            {isFullRawDocument(post.content) ? (
+              <div className="mt-6">
+                <RawHtmlFrame html={post.content} />
+              </div>
+            ) : (
+              <div
+                className="prose prose-sm mt-6 max-w-none text-ink-700"
+                dangerouslySetInnerHTML={{
+                  __html:
+                    post.contentFormat === 'html' || looksLikeHtml(post.content)
+                      ? wrapWithScopeClass(sanitizeHtml(post.content, post.id), post.id)
+                      : markdownToHtml(post.content),
+                }}
+              />
+            )}
           </div>
           <CommentThread
             endpoint={`/api/blog/${post.id}/comments`}

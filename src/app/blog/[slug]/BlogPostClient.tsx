@@ -69,6 +69,35 @@ function looksLikeHtml(content: string): boolean {
  * We inject one if the author didn't include their own, so the page
  * lays out at the actual device width instead of a shrunken desktop view.
  */
+/**
+ * A viewport meta tag alone stops the browser from *scaling down* a
+ * desktop-width page, but it doesn't help if the author's own CSS hardcodes
+ * pixel widths (e.g. `body { width: 1080px }`, a wrapper `<div
+ * style="width:1000px">`, or a wide fixed-width table). In that case the
+ * content renders at true 1:1 size but still doesn't fit the phone — it
+ * just looks "boxed in" with dead space on either side, or gets clipped.
+ *
+ * This stylesheet is appended (not prepended) so it wins the cascade
+ * against the author's own <style> block via source order, while staying
+ * low-specificity enough not to break intentional layouts:
+ * - Caps body/html and common wrapper elements to 100% of the viewport
+ *   width instead of a fixed px value.
+ * - Lets any element that's still wider than the viewport (e.g. a big
+ *   table) scroll horizontally in its own box, rather than blowing out
+ *   the whole page width.
+ * - Forces all images/media to scale down to fit.
+ */
+const RESPONSIVE_OVERRIDE_CSS = `
+<style>
+  html, body { max-width: 100% !important; overflow-x: hidden !important; }
+  body > * { max-width: 100% !important; }
+  img, video, iframe, canvas, svg { max-width: 100% !important; height: auto !important; }
+  table { display: block !important; max-width: 100% !important; overflow-x: auto !important; }
+  pre { max-width: 100% !important; overflow-x: auto !important; }
+  * { box-sizing: border-box !important; }
+</style>
+`;
+
 function ensureViewportMeta(html: string): string {
   if (/<meta[^>]+name=["']viewport["']/i.test(html)) return html;
   const viewportTag = '<meta name="viewport" content="width=device-width, initial-scale=1">';
@@ -78,15 +107,24 @@ function ensureViewportMeta(html: string): string {
   if (/<html[^>]*>/i.test(html)) {
     return html.replace(/<html[^>]*>/i, (match) => `${match}<head>${viewportTag}</head>`);
   }
-  // No <html> wrapper at all (shouldn't happen given isFullRawDocument's
-  // check, but fall back safely) — just prepend it.
   return `${viewportTag}${html}`;
+}
+
+/** Injects the responsive override stylesheet right before </head> (or </html>/end of string as fallbacks) so it loads after the author's own styles. */
+function injectResponsiveOverrides(html: string): string {
+  if (/<\/head>/i.test(html)) {
+    return html.replace(/<\/head>/i, `${RESPONSIVE_OVERRIDE_CSS}</head>`);
+  }
+  if (/<\/html>/i.test(html)) {
+    return html.replace(/<\/html>/i, `${RESPONSIVE_OVERRIDE_CSS}</html>`);
+  }
+  return `${html}${RESPONSIVE_OVERRIDE_CSS}`;
 }
 
 function RawHtmlFrame({ html }: { html: string }) {
   const [height, setHeight] = useState(600);
   const [frameEl, setFrameEl] = useState<HTMLIFrameElement | null>(null);
-  const scopedHtml = ensureViewportMeta(html);
+  const scopedHtml = injectResponsiveOverrides(ensureViewportMeta(html));
 
   useEffect(() => {
     if (!frameEl) return;

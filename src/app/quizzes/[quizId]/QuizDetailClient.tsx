@@ -207,7 +207,7 @@ export function QuizDetailClient({ quizId }: { quizId: string }) {
       </Card>
 
       <QuizLeaderboardSection quizId={quizId} />
-      <CommentThread quizId={quizId} />
+      <CommentThread endpoint={`/api/quizzes/${quizId}/comments`} />
       <RelatedQuizzes endpoint={`/api/quizzes/${quizId}/related`} />
     </div>
   );

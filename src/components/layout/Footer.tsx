@@ -1,8 +1,21 @@
+'use client';
+
 import Link from 'next/link';
+import { useEffect, useState } from 'react';
 import { HomepageVideoSection } from './HomepageVideoSection';
 import { BannerSlot } from './BannerSlot';
 
+interface BlogCategoryOption { id: string; name: string; slug: string; sortOrder: number }
+
 export function Footer() {
+  const [blogCategories, setBlogCategories] = useState<BlogCategoryOption[]>([]);
+
+  useEffect(() => {
+    fetch('/api/blog-categories')
+      .then((res) => res.json())
+      .then((data) => setBlogCategories(data.categories ?? []));
+  }, []);
+
   return (
     <footer className="mt-16">
       <HomepageVideoSection />
@@ -11,7 +24,7 @@ export function Footer() {
 
       <div className="border-t border-ink-100 bg-ink-800 text-ink-100">
         <div className="mx-auto max-w-7xl px-6 py-12">
-          <div className="grid grid-cols-2 gap-8 sm:grid-cols-4">
+          <div className="grid grid-cols-2 gap-8 sm:grid-cols-5">
             <div className="col-span-2 sm:col-span-1">
               <span className="font-display text-lg font-semibold text-white">Cliniolab</span>
               <p className="mt-2 text-sm text-ink-300">
@@ -25,6 +38,20 @@ export function Footer() {
                 <li><Link href="/quizzes" className="hover:text-white">Latest Quizzes</Link></li>
                 <li><Link href="/leaderboard" className="hover:text-white">Leaderboard</Link></li>
                 <li><Link href="/blog" className="hover:text-white">Blog</Link></li>
+                <li><Link href="/jobs" className="hover:text-white">Jobs</Link></li>
+                <li><Link href="/scholarships" className="hover:text-white">Scholarships</Link></li>
+              </ul>
+            </div>
+            <div>
+              <h4 className="text-sm font-semibold text-white">Blog Categories</h4>
+              <ul className="mt-3 space-y-2 text-sm text-ink-300">
+                {blogCategories.map((c) => (
+                  <li key={c.id}>
+                    <Link href={`/blog/category/${c.slug}`} className="hover:text-white">
+                      {c.name}
+                    </Link>
+                  </li>
+                ))}
               </ul>
             </div>
             <div>

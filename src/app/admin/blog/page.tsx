@@ -24,6 +24,7 @@ function lengthHint(length: number, ideal: [number, number]): { label: string; c
 
 export default function AdminBlogPage() {
   const [posts, setPosts] = useState<BlogPost[]>([]);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [title, setTitle] = useState('');
   const [slug, setSlug] = useState('');
   const [slugTouched, setSlugTouched] = useState(false);
@@ -82,47 +83,94 @@ export default function AdminBlogPage() {
     }
   }
 
+  function resetForm() {
+    setEditingId(null);
+    setTitle('');
+    setSlug('');
+    setSlugTouched(false);
+    setContent('');
+    setExcerpt('');
+    setContentFormat('html');
+    setFeaturedImageUrl('');
+    setCategory((blogCategories[0]?.name) || '');
+    setStatus('draft');
+    setSeoTitle('');
+    setSeoDescription('');
+    setIsSponsored(false);
+    setIsPinned(false);
+    setSendAsNewsletter(false);
+    setError(null);
+  }
+
+  function startEdit(post: BlogPost) {
+    setEditingId(post.id);
+    setTitle(post.title);
+    setSlug(post.slug);
+    setSlugTouched(true); // don't auto-overwrite the slug while editing an existing post
+    setContent(post.content);
+    setExcerpt(post.excerpt ?? '');
+    setContentFormat(post.contentFormat);
+    setFeaturedImageUrl(post.featuredImageUrl ?? '');
+    setCategory(post.category ?? blogCategories[0]?.name ?? '');
+    setStatus(post.status);
+    setSeoTitle(post.seoTitle ?? '');
+    setSeoDescription(post.seoDescription ?? '');
+    setIsSponsored(post.isSponsored);
+    setIsPinned(post.isPinned);
+    setSendAsNewsletter(false); // never re-trigger a newsletter send just by opening an edit
+    setError(null);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  async function removePost(post: BlogPost) {
+    if (!window.confirm(`Delete "${post.title}"? This can't be undone.`)) return;
+    const res = await fetch(`/api/admin/blog/${post.id}`, { method: 'DELETE' });
+    if (res.ok) {
+      if (editingId === post.id) resetForm();
+      load();
+    } else {
+      const data = await res.json();
+      setError(data.error);
+    }
+  }
+
   // Auto-derive the slug from the title until the admin manually edits
   // the slug field themselves — same UX WordPress uses.
   useEffect(() => {
     if (!slugTouched) setSlug(slugify(title));
   }, [title, slugTouched]);
 
-  async function createPost() {
+  async function savePost() {
     if (!title.trim() || !content.trim()) return;
     setError(null);
-    const res = await fetch('/api/blog', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        title,
-        slug: slug || slugify(title),
-        content,
-        contentFormat,
-        excerpt: excerpt || undefined,
-        featuredImageUrl: featuredImageUrl || undefined,
-        category,
-        status,
-        seoTitle: seoTitle || undefined,
-        seoDescription: seoDescription || undefined,
-        isSponsored,
-        isPinned,
-        sendAsNewsletter,
-      }),
-    });
+    const payload = {
+      title,
+      slug: slug || slugify(title),
+      content,
+      contentFormat,
+      excerpt: excerpt || undefined,
+      featuredImageUrl: featuredImageUrl || undefined,
+      category,
+      status,
+      seoTitle: seoTitle || undefined,
+      seoDescription: seoDescription || undefined,
+      isSponsored,
+      isPinned,
+      sendAsNewsletter,
+    };
+    const res = editingId
+      ? await fetch(`/api/admin/blog/${editingId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        })
+      : await fetch('/api/blog', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
     if (res.ok) {
-      setTitle('');
-      setSlug('');
-      setSlugTouched(false);
-      setContent('');
-      setExcerpt('');
-      setContentFormat('markdown');
-      setFeaturedImageUrl('');
-      setSeoTitle('');
-      setSeoDescription('');
-      setIsSponsored(false);
-      setIsPinned(false);
-      setSendAsNewsletter(false);
+      resetForm();
       load();
     } else {
       const data = await res.json();
@@ -135,7 +183,9 @@ export default function AdminBlogPage() {
 
   return (
     <div>
-      <h1 className="font-display text-2xl font-semibold text-ink-800">Blog</h1>
+      <h1 className="font-display text-2xl font-semibold text-ink-800">
+        {editingId ? 'Edit post' : 'Blog'}
+      </h1>
       <p className="mt-1 text-sm text-ink-500">
         Jobs and Scholarships listings are just posts tagged with those categories — pick them
         below like any other post.
@@ -244,7 +294,10 @@ export default function AdminBlogPage() {
           <Toggle checked={isSponsored} onChange={setIsSponsored} label="Sponsored" />
           <Toggle checked={isPinned} onChange={setIsPinned} label="Pinned" />
           <Toggle checked={sendAsNewsletter} onChange={setSendAsNewsletter} label="Send as newsletter" />
-          <Button size="sm" onClick={createPost}>Save post</Button>
+          <Button size="sm" onClick={savePost}>{editingId ? 'Update post' : 'Save post'}</Button>
+          {editingId && (
+            <Button size="sm" variant="secondary" onClick={resetForm}>Cancel edit</Button>
+          )}
         </div>
         {sendAsNewsletter && status === 'draft' && (
           <p className="text-xs text-flag-600">
@@ -256,18 +309,26 @@ export default function AdminBlogPage() {
 
       <div className="mt-8 space-y-3">
         {posts.map((post) => (
-          <Card key={post.id} className="p-4">
-            <div className="flex items-center gap-2">
-              <p className="font-medium text-ink-800">{post.title}</p>
-              {post.isPinned && <span className="rounded bg-flag-50 px-2 py-0.5 text-xs text-flag-600">Pinned</span>}
-              {post.isSponsored && <span className="rounded bg-pulse-50 px-2 py-0.5 text-xs text-pulse-600">Sponsored</span>}
-              {post.contentFormat === 'html' && (
-                <span className="rounded bg-ink-50 px-2 py-0.5 text-xs text-ink-500">HTML</span>
-              )}
+          <Card key={post.id} className={`p-4 ${editingId === post.id ? 'ring-2 ring-pulse-400' : ''}`}>
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="font-medium text-ink-800">{post.title}</p>
+                  {post.isPinned && <span className="rounded bg-flag-50 px-2 py-0.5 text-xs text-flag-600">Pinned</span>}
+                  {post.isSponsored && <span className="rounded bg-pulse-50 px-2 py-0.5 text-xs text-pulse-600">Sponsored</span>}
+                  {post.contentFormat === 'html' && (
+                    <span className="rounded bg-ink-50 px-2 py-0.5 text-xs text-ink-500">HTML</span>
+                  )}
+                </div>
+                <p className="text-xs text-ink-400">
+                  {post.category ?? 'Uncategorized'} · {post.status} · {new Date(post.createdAt).toLocaleDateString()}
+                </p>
+              </div>
+              <div className="flex shrink-0 gap-2">
+                <Button size="sm" variant="secondary" onClick={() => startEdit(post)}>Edit</Button>
+                <Button size="sm" variant="secondary" onClick={() => removePost(post)}>Delete</Button>
+              </div>
             </div>
-            <p className="text-xs text-ink-400">
-              {post.category ?? 'Uncategorized'} · {post.status} · {new Date(post.createdAt).toLocaleDateString()}
-            </p>
           </Card>
         ))}
       </div>

@@ -1,0 +1,59 @@
+import { NextResponse } from 'next/server';
+import { getCurrentUser } from '@/lib/auth/currentUser';
+import { commentService, cmsService, featureFlagService } from '@/lib/db';
+import { sendCommentReplyEmail } from '@/lib/email/emailService';
+
+interface RouteParams {
+  params: Promise<{ postId: string }>;
+}
+
+export async function GET(_request: Request, { params }: RouteParams) {
+  const { postId } = await params;
+  const enabled = await featureFlagService.isFeatureEnabled('comments');
+  if (!enabled) return NextResponse.json({ comments: [], enabled: false });
+
+  const user = await getCurrentUser();
+  const comments = await commentService.getCommentsForBlogPost(postId, user?.id);
+  return NextResponse.json({ comments, enabled: true });
+}
+
+export async function POST(request: Request, { params }: RouteParams) {
+  const { postId } = await params;
+  const enabled = await featureFlagService.isFeatureEnabled('comments');
+  if (!enabled) return NextResponse.json({ error: 'Comments are currently disabled' }, { status: 403 });
+
+  const user = await getCurrentUser();
+  if (!user) return NextResponse.json({ error: 'Login required to comment' }, { status: 401 });
+
+  let body: { body: string; parentCommentId?: string };
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
+  }
+
+  if (!body.body || !body.body.trim()) {
+    return NextResponse.json({ error: 'Comment body is required' }, { status: 400 });
+  }
+
+  const comment = await commentService.addCommentToBlogPost(user.id, postId, body.body.trim(), body.parentCommentId);
+
+  // Notify the parent comment's author, unless they're replying to themselves.
+  if (body.parentCommentId) {
+    const parent = await commentService.getCommentById(body.parentCommentId);
+    if (parent && parent.userId !== user.id) {
+      const post = await cmsService.getPostById(postId);
+      if (post) {
+        sendCommentReplyEmail(
+          parent.userId,
+          user.displayName ?? user.email,
+          post.title,
+          `/blog/${post.slug}`,
+          body.body.trim()
+        ).catch(() => {});
+      }
+    }
+  }
+
+  return NextResponse.json({ comment: { ...comment, authorName: user.displayName ?? user.email } }, { status: 201 });
+}

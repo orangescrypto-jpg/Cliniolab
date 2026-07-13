@@ -46,11 +46,23 @@ export function CommentThread({ endpoint, placeholder = 'Share your thoughts on 
   const [submitting, setSubmitting] = useState(false);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [postError, setPostError] = useState<string | null>(null);
+
   function loadComments() {
     fetch(endpoint, { cache: 'no-store' })
-      .then((res) => res.json())
-      .then((data) => {
-        setEnabled(data.enabled);
+      .then(async (res) => {
+        let data: { comments?: Comment[]; enabled?: boolean; error?: string } = {};
+        try {
+          data = await res.json();
+        } catch {
+          throw new Error(`Bad response (${res.status}): could not parse JSON`);
+        }
+        if (!res.ok) {
+          throw new Error(data.error ?? `Request failed (${res.status})`);
+        }
+        setLoadError(null);
+        setEnabled(data.enabled ?? true);
         setComments((prev) => {
           const next = data.comments ?? [];
           // Skip the state update (and re-render) on background polls
@@ -58,6 +70,10 @@ export function CommentThread({ endpoint, placeholder = 'Share your thoughts on 
           // draft or expanded/collapsed state isn't disturbed.
           return JSON.stringify(prev) === JSON.stringify(next) ? prev : next;
         });
+      })
+      .catch((err: Error) => {
+        console.error('[CommentThread] loadComments failed:', endpoint, err);
+        setLoadError(err.message || 'Failed to load comments');
       });
   }
 
@@ -85,21 +101,35 @@ export function CommentThread({ endpoint, placeholder = 'Share your thoughts on 
   async function postComment(text: string, parentCommentId?: string) {
     if (!text.trim() || submitting) return;
     setSubmitting(true);
+    setPostError(null);
     try {
       const res = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ body: text, parentCommentId }),
       });
-      if (res.ok) {
-        setBody('');
-        setReplyBody('');
-        if (parentCommentId) {
-          setExpanded((prev) => new Set(prev).add(parentCommentId));
-        }
-        setReplyTo(null);
-        loadComments();
+      let data: { error?: string } = {};
+      try {
+        data = await res.json();
+      } catch {
+        // Non-JSON error body (e.g. a raw 500 HTML page); fall through to status-based message.
       }
+      if (!res.ok) {
+        const message = data.error ?? `Failed to post comment (${res.status})`;
+        console.error('[CommentThread] postComment failed:', endpoint, res.status, data);
+        setPostError(message);
+        return;
+      }
+      setBody('');
+      setReplyBody('');
+      if (parentCommentId) {
+        setExpanded((prev) => new Set(prev).add(parentCommentId));
+      }
+      setReplyTo(null);
+      loadComments();
+    } catch (err) {
+      console.error('[CommentThread] postComment threw:', endpoint, err);
+      setPostError(err instanceof Error ? err.message : 'Network error posting comment');
     } finally {
       setSubmitting(false);
     }
@@ -154,6 +184,12 @@ export function CommentThread({ endpoint, placeholder = 'Share your thoughts on 
         Comments{count > 0 ? ` (${count})` : ''}
       </h3>
 
+      {loadError && (
+        <p className="mt-3 rounded-md bg-critical-50 px-3 py-2 text-xs font-medium text-critical-600">
+          Couldn&apos;t load comments: {loadError}
+        </p>
+      )}
+
       {user ? (
         <div className="mt-4 flex gap-2">
           <textarea
@@ -169,6 +205,12 @@ export function CommentThread({ endpoint, placeholder = 'Share your thoughts on 
         </div>
       ) : (
         <p className="mt-4 text-sm text-ink-400">Log in to join the discussion.</p>
+      )}
+
+      {postError && (
+        <p className="mt-2 rounded-md bg-critical-50 px-3 py-2 text-xs font-medium text-critical-600">
+          Couldn&apos;t post comment: {postError}
+        </p>
       )}
 
       <div className="mt-6 space-y-5">

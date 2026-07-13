@@ -98,6 +98,19 @@ const RESPONSIVE_OVERRIDE_CSS = `
 </style>
 `;
 
+/**
+ * Most pasted documents don't set an explicit background — browsers
+ * default <body> to opaque white. Against the site's cream page
+ * background, that reads as a floating white "card" even once the width
+ * is fixed (this is what the person is seeing: full-width, just visually
+ * boxed). We only force transparency when the author didn't deliberately
+ * set a background, so an intentionally-styled post (e.g. a dark-mode
+ * code post) keeps its own look.
+ */
+function hasExplicitBackground(html: string): boolean {
+  return /body\s*{[^}]*background/i.test(html) || /<body[^>]+style=["'][^"']*background/i.test(html);
+}
+
 function ensureViewportMeta(html: string): string {
   if (/<meta[^>]+name=["']viewport["']/i.test(html)) return html;
   const viewportTag = '<meta name="viewport" content="width=device-width, initial-scale=1">';
@@ -110,15 +123,19 @@ function ensureViewportMeta(html: string): string {
   return `${viewportTag}${html}`;
 }
 
-/** Injects the responsive override stylesheet right before </head> (or </html>/end of string as fallbacks) so it loads after the author's own styles. */
+/** Injects the responsive override stylesheet (and, if the author didn't set their own background, a page-matching background) right before </head> so it loads after and wins against the author's own styles. */
 function injectResponsiveOverrides(html: string): string {
+  const backgroundOverride = hasExplicitBackground(html)
+    ? ''
+    : '<style>html, body { background: #F7F5F0 !important; }</style>';
+  const combined = `${RESPONSIVE_OVERRIDE_CSS}${backgroundOverride}`;
   if (/<\/head>/i.test(html)) {
-    return html.replace(/<\/head>/i, `${RESPONSIVE_OVERRIDE_CSS}</head>`);
+    return html.replace(/<\/head>/i, `${combined}</head>`);
   }
   if (/<\/html>/i.test(html)) {
-    return html.replace(/<\/html>/i, `${RESPONSIVE_OVERRIDE_CSS}</html>`);
+    return html.replace(/<\/html>/i, `${combined}</html>`);
   }
-  return `${html}${RESPONSIVE_OVERRIDE_CSS}`;
+  return `${html}${combined}`;
 }
 
 function RawHtmlFrame({ html }: { html: string }) {

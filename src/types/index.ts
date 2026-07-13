@@ -251,6 +251,7 @@ export interface BlogPost {
   slug: string;
   content: string;
   contentFormat: BlogContentFormat;
+  excerpt: string | null;
   category: string | null;
   featuredImageUrl: string | null;
   seoTitle: string | null;

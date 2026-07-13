@@ -53,7 +53,7 @@ export function BlogPostClient({ slug }: { slug: string }) {
               )}
               {post.category && <span className="text-xs font-medium text-ink-400">{post.category}</span>}
             </div>
-            <div className="mt-2 flex items-start justify-between gap-3">
+            <div className="mt-2 flex flex-col items-start gap-3 sm:flex-row sm:items-start sm:justify-between">
               <h1 className="font-display text-3xl font-semibold text-ink-800">{post.title}</h1>
               {typeof window !== 'undefined' && (
                 <ShareButton url={window.location.href} title={post.title} />

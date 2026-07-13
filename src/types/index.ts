@@ -252,7 +252,9 @@ export interface BlogPost {
   content: string;
   contentFormat: BlogContentFormat;
   excerpt: string | null;
-  category: string | null;
+  category: string | null; // legacy free-text tag, kept for old posts
+  blogCategoryId: string | null;
+  blogSubcategoryId: string | null;
   featuredImageUrl: string | null;
   seoTitle: string | null;
   seoDescription: string | null;

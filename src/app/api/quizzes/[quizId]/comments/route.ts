@@ -3,6 +3,11 @@ import { getCurrentUser } from '@/lib/auth/currentUser';
 import { commentService, featureFlagService, quizService } from '@/lib/db';
 import { sendCommentReplyEmail } from '@/lib/email/emailService';
 
+// See comment in the blog comments route for why this is needed —
+// otherwise this GET can be served from a stale cache after a new
+// comment is posted.
+export const dynamic = 'force-dynamic';
+
 interface RouteParams {
   params: Promise<{ quizId: string }>;
 }

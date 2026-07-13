@@ -118,6 +118,24 @@ CREATE TABLE question_reports (
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+CREATE TABLE blog_categories (
+  id TEXT PRIMARY KEY,
+  name TEXT UNIQUE NOT NULL,
+  slug TEXT UNIQUE NOT NULL,
+  sort_order INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE blog_subcategories (
+  id TEXT PRIMARY KEY,
+  blog_category_id TEXT NOT NULL REFERENCES blog_categories(id),
+  name TEXT NOT NULL,
+  slug TEXT NOT NULL,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  UNIQUE(blog_category_id, slug)
+);
+
+CREATE INDEX idx_blog_subcategories_category ON blog_subcategories(blog_category_id, sort_order);
+
 CREATE TABLE blog_posts (
   id TEXT PRIMARY KEY,
   author_id TEXT NOT NULL REFERENCES users(id),
@@ -125,7 +143,10 @@ CREATE TABLE blog_posts (
   slug TEXT UNIQUE NOT NULL,
   content TEXT NOT NULL,
   content_format TEXT NOT NULL DEFAULT 'markdown', -- 'markdown' | 'html' - html is sanitized on render, never trusted raw
-  category TEXT,                      -- free-text tag e.g. 'Clinical Scenario', 'Study Tips', 'Job', 'Scholarship'
+  excerpt TEXT,                       -- short manual summary; falls back to an auto-derived excerpt of `content` when unset
+  category TEXT,                      -- LEGACY free-text tag, kept only so old posts keep rendering as-is. New posts use blog_category_id/blog_subcategory_id instead.
+  blog_category_id TEXT REFERENCES blog_categories(id),    -- one of the fixed top-level categories (Anatomy & Physiology, Job, Scholarship, etc.)
+  blog_subcategory_id TEXT REFERENCES blog_subcategories(id), -- admin-defined, freeform within the chosen category; persists for reuse
   featured_image_url TEXT,            -- external URL or /api/images/... (R2-backed) path
   seo_title TEXT,                     -- overrides <title>/OG title if set; falls back to `title`
   seo_description TEXT,               -- overrides meta description if set; falls back to an auto-excerpt of `content`
@@ -136,6 +157,25 @@ CREATE TABLE blog_posts (
   newsletter_sent_at TEXT,            -- set once sent, prevents duplicate sends
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
+
+CREATE INDEX idx_blog_posts_category ON blog_posts(blog_category_id, status, created_at);
+
+-- Fixed top-level blog categories. Admins pick one of these when writing a
+-- post — they cannot add/remove from this list via the UI. Subcategories
+-- within a category ARE freely addable by admins (see blog_subcategories).
+INSERT INTO blog_categories (id, name, slug, sort_order) VALUES
+('blogcat_anatomy_physiology', 'Anatomy & Physiology', 'anatomy-physiology', 1),
+('blogcat_pharmacology', 'Pharmacology', 'pharmacology', 2),
+('blogcat_microbiology', 'Microbiology', 'microbiology', 3),
+('blogcat_pathophysiology', 'Pathophysiology', 'pathophysiology', 4),
+('blogcat_biochemistry', 'Biochemistry', 'biochemistry', 5),
+('blogcat_nursing', 'Nursing', 'nursing', 6),
+('blogcat_general_clinical', 'General Clinical', 'general-clinical', 7),
+('blogcat_clinical_specialists', 'Clinical Specialists', 'clinical-specialists', 8),
+('blogcat_clinical_scenarios', 'Clinical Scenarios', 'clinical-scenarios', 9),
+('blogcat_others', 'Others', 'others', 10),
+('blogcat_job', 'Job', 'job', 11),
+('blogcat_scholarship', 'Scholarship', 'scholarship', 12);
 
 CREATE TABLE static_pages (
   id TEXT PRIMARY KEY,       -- e.g. 'about', 'contact', 'terms', 'privacy', 'faq'

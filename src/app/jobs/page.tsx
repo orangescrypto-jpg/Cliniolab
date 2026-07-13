@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { BlogPostCard } from '@/components/cms/BlogPostCard';
+import { JOB_CATEGORY_SLUG } from '@/lib/constants/blogCategories';
 import type { BlogPost } from '@/types';
 
 export default function JobsPage() {
@@ -14,7 +15,7 @@ export default function JobsPage() {
       .then((res) => res.json())
       .then((data) => setEnabled(data.enabled))
       .finally(() => setLoaded(true));
-    fetch('/api/blog?category=Job')
+    fetch(`/api/blog?categorySlug=${JOB_CATEGORY_SLUG}`)
       .then((res) => res.json())
       .then((data) => setPosts(data.posts ?? []));
   }, []);

@@ -35,11 +35,12 @@ const ALLOWED_TAGS = new Set([
   'p', 'br', 'hr',
   'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
   'strong', 'b', 'em', 'i', 'u', 's', 'mark', 'small', 'sub', 'sup',
-  'ul', 'ol', 'li',
+  'ul', 'ol', 'li', 'dl', 'dt', 'dd',
   'blockquote', 'pre', 'code',
   'a', 'img', 'figure', 'figcaption',
-  'table', 'thead', 'tbody', 'tr', 'th', 'td',
+  'table', 'thead', 'tbody', 'tr', 'th', 'td', 'caption', 'colgroup', 'col',
   'div', 'span', 'iframe', 'style',
+  'article', 'section', 'header', 'footer', 'main', 'nav', 'aside',
 ]);
 
 // Only these two video-embed origins are ever allowed through as <iframe>.
@@ -61,6 +62,13 @@ const ALLOWED_ATTRS: Record<string, Set<string>> = {
   div: new Set(['style']),
   figure: new Set(['style']),
   mark: new Set(['style']),
+  article: new Set(['style']),
+  section: new Set(['style']),
+  header: new Set(['style']),
+  footer: new Set(['style']),
+  main: new Set(['style']),
+  nav: new Set(['style']),
+  aside: new Set(['style']),
   // iframe intentionally NOT given a normal attrs entry — it's handled by
   // a dedicated branch in rebuildOpeningTag() that only ever emits a
   // fixed, hardcoded set of attributes for a verified embed URL.

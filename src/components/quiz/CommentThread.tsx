@@ -44,12 +44,34 @@ export function CommentThread({ quizId }: { quizId: string }) {
       .then((res) => res.json())
       .then((data) => {
         setEnabled(data.enabled);
-        setComments(data.comments ?? []);
+        setComments((prev) => {
+          const next = data.comments ?? [];
+          // Skip the state update (and re-render) on background polls
+          // where nothing actually changed, so an in-progress reply
+          // draft or expanded/collapsed state isn't disturbed.
+          return JSON.stringify(prev) === JSON.stringify(next) ? prev : next;
+        });
       });
   }
 
   useEffect(() => {
     loadComments();
+
+    // Poll for new comments from other users every 8s, and refetch
+    // immediately whenever the tab regains focus/visibility — cheap
+    // "near real-time" without needing a websocket/SSE backend.
+    const interval = setInterval(loadComments, 8000);
+    function onVisible() {
+      if (document.visibilityState === 'visible') loadComments();
+    }
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('focus', onVisible);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('focus', onVisible);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [quizId]);
 

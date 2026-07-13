@@ -35,6 +35,12 @@ export default function AdminBlogPage() {
   // as 'html'. Existing 'markdown' posts already in the DB are unaffected
   // and still render via the old markdown path on the public blog page.
   const [contentFormat, setContentFormat] = useState<BlogContentFormat>('html');
+  // When true, the Content field is a plain textarea (no Tiptap/ProseMirror
+  // parsing, no editor-level sanitizeHtml call) so a full pasted HTML
+  // document — <!DOCTYPE>, <head>, <style> with @media/*, etc. — is saved
+  // byte-for-byte. Rendering safety for this path lives at render time in
+  // BlogPostClient (sandboxed iframe), not at save time.
+  const [isRawHtmlMode, setIsRawHtmlMode] = useState(false);
   const [featuredImageUrl, setFeaturedImageUrl] = useState('');
 
   // Fixed top-level category (required) — admin cannot add/remove these.
@@ -122,6 +128,7 @@ export default function AdminBlogPage() {
     setContent('');
     setExcerpt('');
     setContentFormat('html');
+    setIsRawHtmlMode(false);
     setFeaturedImageUrl('');
     setBlogCategoryId(blogCategories[0]?.id || '');
     setBlogSubcategoryId('');
@@ -141,6 +148,7 @@ export default function AdminBlogPage() {
     setSlug(post.slug);
     setSlugTouched(true); // don't auto-overwrite the slug while editing an existing post
     setContent(post.content);
+    setIsRawHtmlMode(/^\s*<!DOCTYPE\s+html/i.test(post.content) || /^\s*<html[\s>]/i.test(post.content));
     setExcerpt(post.excerpt ?? '');
     setContentFormat(post.contentFormat);
     setFeaturedImageUrl(post.featuredImageUrl ?? '');
@@ -266,15 +274,39 @@ export default function AdminBlogPage() {
         <ImagePicker value={featuredImageUrl} onChange={setFeaturedImageUrl} purpose="blog" label="Featured image" />
 
         <div>
-          <label className="text-sm font-medium text-ink-700">Content</label>
-          <div className="mt-1">
-            <TiptapEditor
-              value={content}
-              onChange={setContent}
-              uploadPurpose="blog"
-              placeholder="Write your post…"
+          <div className="flex items-center justify-between">
+            <label className="text-sm font-medium text-ink-700">Content</label>
+            <Toggle
+              checked={isRawHtmlMode}
+              onChange={setIsRawHtmlMode}
+              label="Raw HTML mode (paste a full HTML document as-is)"
             />
           </div>
+          <div className="mt-1">
+            {isRawHtmlMode ? (
+              <textarea
+                value={content}
+                onChange={(e) => setContent(e.target.value)}
+                rows={20}
+                placeholder="Paste a full HTML document here (<!DOCTYPE html>...). Saved exactly as pasted — no parsing, no stripping."
+                spellCheck={false}
+                className="w-full rounded-md border border-ink-100 px-4 py-2 font-mono text-xs text-ink-700 focus:border-pulse-400 focus:outline-none"
+              />
+            ) : (
+              <TiptapEditor
+                value={content}
+                onChange={setContent}
+                uploadPurpose="blog"
+                placeholder="Write your post…"
+              />
+            )}
+          </div>
+          {isRawHtmlMode && (
+            <p className="mt-1 text-xs text-ink-400">
+              Raw HTML mode bypasses the rich-text editor entirely — pasted content, including &lt;style&gt; blocks
+              with @media queries, is saved unchanged and rendered in a sandboxed frame on the public page.
+            </p>
+          )}
         </div>
 
         <div>

@@ -48,7 +48,7 @@ export async function POST(request: Request, { params }: RouteParams) {
           parent.userId,
           user.displayName ?? user.email,
           quiz.title,
-          quizId,
+          `/quizzes/${quizId}`,
           body.body.trim()
         ).catch(() => {});
       }

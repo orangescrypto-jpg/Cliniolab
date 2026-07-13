@@ -68,7 +68,7 @@ async function getCommentsForSubject(
         (SELECT COUNT(*) FROM comment_reactions r WHERE r.comment_id = c.id) as like_count,
         (SELECT COUNT(*) FROM comment_reactions r WHERE r.comment_id = c.id AND r.user_id = ?) as liked_by_me
        FROM comments c
-       JOIN users u ON u.id = c.user_id
+       LEFT JOIN users u ON u.id = c.user_id
        WHERE c.${column} = ?
        ORDER BY c.created_at ASC`
     )
@@ -164,7 +164,7 @@ export async function getCommentById(commentId: string): Promise<Comment | null>
         (SELECT COUNT(*) FROM comment_reactions r WHERE r.comment_id = c.id) as like_count,
         0 as liked_by_me
        FROM comments c
-       JOIN users u ON u.id = c.user_id
+       LEFT JOIN users u ON u.id = c.user_id
        WHERE c.id = ?`
     )
     .bind(commentId)

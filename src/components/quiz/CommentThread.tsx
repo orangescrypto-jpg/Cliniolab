@@ -29,7 +29,14 @@ function totalCount(comments: Comment[]): number {
 // readable on a phone screen instead of marching off the right edge.
 const MAX_VISUAL_INDENT = 2;
 
-export function CommentThread({ quizId }: { quizId: string }) {
+interface CommentThreadProps {
+  /** API endpoint for this thread's comments, e.g. `/api/quizzes/{id}/comments` or `/api/blog/{id}/comments`. */
+  endpoint: string;
+  /** Placeholder copy for the top-level composer; defaults to quiz wording for backward compatibility. */
+  placeholder?: string;
+}
+
+export function CommentThread({ endpoint, placeholder = 'Share your thoughts on this quiz…' }: CommentThreadProps) {
   const { user } = useAuth();
   const [comments, setComments] = useState<Comment[]>([]);
   const [enabled, setEnabled] = useState(true);
@@ -40,7 +47,7 @@ export function CommentThread({ quizId }: { quizId: string }) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
   function loadComments() {
-    fetch(`/api/quizzes/${quizId}/comments`)
+    fetch(endpoint)
       .then((res) => res.json())
       .then((data) => {
         setEnabled(data.enabled);
@@ -73,13 +80,13 @@ export function CommentThread({ quizId }: { quizId: string }) {
       window.removeEventListener('focus', onVisible);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [quizId]);
+  }, [endpoint]);
 
   async function postComment(text: string, parentCommentId?: string) {
     if (!text.trim() || submitting) return;
     setSubmitting(true);
     try {
-      const res = await fetch(`/api/quizzes/${quizId}/comments`, {
+      const res = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ body: text, parentCommentId }),
@@ -152,7 +159,7 @@ export function CommentThread({ quizId }: { quizId: string }) {
           <textarea
             value={body}
             onChange={(e) => setBody(e.target.value)}
-            placeholder="Share your thoughts on this quiz…"
+            placeholder={placeholder}
             rows={3}
             className="flex-1 rounded-md border border-ink-100 px-4 py-2 text-sm focus:border-pulse-400 focus:outline-none"
           />

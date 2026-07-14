@@ -6,6 +6,7 @@ import { sanitizeHtml, wrapWithScopeClass } from '@/lib/utils/sanitizeHtml';
 import { ShareButton } from '@/components/quiz/ShareButton';
 import { RelatedQuizzes } from '@/components/quiz/RelatedQuizzes';
 import { CommentThread } from '@/components/quiz/CommentThread';
+import { useBlogSubcategoryName } from '@/lib/hooks/useBlogSubcategoryName';
 import type { BlogPost } from '@/types';
 
 /**
@@ -247,61 +248,84 @@ export function BlogPostClient({ slug }: { slug: string }) {
     );
   }
 
+  return <BlogPostBody post={post} />;
+}
+
+function BlogPostBody({ post }: { post: BlogPost | null }) {
+  const subcategoryName = useBlogSubcategoryName(post?.blogCategoryId, post?.blogSubcategoryId);
+  if (!post) return <div className="mx-auto max-w-4xl px-6 py-16" />;
+
+  const isRaw = isFullRawDocument(post.content);
+
   return (
-    <div className="mx-auto max-w-4xl px-6 py-16">
-      {post && (
-        <>
-          <div className="mx-auto max-w-2xl">
-            {post.featuredImageUrl && (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={post.featuredImageUrl}
-                alt=""
-                className="mb-6 h-64 w-full rounded-lg object-cover"
-              />
-            )}
-            <div className="flex flex-wrap items-center gap-2">
-              {post.isPinned && (
-                <span className="rounded bg-flag-50 px-2 py-0.5 text-xs font-medium text-flag-600">Pinned</span>
-              )}
-              {post.isSponsored && (
-                <span className="rounded bg-pulse-50 px-2 py-0.5 text-xs font-medium text-pulse-600">Sponsored</span>
-              )}
-              {post.category && <span className="text-xs font-medium text-ink-400">{post.category}</span>}
-            </div>
-            <div className="mt-2 flex flex-col items-start gap-3 sm:flex-row sm:items-start sm:justify-between">
-              <h1 className="font-display text-3xl font-semibold text-ink-800">{post.title}</h1>
-              {typeof window !== 'undefined' && (
-                <ShareButton url={window.location.href} title={post.title} />
-              )}
-            </div>
-            <p className="mt-2 text-xs text-ink-400">{new Date(post.createdAt).toLocaleDateString()}</p>
-            {isFullRawDocument(post.content) ? (
-              <div className="mt-6">
-                <RawHtmlFrame html={post.content} />
-              </div>
-            ) : (
-              <>
-                <style>{FLATTEN_BOXED_CONTENT_CSS}</style>
-                <div
-                  className="post-content-flatten prose prose-sm mt-6 max-w-none text-ink-700"
-                  dangerouslySetInnerHTML={{
-                    __html:
-                      post.contentFormat === 'html' || looksLikeHtml(post.content)
-                        ? wrapWithScopeClass(sanitizeHtml(post.content, post.id), post.id)
-                        : markdownToHtml(post.content),
-                  }}
-                />
-              </>
-            )}
-          </div>
-          <CommentThread
-            endpoint={`/api/blog/${post.id}/comments`}
-            placeholder="Share your thoughts on this post…"
+    <div className="py-16">
+      {/* Header block (title, meta, category) always stays at readable
+          width — only the post body itself is allowed to go full-width,
+          since that's the part authors sometimes paste as a complete,
+          wide HTML document. */}
+      <div className="mx-auto max-w-2xl px-6">
+        {post.featuredImageUrl && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={post.featuredImageUrl}
+            alt=""
+            className="mb-6 h-64 w-full rounded-lg object-cover"
           />
-          <RelatedQuizzes endpoint={`/api/blog/${slug}/related`} title="Practice quizzes for this topic" />
-        </>
+        )}
+        <div className="flex flex-wrap items-center gap-2">
+          {post.isPinned && (
+            <span className="rounded bg-flag-50 px-2 py-0.5 text-xs font-medium text-flag-600">Pinned</span>
+          )}
+          {post.isSponsored && (
+            <span className="rounded bg-pulse-50 px-2 py-0.5 text-xs font-medium text-pulse-600">Sponsored</span>
+          )}
+          {post.category && <span className="text-xs font-medium text-ink-400">{post.category}</span>}
+          {subcategoryName && (
+            <span className="rounded bg-ink-50 px-2 py-0.5 text-xs font-medium text-ink-500">
+              {subcategoryName}
+            </span>
+          )}
+        </div>
+        <div className="mt-2 flex flex-col items-start gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <h1 className="font-display text-3xl font-semibold text-ink-800">{post.title}</h1>
+          {typeof window !== 'undefined' && (
+            <ShareButton url={window.location.href} title={post.title} />
+          )}
+        </div>
+        <p className="mt-2 text-xs text-ink-400">{new Date(post.createdAt).toLocaleDateString()}</p>
+      </div>
+
+      {/* Post body: full raw HTML documents render edge-to-edge (up to a
+          generous max width) via the sandboxed iframe, since that's the
+          "boxed" complaint — a pasted HTML page was being squeezed into
+          the same max-w-2xl column as the title/byline text. Regular
+          markdown/HTML-fragment posts stay at readable article width. */}
+      {isRaw ? (
+        <div className="mx-auto mt-6 max-w-6xl px-6">
+          <RawHtmlFrame html={post.content} />
+        </div>
+      ) : (
+        <div className="mx-auto max-w-2xl px-6">
+          <style>{FLATTEN_BOXED_CONTENT_CSS}</style>
+          <div
+            className="post-content-flatten prose prose-sm mt-6 max-w-none text-ink-700"
+            dangerouslySetInnerHTML={{
+              __html:
+                post.contentFormat === 'html' || looksLikeHtml(post.content)
+                  ? wrapWithScopeClass(sanitizeHtml(post.content, post.id), post.id)
+                  : markdownToHtml(post.content),
+            }}
+          />
+        </div>
       )}
+
+      <div className="mx-auto max-w-2xl px-6">
+        <CommentThread
+          endpoint={`/api/blog/${post.id}/comments`}
+          placeholder="Share your thoughts on this post…"
+        />
+        <RelatedQuizzes endpoint={`/api/blog/${post.slug}/related`} title="Practice quizzes for this topic" />
+      </div>
     </div>
   );
 }

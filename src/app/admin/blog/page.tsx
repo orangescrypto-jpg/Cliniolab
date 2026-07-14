@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/Button';
 import { Toggle } from '@/components/ui/Toggle';
 import { ImagePicker } from '@/components/ui/ImagePicker';
 import { TiptapEditor } from '@/components/ui/TiptapEditor';
+import { RawHtmlFrame } from '@/components/ui/RawHtmlFrame';
 import type { BlogContentFormat, BlogPost, BlogStatus } from '@/types';
 
 interface BlogCategoryOption { id: string; name: string; slug: string; sortOrder: number }
@@ -41,6 +42,11 @@ export default function AdminBlogPage() {
   // byte-for-byte. Rendering safety for this path lives at render time in
   // BlogPostClient (sandboxed iframe), not at save time.
   const [isRawHtmlMode, setIsRawHtmlMode] = useState(false);
+  // Raw HTML mode has no visual editor at all — it's a blind textarea
+  // unless we render what's being typed. This controls which of the two
+  // panes (or both) are visible; defaults to split so the preview is
+  // never something the admin has to remember to open.
+  const [rawHtmlView, setRawHtmlView] = useState<'split' | 'edit' | 'preview'>('split');
   const [featuredImageUrl, setFeaturedImageUrl] = useState('');
 
   // Fixed top-level category (required) — admin cannot add/remove these.
@@ -62,22 +68,39 @@ export default function AdminBlogPage() {
   const [sendAsNewsletter, setSendAsNewsletter] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const [postsLoading, setPostsLoading] = useState(true);
+  const [postsLoadError, setPostsLoadError] = useState(false);
+
   function load() {
+    setPostsLoading(true);
+    setPostsLoadError(false);
     fetch('/api/admin/blog')
-      .then((res) => res.json())
-      .then((data) => setPosts(data.posts ?? []));
+      .then((res) => {
+        if (!res.ok) throw new Error('Failed to load posts');
+        return res.json();
+      })
+      .then((data) => setPosts(data.posts ?? []))
+      .catch(() => setPostsLoadError(true))
+      .finally(() => setPostsLoading(false));
   }
 
   useEffect(load, []);
 
+  const [categoriesLoadError, setCategoriesLoadError] = useState(false);
+
   function loadBlogCategories() {
+    setCategoriesLoadError(false);
     fetch('/api/blog-categories')
-      .then((res) => res.json())
+      .then((res) => {
+        if (!res.ok) throw new Error('Failed to load categories');
+        return res.json();
+      })
       .then((data) => {
         const cats: BlogCategoryOption[] = data.categories ?? [];
         setBlogCategories(cats);
         setBlogCategoryId((current) => current || cats[0]?.id || '');
-      });
+      })
+      .catch(() => setCategoriesLoadError(true));
   }
 
   useEffect(loadBlogCategories, []);
@@ -92,8 +115,12 @@ export default function AdminBlogPage() {
       return;
     }
     fetch(`/api/blog-subcategories?categoryId=${encodeURIComponent(categoryId)}`)
-      .then((res) => res.json())
-      .then((data) => setSubcategories(data.subcategories ?? []));
+      .then((res) => {
+        if (!res.ok) throw new Error('Failed to load subcategories');
+        return res.json();
+      })
+      .then((data) => setSubcategories(data.subcategories ?? []))
+      .catch(() => setSubcategories([]));
   }
 
   useEffect(() => {
@@ -129,6 +156,7 @@ export default function AdminBlogPage() {
     setExcerpt('');
     setContentFormat('html');
     setIsRawHtmlMode(false);
+    setRawHtmlView('split');
     setFeaturedImageUrl('');
     setBlogCategoryId(blogCategories[0]?.id || '');
     setBlogSubcategoryId('');
@@ -149,6 +177,7 @@ export default function AdminBlogPage() {
     setSlugTouched(true); // don't auto-overwrite the slug while editing an existing post
     setContent(post.content);
     setIsRawHtmlMode(/^\s*<!DOCTYPE\s+html/i.test(post.content) || /^\s*<html[\s>]/i.test(post.content));
+    setRawHtmlView('split');
     setExcerpt(post.excerpt ?? '');
     setContentFormat(post.contentFormat);
     setFeaturedImageUrl(post.featuredImageUrl ?? '');
@@ -168,13 +197,18 @@ export default function AdminBlogPage() {
 
   async function removePost(post: BlogPost) {
     if (!window.confirm(`Delete "${post.title}"? This can't be undone.`)) return;
-    const res = await fetch(`/api/admin/blog/${post.id}`, { method: 'DELETE' });
-    if (res.ok) {
-      if (editingId === post.id) resetForm();
-      load();
-    } else {
-      const data = await res.json();
-      setError(data.error);
+    setError(null);
+    try {
+      const res = await fetch(`/api/admin/blog/${post.id}`, { method: 'DELETE' });
+      if (res.ok) {
+        if (editingId === post.id) resetForm();
+        load();
+      } else {
+        const data = await res.json().catch(() => ({}));
+        setError(data.error ?? 'Failed to delete post.');
+      }
+    } catch {
+      setError('Failed to delete post — check your connection and try again.');
     }
   }
 
@@ -184,13 +218,23 @@ export default function AdminBlogPage() {
     if (!slugTouched) setSlug(slugify(title));
   }, [title, slugTouched]);
 
+  const [saving, setSaving] = useState(false);
+
   async function savePost() {
-    if (!title.trim() || !content.trim()) return;
+    if (!title.trim()) {
+      setError('Title is required.');
+      return;
+    }
+    if (!content.trim()) {
+      setError('Content is required.');
+      return;
+    }
     if (!blogCategoryId) {
       setError('Category is required.');
       return;
     }
     setError(null);
+    setSaving(true);
     const payload = {
       title,
       slug: slug || slugify(title),
@@ -207,23 +251,29 @@ export default function AdminBlogPage() {
       isPinned,
       sendAsNewsletter,
     };
-    const res = editingId
-      ? await fetch(`/api/admin/blog/${editingId}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-        })
-      : await fetch('/api/blog', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-        });
-    if (res.ok) {
-      resetForm();
-      load();
-    } else {
-      const data = await res.json();
-      setError(data.error);
+    try {
+      const res = editingId
+        ? await fetch(`/api/admin/blog/${editingId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          })
+        : await fetch('/api/blog', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          });
+      if (res.ok) {
+        resetForm();
+        load();
+      } else {
+        const data = await res.json().catch(() => ({}));
+        setError(data.error ?? 'Failed to save post.');
+      }
+    } catch {
+      setError('Failed to save post — check your connection and try again.');
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -274,7 +324,7 @@ export default function AdminBlogPage() {
         <ImagePicker value={featuredImageUrl} onChange={setFeaturedImageUrl} purpose="blog" label="Featured image" />
 
         <div>
-          <div className="flex items-center justify-between">
+          <div className="flex flex-wrap items-center justify-between gap-2">
             <label className="text-sm font-medium text-ink-700">Content</label>
             <Toggle
               checked={isRawHtmlMode}
@@ -284,14 +334,53 @@ export default function AdminBlogPage() {
           </div>
           <div className="mt-1">
             {isRawHtmlMode ? (
-              <textarea
-                value={content}
-                onChange={(e) => setContent(e.target.value)}
-                rows={20}
-                placeholder="Paste a full HTML document here (<!DOCTYPE html>...). Saved exactly as pasted — no parsing, no stripping."
-                spellCheck={false}
-                className="w-full rounded-md border border-ink-100 px-4 py-2 font-mono text-xs text-ink-700 focus:border-pulse-400 focus:outline-none"
-              />
+              <div className="rounded-md border border-ink-100">
+                <div className="flex items-center gap-1 border-b border-ink-100 bg-ink-50/50 p-1.5">
+                  {(['edit', 'split', 'preview'] as const).map((mode) => (
+                    <button
+                      key={mode}
+                      type="button"
+                      onClick={() => setRawHtmlView(mode)}
+                      className={`rounded px-2.5 py-1 text-xs font-semibold capitalize ${
+                        rawHtmlView === mode
+                          ? 'bg-pulse-600 text-white'
+                          : 'text-ink-600 hover:bg-ink-100'
+                      }`}
+                    >
+                      {mode}
+                    </button>
+                  ))}
+                </div>
+                <div
+                  className={
+                    rawHtmlView === 'split'
+                      ? 'grid grid-cols-1 divide-y divide-ink-100 lg:grid-cols-2 lg:divide-x lg:divide-y-0'
+                      : ''
+                  }
+                >
+                  {rawHtmlView !== 'preview' && (
+                    <textarea
+                      value={content}
+                      onChange={(e) => setContent(e.target.value)}
+                      rows={20}
+                      placeholder="Paste a full HTML document here (<!DOCTYPE html>...). Saved exactly as pasted — no parsing, no stripping."
+                      spellCheck={false}
+                      className="w-full resize-y border-0 px-4 py-2 font-mono text-xs text-ink-700 focus:outline-none"
+                    />
+                  )}
+                  {rawHtmlView !== 'edit' && (
+                    <div className="max-h-[600px] overflow-auto bg-ink-50/30">
+                      {content.trim() ? (
+                        <RawHtmlFrame html={content} maxHeightPx={600} />
+                      ) : (
+                        <p className="p-4 text-xs text-ink-400">
+                          Nothing to preview yet — paste or type HTML on the left.
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
             ) : (
               <TiptapEditor
                 value={content}
@@ -304,7 +393,8 @@ export default function AdminBlogPage() {
           {isRawHtmlMode && (
             <p className="mt-1 text-xs text-ink-400">
               Raw HTML mode bypasses the rich-text editor entirely — pasted content, including &lt;style&gt; blocks
-              with @media queries, is saved unchanged and rendered in a sandboxed frame on the public page.
+              with @media queries, is saved unchanged and rendered in a sandboxed frame on the public page. The
+              preview pane above renders the exact same way the published post will look.
             </p>
           )}
         </div>
@@ -350,6 +440,12 @@ export default function AdminBlogPage() {
         {/* Category (required, fixed 12) + Subcategory (optional, freely addable & reused) */}
         <div className="rounded-md border border-ink-100 p-4">
           <p className="text-sm font-semibold text-ink-700">Category</p>
+          {categoriesLoadError && (
+            <p className="mt-1 text-xs text-critical-500">
+              Couldn&apos;t load categories.{' '}
+              <button type="button" onClick={loadBlogCategories} className="underline">Retry</button>
+            </p>
+          )}
           <div className="mt-3 flex flex-wrap items-center gap-3">
             <div>
               <label className="text-xs font-medium text-ink-600">Category (required)</label>
@@ -405,7 +501,9 @@ export default function AdminBlogPage() {
           <Toggle checked={isSponsored} onChange={setIsSponsored} label="Sponsored" />
           <Toggle checked={isPinned} onChange={setIsPinned} label="Pinned" />
           <Toggle checked={sendAsNewsletter} onChange={setSendAsNewsletter} label="Send as newsletter" />
-          <Button size="sm" onClick={savePost}>{editingId ? 'Update post' : 'Save post'}</Button>
+          <Button size="sm" onClick={savePost} disabled={saving}>
+            {saving ? 'Saving…' : editingId ? 'Update post' : 'Save post'}
+          </Button>
           {editingId && (
             <Button size="sm" variant="secondary" onClick={resetForm}>Cancel edit</Button>
           )}
@@ -419,7 +517,19 @@ export default function AdminBlogPage() {
       </Card>
 
       <div className="mt-8 space-y-3">
-        {posts.map((post) => (
+        {postsLoading && (
+          <p className="text-sm text-ink-400">Loading posts…</p>
+        )}
+        {!postsLoading && postsLoadError && (
+          <Card className="p-4">
+            <p className="text-sm text-critical-500">Couldn&apos;t load posts — check your connection.</p>
+            <Button size="sm" variant="secondary" className="mt-2" onClick={load}>Retry</Button>
+          </Card>
+        )}
+        {!postsLoading && !postsLoadError && posts.length === 0 && (
+          <p className="text-sm text-ink-400">No posts yet — create your first one above.</p>
+        )}
+        {!postsLoading && !postsLoadError && posts.map((post) => (
           <Card key={post.id} className={`p-4 ${editingId === post.id ? 'ring-2 ring-pulse-400' : ''}`}>
             <div className="flex items-start justify-between gap-3">
               <div>

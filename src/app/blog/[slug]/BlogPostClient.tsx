@@ -3,31 +3,12 @@
 import { useEffect, useState } from 'react';
 import { markdownToHtml } from '@/components/ui/RichTextEditor';
 import { sanitizeHtml, wrapWithScopeClass } from '@/lib/utils/sanitizeHtml';
+import { RawHtmlFrame, isFullRawDocument } from '@/components/ui/RawHtmlFrame';
 import { ShareButton } from '@/components/quiz/ShareButton';
 import { RelatedQuizzes } from '@/components/quiz/RelatedQuizzes';
 import { CommentThread } from '@/components/quiz/CommentThread';
 import { useBlogSubcategoryName } from '@/lib/hooks/useBlogSubcategoryName';
 import type { BlogPost } from '@/types';
-
-/**
- * A post is a "full raw document" when it's a complete standalone HTML
- * page (doctype/html/head) rather than a content fragment meant to sit
- * inside the site's own layout. These render via a sandboxed iframe (see
- * RawHtmlFrame) instead of the text-level sanitizer, so the author's CSS
- * (including @media, *, arbitrary selectors) renders pixel-perfect
- * without the scoping/stripping tradeoffs of sanitizeHtml. The sandbox
- * attribute means embedded scripts/styles can't touch the parent app,
- * cookies, or admin session — this is a stronger security boundary, not
- * a removed one.
- */
-function isFullRawDocument(content: string): boolean {
-  const sample = content.slice(0, 1000);
-  return (
-    /<!DOCTYPE\s+html/i.test(sample) ||
-    /<html[\s>]/i.test(sample) ||
-    /<head[\s>]/i.test(sample)
-  );
-}
 
 function looksLikeHtml(content: string): boolean {
   const sample = content.slice(0, 1000);
@@ -50,107 +31,6 @@ function looksLikeHtml(content: string): boolean {
     /<\/?(div|span|p|section|article|header|footer|nav|main|table|tr|td|th|ul|ol|li|h[1-6]|img|a|button|form|label|input|strong|em|br|hr)[\s/>]/gi
   );
   return (tagMatches?.length ?? 0) >= 3;
-}
-
-/**
- * Renders a full raw HTML document (with its own <style>, @media, *, etc.)
- * inside a sandboxed iframe sized to its own content. `sandbox="allow-scripts"`
- * (no allow-same-origin, no allow-forms, no allow-top-navigation) means the
- * iframe gets its own opaque origin — any script inside it cannot read the
- * parent page's cookies, session, or DOM, and cannot navigate the parent
- * window. This is what lets us skip sanitizeHtml entirely for this path
- * without reopening the XSS/session-theft risk it exists to prevent.
- */
-/**
- * Many authors paste a full HTML document that was never designed with a
- * mobile viewport in mind (no <meta name="viewport">, or fixed pixel
- * widths). Without a viewport meta tag, phones render the iframe's
- * document at a default desktop-width viewport (~980px) and then scale
- * it down, which is what makes pasted posts look cramped/tiny on mobile.
- * We inject one if the author didn't include their own, so the page
- * lays out at the actual device width instead of a shrunken desktop view.
- */
-/**
- * A viewport meta tag alone stops the browser from *scaling down* a
- * desktop-width page, but it doesn't help if the author's own CSS hardcodes
- * pixel widths (e.g. `body { width: 1080px }`, a wrapper `<div
- * style="width:1000px">`, or a wide fixed-width table). In that case the
- * content renders at true 1:1 size but still doesn't fit the phone — it
- * just looks "boxed in" with dead space on either side, or gets clipped.
- *
- * This stylesheet is appended (not prepended) so it wins the cascade
- * against the author's own <style> block via source order, while staying
- * low-specificity enough not to break intentional layouts:
- * - Caps body/html and common wrapper elements to 100% of the viewport
- *   width instead of a fixed px value.
- * - Lets any element that's still wider than the viewport (e.g. a big
- *   table) scroll horizontally in its own box, rather than blowing out
- *   the whole page width.
- * - Forces all images/media to scale down to fit.
- */
-const RESPONSIVE_OVERRIDE_CSS = `
-<style>
-  html, body {
-    max-width: 100% !important;
-    overflow-x: hidden !important;
-    background: #F7F5F0 !important;
-    margin: 0 !important;
-  }
-  /* Flatten the common "boxed card" pattern: a wrapper div (or the body
-     itself) with its own white/light background, box-shadow, border,
-     border-radius, or outer margin. This is what makes pasted HTML read
-     as a floating rectangle instead of flowing text. Padding is left
-     alone so inner spacing/readability isn't disturbed.
-     Applied to every element (not just direct children of body) since
-     authors commonly nest the boxed wrapper a level or two deeper, e.g.
-     body > .page-wrapper > .card. Only the outer box chrome is stripped
-     -- background/shadow/border/radius/horizontal margin -- so inline
-     card-style elements the author actually wants (e.g. a callout box)
-     aren't visually destroyed, just prevented from constraining width. */
-  body, body * {
-    max-width: 100% !important;
-    background: transparent !important;
-    box-shadow: none !important;
-    border-radius: 0 !important;
-    border: none !important;
-    margin-left: 0 !important;
-    margin-right: 0 !important;
-  }
-  /* Only block-level containers get width:auto -- this is what actually
-     collapses a fixed-width boxed card (e.g. style="width:960px") back
-     to fluid. Left off other elements (buttons, spans, images, badges)
-     so intentional sizing on inline/inline-block content still works. */
-  body div, body section, body article, body main, body header, body footer {
-    width: auto !important;
-  }
-  img, video, iframe, canvas, svg { max-width: 100% !important; height: auto !important; }
-  table { display: block !important; max-width: 100% !important; overflow-x: auto !important; }
-  pre { max-width: 100% !important; overflow-x: auto !important; }
-  * { box-sizing: border-box !important; }
-</style>
-`;
-
-function ensureViewportMeta(html: string): string {
-  if (/<meta[^>]+name=["']viewport["']/i.test(html)) return html;
-  const viewportTag = '<meta name="viewport" content="width=device-width, initial-scale=1">';
-  if (/<head[^>]*>/i.test(html)) {
-    return html.replace(/<head[^>]*>/i, (match) => `${match}${viewportTag}`);
-  }
-  if (/<html[^>]*>/i.test(html)) {
-    return html.replace(/<html[^>]*>/i, (match) => `${match}<head>${viewportTag}</head>`);
-  }
-  return `${viewportTag}${html}`;
-}
-
-/** Injects the responsive override stylesheet right before </head> so it loads after, and wins the cascade against, the author's own styles — flattening any boxed/card look into flush, full-width, page-matching content. */
-function injectResponsiveOverrides(html: string): string {
-  if (/<\/head>/i.test(html)) {
-    return html.replace(/<\/head>/i, `${RESPONSIVE_OVERRIDE_CSS}</head>`);
-  }
-  if (/<\/html>/i.test(html)) {
-    return html.replace(/<\/html>/i, `${RESPONSIVE_OVERRIDE_CSS}</html>`);
-  }
-  return `${html}${RESPONSIVE_OVERRIDE_CSS}`;
 }
 
 const FLATTEN_BOXED_CONTENT_CSS = `
@@ -187,57 +67,43 @@ const FLATTEN_BOXED_CONTENT_CSS = `
   }
 `;
 
-function RawHtmlFrame({ html }: { html: string }) {
-  const [height, setHeight] = useState(600);
-  const [frameEl, setFrameEl] = useState<HTMLIFrameElement | null>(null);
-  const scopedHtml = injectResponsiveOverrides(ensureViewportMeta(html));
-
-  useEffect(() => {
-    if (!frameEl) return;
-    const resize = () => {
-      try {
-        const doc = frameEl.contentDocument;
-        if (doc?.documentElement) {
-          setHeight(doc.documentElement.scrollHeight + 24);
-        }
-      } catch {
-        // Cross-origin (opaque sandbox origin) — can't read scrollHeight.
-        // Falls back to the last known/default height.
-      }
-    };
-    frameEl.addEventListener('load', resize);
-    const interval = setInterval(resize, 500);
-    return () => {
-      frameEl.removeEventListener('load', resize);
-      clearInterval(interval);
-    };
-  }, [frameEl]);
-
-  return (
-    <iframe
-      ref={setFrameEl}
-      srcDoc={scopedHtml}
-      sandbox="allow-scripts allow-popups"
-      style={{ width: '100%', height, border: 'none', display: 'block' }}
-      title="Post content"
-    />
-  );
-}
-
 export function BlogPostClient({ slug }: { slug: string }) {
   const [post, setPost] = useState<BlogPost | null>(null);
   const [notFound, setNotFound] = useState(false);
+  const [loadError, setLoadError] = useState(false);
 
   useEffect(() => {
+    let cancelled = false;
+    setNotFound(false);
+    setLoadError(false);
+    setPost(null);
+
     fetch(`/api/blog/${slug}`)
       .then((res) => {
+        if (cancelled) return null;
         if (!res.ok) {
           setNotFound(true);
           return null;
         }
         return res.json();
       })
-      .then((data) => data && setPost(data.post));
+      .then((data) => {
+        if (cancelled) return;
+        if (data?.post) {
+          setPost(data.post);
+        } else if (data) {
+          // Response was ok but the payload didn't include a post — treat
+          // as not-found rather than silently showing a blank page.
+          setNotFound(true);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setLoadError(true);
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, [slug]);
 
   if (notFound) {
@@ -248,19 +114,37 @@ export function BlogPostClient({ slug }: { slug: string }) {
     );
   }
 
+  if (loadError) {
+    return (
+      <div className="mx-auto max-w-2xl px-6 py-24 text-center">
+        <h1 className="font-display text-2xl font-semibold text-ink-800">Couldn&apos;t load this post</h1>
+        <p className="mt-2 text-sm text-ink-500">Check your connection and try refreshing the page.</p>
+      </div>
+    );
+  }
+
+  if (!post) {
+    // Loading state — avoids a blank flash while the fetch is in flight.
+    return (
+      <div className="mx-auto max-w-2xl animate-pulse px-6 py-16">
+        <div className="mb-6 h-64 w-full rounded-lg bg-ink-100" />
+        <div className="h-6 w-3/4 rounded bg-ink-100" />
+        <div className="mt-3 h-4 w-1/3 rounded bg-ink-100" />
+      </div>
+    );
+  }
+
   return <BlogPostBody post={post} />;
 }
 
-function BlogPostBody({ post }: { post: BlogPost | null }) {
-  const subcategoryName = useBlogSubcategoryName(post?.blogCategoryId, post?.blogSubcategoryId);
-  if (!post) return <div className="mx-auto max-w-4xl px-6 py-16" />;
-
+function BlogPostBody({ post }: { post: BlogPost }) {
+  const subcategoryName = useBlogSubcategoryName(post.blogCategoryId, post.blogSubcategoryId);
   const isRaw = isFullRawDocument(post.content);
 
   return (
     <div className="py-16">
       {/* Header block (title, meta, category) always stays at readable
-          width — only the post body itself is allowed to go full-width,
+          width — only the post body itself is allowed to go full width,
           since that's the part authors sometimes paste as a complete,
           wide HTML document. */}
       <div className="mx-auto max-w-2xl px-6">
@@ -296,10 +180,10 @@ function BlogPostBody({ post }: { post: BlogPost | null }) {
       </div>
 
       {/* Post body: full raw HTML documents render edge-to-edge (up to a
-          generous max width) via the sandboxed iframe, since that's the
-          "boxed" complaint — a pasted HTML page was being squeezed into
-          the same max-w-2xl column as the title/byline text. Regular
-          markdown/HTML-fragment posts stay at readable article width. */}
+          generous max width) via the shared sandboxed iframe, so a pasted
+          HTML page is never squeezed into the same narrow column as the
+          title/byline text. Regular markdown/HTML-fragment posts stay at
+          readable article width. */}
       {isRaw ? (
         <div className="mx-auto mt-6 max-w-6xl px-6">
           <RawHtmlFrame html={post.content} />

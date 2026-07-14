@@ -33,10 +33,42 @@ function looksLikeHtml(content: string): boolean {
   return (tagMatches?.length ?? 0) >= 3;
 }
 
+/**
+ * Some posts were saved before "raw HTML mode" existed, or lost their
+ * <!DOCTYPE>/<html> wrapper somewhere along the way (e.g. sanitizeHtml
+ * strips those since they're not fragment-safe tags), even though the
+ * author clearly designed the content as a styled page rather than a
+ * simple article. isFullRawDocument() alone misses these, and they end
+ * up squeezed into the narrow article column with their own <style>
+ * rules fighting the surrounding max-w-2xl box.
+ *
+ * Heuristic: a fragment carrying its own <style> block (own layout/CSS
+ * intent), or with a fixed pixel width baked into inline styles, reads
+ * the same way a full document does — it wants control of its own
+ * width, not to sit inside the article column. Anything that matches
+ * gets the wide container even though it renders via the fragment path
+ * (sanitizeHtml + scoping), not the iframe.
+ */
+function looksLikeWideDesignedContent(content: string): boolean {
+  if (/<style[\s>]/i.test(content)) return true;
+  if (/width\s*:\s*\d{3,}px/i.test(content)) return true;
+  return false;
+}
+
 const FLATTEN_BOXED_CONTENT_CSS = `
   .post-content-flatten, .post-content-flatten * {
     max-width: 100% !important;
     box-sizing: border-box !important;
+  }
+  /* Collapses a fixed-width/self-margined body wrapper (e.g. an author's
+     own <body style="max-width:880px; margin:0 auto">, common in HTML
+     pasted from another site) so the fragment can use the full width of
+     its now-wide container, instead of imposing its own narrower one
+     inside it. */
+  .post-content-flatten > *:first-child {
+    max-width: 100% !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
   }
   .post-content-flatten > div,
   .post-content-flatten > section,
@@ -140,6 +172,12 @@ export function BlogPostClient({ slug }: { slug: string }) {
 function BlogPostBody({ post }: { post: BlogPost }) {
   const subcategoryName = useBlogSubcategoryName(post.blogCategoryId, post.blogSubcategoryId);
   const isRaw = isFullRawDocument(post.content);
+  // Covers old/edge-case posts that carry their own <style> or fixed
+  // pixel widths but, for whatever historical reason, don't trip the
+  // "full raw document" check — these still need a wide container
+  // instead of the narrow article column.
+  const isWideFragment = !isRaw && looksLikeWideDesignedContent(post.content);
+  const wide = isRaw || isWideFragment;
 
   return (
     <div className="py-16">
@@ -182,14 +220,18 @@ function BlogPostBody({ post }: { post: BlogPost }) {
       {/* Post body: full raw HTML documents render edge-to-edge (up to a
           generous max width) via the shared sandboxed iframe, so a pasted
           HTML page is never squeezed into the same narrow column as the
-          title/byline text. Regular markdown/HTML-fragment posts stay at
-          readable article width. */}
+          title/byline text. Fragments that carry their own <style>/fixed
+          widths (including older posts saved before raw-HTML mode
+          existed) get the same wide container even though they still
+          render through the fragment/sanitize path below — only the
+          iframe rendering itself is reserved for true full documents.
+          Plain markdown/article posts stay at readable article width. */}
       {isRaw ? (
         <div className="mx-auto mt-6 max-w-6xl px-6">
           <RawHtmlFrame html={post.content} />
         </div>
       ) : (
-        <div className="mx-auto max-w-2xl px-6">
+        <div className={`mx-auto px-6 ${wide ? 'max-w-6xl' : 'max-w-2xl'}`}>
           <style>{FLATTEN_BOXED_CONTENT_CSS}</style>
           <div
             className="post-content-flatten prose prose-sm mt-6 max-w-none text-ink-700"

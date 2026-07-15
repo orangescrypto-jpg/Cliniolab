@@ -48,6 +48,7 @@ export async function POST(request: Request) {
     seoDescription?: string;
     isSponsored?: boolean;
     isPinned?: boolean;
+    fullWidth?: boolean;
     sendAsNewsletter?: boolean;
   };
   try {
@@ -77,6 +78,7 @@ export async function POST(request: Request) {
     seoDescription: body.seoDescription,
     isSponsored: body.isSponsored,
     isPinned: body.isPinned,
+    fullWidth: body.fullWidth,
     sendAsNewsletter: body.sendAsNewsletter,
   });
 

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
@@ -97,6 +97,16 @@ export function QuizRunner({ quiz, questions: rawQuestions, submitEndpoint }: Qu
     [questions, answers, markedForReview]
   );
 
+  // The timer's setInterval callback is created once and would otherwise
+  // close over the `answers` value from that render, so an auto-submit on
+  // timeout would silently send an empty answer set even if the user had
+  // answered everything. Keep a ref in sync with the latest answers so the
+  // timeout path always submits what's actually been selected.
+  const answersRef = useRef(answers);
+  useEffect(() => {
+    answersRef.current = answers;
+  }, [answers]);
+
   async function handleSubmit() {
     if (submitting || result) return;
     setSubmitting(true);
@@ -107,7 +117,7 @@ export function QuizRunner({ quiz, questions: rawQuestions, submitEndpoint }: Qu
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          answers: Object.entries(answers).map(([questionId, submittedAnswer]) => ({
+          answers: Object.entries(answersRef.current).map(([questionId, submittedAnswer]) => ({
             questionId,
             submittedAnswer,
           })),

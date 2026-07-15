@@ -888,22 +888,36 @@ export async function deleteQuiz(quizId: string): Promise<void> {
 
   const placeholders = (n: number) => Array(n).fill('?').join(', ');
 
+  // D1 rejects statements with too many bound variables (limit is well
+  // under 999 in practice over the HTTP adapter). Chunk any IN (...) list
+  // so quizzes with hundreds of questions can still be deleted cleanly.
+  const CHUNK_SIZE = 100;
+  function chunk<T>(arr: T[], size: number): T[][] {
+    const out: T[][] = [];
+    for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+    return out;
+  }
+
   if (questionIds.length > 0) {
-    await db
-      .prepare(`DELETE FROM question_reports WHERE question_id IN (${placeholders(questionIds.length)})`)
-      .bind(...questionIds)
-      .run();
-    await db
-      .prepare(`DELETE FROM attempt_answers WHERE question_id IN (${placeholders(questionIds.length)})`)
-      .bind(...questionIds)
-      .run();
+    for (const idsChunk of chunk(questionIds, CHUNK_SIZE)) {
+      await db
+        .prepare(`DELETE FROM question_reports WHERE question_id IN (${placeholders(idsChunk.length)})`)
+        .bind(...idsChunk)
+        .run();
+      await db
+        .prepare(`DELETE FROM attempt_answers WHERE question_id IN (${placeholders(idsChunk.length)})`)
+        .bind(...idsChunk)
+        .run();
+    }
   }
 
   if (commentIds.length > 0) {
-    await db
-      .prepare(`DELETE FROM comment_reactions WHERE comment_id IN (${placeholders(commentIds.length)})`)
-      .bind(...commentIds)
-      .run();
+    for (const idsChunk of chunk(commentIds, CHUNK_SIZE)) {
+      await db
+        .prepare(`DELETE FROM comment_reactions WHERE comment_id IN (${placeholders(idsChunk.length)})`)
+        .bind(...idsChunk)
+        .run();
+    }
   }
 
   await db.prepare('DELETE FROM questions WHERE quiz_id = ?').bind(quizId).run();

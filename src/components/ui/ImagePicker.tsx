@@ -25,14 +25,25 @@ export function ImagePicker({ value, onChange, purpose, label }: ImagePickerProp
       formData.append('file', file);
       formData.append('purpose', purpose);
       const res = await fetch('/api/uploads/image', { method: 'POST', body: formData });
-      const data = await res.json();
-      if (!res.ok) {
+      let data: { path?: string; error?: string };
+      try {
+        data = await res.json();
+      } catch {
+        setError('Upload failed — the server returned an unexpected response.');
+        return;
+      }
+      if (!res.ok || !data.path) {
         setError(data.error ?? 'Upload failed');
         return;
       }
       onChange(data.path);
+    } catch {
+      setError('Upload failed — check your connection and try again.');
     } finally {
       setUploading(false);
+      // Reset so selecting the same file again (e.g. retry after an
+      // error) still fires onChange instead of being a no-op.
+      if (fileInputRef.current) fileInputRef.current.value = '';
     }
   }
 

@@ -177,7 +177,10 @@ function BlogPostBody({ post }: { post: BlogPost }) {
   // "full raw document" check — these still need a wide container
   // instead of the narrow article column.
   const isWideFragment = !isRaw && looksLikeWideDesignedContent(post.content);
-  const wide = isRaw || isWideFragment;
+  // Admin's explicit "Full-width content" toggle always wins over the
+  // heuristics below — those exist only to catch posts where nobody set
+  // the toggle (older posts, or pasted HTML the author didn't mark).
+  const wide = post.fullWidth || isRaw || isWideFragment;
 
   return (
     <div className="py-16">

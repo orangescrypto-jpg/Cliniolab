@@ -262,6 +262,7 @@ export interface BlogPost {
   status: BlogStatus;
   isSponsored: boolean;
   isPinned: boolean;
+  fullWidth: boolean;
   sendAsNewsletter: boolean;
   newsletterSentAt: string | null;
   createdAt: string;

@@ -22,12 +22,14 @@ export default function SharedQuizPage() {
   const [questions, setQuestions] = useState<Omit<QuizQuestion, 'correctAnswer'>[]>([]);
   const [studyQuestions, setStudyQuestions] = useState<QuizQuestion[]>([]);
   const [started, setStarted] = useState(false);
+  const [attemptKey, setAttemptKey] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [fetching, setFetching] = useState(false);
 
   async function handleStart() {
     setFetching(true);
     setError(null);
+    setAttemptKey((k) => k + 1);
     try {
       const res = await fetch(`/api/quizzes/shared/${params.slug}`);
       const data = await res.json();
@@ -73,10 +75,11 @@ export default function SharedQuizPage() {
 
   if (started && quiz) {
     if (quiz.mode === 'study') {
-      return <StudyModeRunner quiz={quiz} questions={studyQuestions} />;
+      return <StudyModeRunner key={attemptKey} quiz={quiz} questions={studyQuestions} />;
     }
     return (
       <QuizRunner
+        key={attemptKey}
         quiz={quiz}
         questions={questions}
         submitEndpoint={`/api/quizzes/${quiz.id}/attempt`}

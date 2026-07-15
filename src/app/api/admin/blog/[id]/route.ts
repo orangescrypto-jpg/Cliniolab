@@ -33,6 +33,7 @@ export async function PUT(request: Request, { params }: RouteParams) {
     seoDescription: string;
     isSponsored: boolean;
     isPinned: boolean;
+    fullWidth: boolean;
   }>;
   try {
     body = await request.json();

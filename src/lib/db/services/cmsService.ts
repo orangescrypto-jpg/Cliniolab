@@ -18,6 +18,7 @@ interface BlogRow {
   status: string;
   is_sponsored: number;
   is_pinned: number;
+  full_width: number;
   send_as_newsletter: number;
   newsletter_sent_at: string | null;
   created_at: string;
@@ -48,6 +49,7 @@ function mapBlog(row: BlogRow): BlogPost {
     status: row.status as BlogStatus,
     isSponsored: row.is_sponsored === 1,
     isPinned: row.is_pinned === 1,
+    fullWidth: row.full_width === 1,
     sendAsNewsletter: row.send_as_newsletter === 1,
     newsletterSentAt: row.newsletter_sent_at,
     createdAt: row.created_at,
@@ -140,6 +142,7 @@ export async function createPost(
     seoDescription?: string;
     isSponsored?: boolean;
     isPinned?: boolean;
+    fullWidth?: boolean;
     sendAsNewsletter?: boolean;
   }
 ): Promise<BlogPost> {
@@ -149,8 +152,8 @@ export async function createPost(
   await db
     .prepare(
       `INSERT INTO blog_posts
-        (id, author_id, title, slug, content, content_format, excerpt, blog_category_id, blog_subcategory_id, featured_image_url, seo_title, seo_description, status, is_sponsored, is_pinned, send_as_newsletter, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        (id, author_id, title, slug, content, content_format, excerpt, blog_category_id, blog_subcategory_id, featured_image_url, seo_title, seo_description, status, is_sponsored, is_pinned, full_width, send_as_newsletter, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .bind(
       id,
@@ -168,6 +171,7 @@ export async function createPost(
       input.status,
       input.isSponsored ? 1 : 0,
       input.isPinned ? 1 : 0,
+      input.fullWidth ? 1 : 0,
       input.sendAsNewsletter ? 1 : 0,
       createdAt
     )
@@ -189,6 +193,7 @@ export async function createPost(
     status: input.status,
     isSponsored: input.isSponsored ?? false,
     isPinned: input.isPinned ?? false,
+    fullWidth: input.fullWidth ?? false,
     sendAsNewsletter: input.sendAsNewsletter ?? false,
     newsletterSentAt: null,
     createdAt,
@@ -211,6 +216,7 @@ export async function updatePost(
     seoDescription: string;
     isSponsored: boolean;
     isPinned: boolean;
+    fullWidth: boolean;
   }>
 ): Promise<void> {
   const db = getDb();
@@ -229,6 +235,7 @@ export async function updatePost(
   if (input.seoDescription !== undefined) { fields.push('seo_description = ?'); values.push(input.seoDescription); }
   if (input.isSponsored !== undefined) { fields.push('is_sponsored = ?'); values.push(input.isSponsored ? 1 : 0); }
   if (input.isPinned !== undefined) { fields.push('is_pinned = ?'); values.push(input.isPinned ? 1 : 0); }
+  if (input.fullWidth !== undefined) { fields.push('full_width = ?'); values.push(input.fullWidth ? 1 : 0); }
   if (fields.length === 0) return;
   values.push(id);
   await db.prepare(`UPDATE blog_posts SET ${fields.join(', ')} WHERE id = ?`).bind(...values).run();

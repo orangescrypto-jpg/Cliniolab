@@ -65,6 +65,7 @@ export default function AdminBlogPage() {
   const [seoDescription, setSeoDescription] = useState('');
   const [isSponsored, setIsSponsored] = useState(false);
   const [isPinned, setIsPinned] = useState(false);
+  const [fullWidth, setFullWidth] = useState(false);
   const [sendAsNewsletter, setSendAsNewsletter] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -166,6 +167,7 @@ export default function AdminBlogPage() {
     setSeoDescription('');
     setIsSponsored(false);
     setIsPinned(false);
+    setFullWidth(false);
     setSendAsNewsletter(false);
     setError(null);
   }
@@ -190,6 +192,7 @@ export default function AdminBlogPage() {
     setSeoDescription(post.seoDescription ?? '');
     setIsSponsored(post.isSponsored);
     setIsPinned(post.isPinned);
+    setFullWidth(post.fullWidth);
     setSendAsNewsletter(false); // never re-trigger a newsletter send just by opening an edit
     setError(null);
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -249,6 +252,7 @@ export default function AdminBlogPage() {
       seoDescription: seoDescription || undefined,
       isSponsored,
       isPinned,
+      fullWidth,
       sendAsNewsletter,
     };
     try {
@@ -489,30 +493,39 @@ export default function AdminBlogPage() {
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="rounded-md border border-ink-100 p-4">
+          <label className="text-xs font-medium text-ink-600">Status</label>
           <select
             value={status}
             onChange={(e) => setStatus(e.target.value as BlogStatus)}
-            className="rounded-md border border-ink-100 px-3 py-1.5 text-sm"
+            className="mt-1 block w-full rounded-md border border-ink-100 px-3 py-1.5 text-sm sm:w-auto"
           >
             <option value="draft">Draft</option>
             <option value="published">Published</option>
           </select>
-          <Toggle checked={isSponsored} onChange={setIsSponsored} label="Sponsored" />
-          <Toggle checked={isPinned} onChange={setIsPinned} label="Pinned" />
-          <Toggle checked={sendAsNewsletter} onChange={setSendAsNewsletter} label="Send as newsletter" />
-          <Button size="sm" onClick={savePost} disabled={saving}>
+
+          <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <Toggle checked={isSponsored} onChange={setIsSponsored} label="Sponsored" />
+            <Toggle checked={isPinned} onChange={setIsPinned} label="Pinned" />
+            <Toggle checked={fullWidth} onChange={setFullWidth} label="Full-width content (skip the narrow article column)" />
+            <Toggle checked={sendAsNewsletter} onChange={setSendAsNewsletter} label="Send as newsletter" />
+          </div>
+
+          {sendAsNewsletter && status === 'draft' && (
+            <p className="mt-3 text-xs text-flag-600">
+              Newsletter only sends when status is Published — saving as Draft now won&apos;t email anyone yet.
+            </p>
+          )}
+        </div>
+
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+          <Button size="sm" onClick={savePost} disabled={saving} className="w-full sm:w-auto">
             {saving ? 'Saving…' : editingId ? 'Update post' : 'Save post'}
           </Button>
           {editingId && (
-            <Button size="sm" variant="secondary" onClick={resetForm}>Cancel edit</Button>
+            <Button size="sm" variant="secondary" onClick={resetForm} className="w-full sm:w-auto">Cancel edit</Button>
           )}
         </div>
-        {sendAsNewsletter && status === 'draft' && (
-          <p className="text-xs text-flag-600">
-            Newsletter only sends when status is Published — saving as Draft now won&apos;t email anyone yet.
-          </p>
-        )}
         {error && <p className="text-sm text-critical-500">{error}</p>}
       </Card>
 

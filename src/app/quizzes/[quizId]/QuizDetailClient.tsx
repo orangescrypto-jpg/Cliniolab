@@ -30,6 +30,7 @@ export function QuizDetailClient({ quizId }: { quizId: string }) {
   const [questions, setQuestions] = useState<Omit<QuizQuestion, 'correctAnswer'>[]>([]);
   const [studyQuestions, setStudyQuestions] = useState<QuizQuestion[]>([]);
   const [started, setStarted] = useState(false);
+  const [attemptKey, setAttemptKey] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [fetching, setFetching] = useState(false);
   const [requiresPurchase, setRequiresPurchase] = useState(false);
@@ -75,6 +76,7 @@ export function QuizDetailClient({ quizId }: { quizId: string }) {
     setFetching(true);
     setError(null);
     setRequiresPurchase(false);
+    setAttemptKey((k) => k + 1);
     try {
       // Peek at the quiz's mode first via the normal endpoint (which
       // never leaks correctAnswer), then only hit the study-only endpoint
@@ -147,9 +149,16 @@ export function QuizDetailClient({ quizId }: { quizId: string }) {
 
   if (started && quiz) {
     if (quiz.mode === 'study') {
-      return <StudyModeRunner quiz={quiz} questions={studyQuestions} />;
+      return <StudyModeRunner key={attemptKey} quiz={quiz} questions={studyQuestions} />;
     }
-    return <QuizRunner quiz={quiz} questions={questions} submitEndpoint={`/api/quizzes/${quizId}/attempt`} />;
+    return (
+      <QuizRunner
+        key={attemptKey}
+        quiz={quiz}
+        questions={questions}
+        submitEndpoint={`/api/quizzes/${quizId}/attempt`}
+      />
+    );
   }
 
   return (

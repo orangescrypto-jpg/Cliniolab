@@ -119,7 +119,26 @@ function generateShareSlug(): string {
  * - public quizzes have no expiry and show in "Latest Quizzes"
  * - private quizzes get a share slug + expiry computed from linkExpiry
  */
+/**
+ * D1's HTTP-API batch endpoint rejects/times out when a single db.batch()
+ * call bundles too many statements (seen failing around ~368 rows). Chunk
+ * any batch of statements into safe-sized pieces so large quizzes (bulk
+ * CSV uploads, big exams) don't silently hang on save.
+ */
+const D1_BATCH_CHUNK_SIZE = 50;
+
+async function runBatchChunked(
+  db: ReturnType<typeof getDb>,
+  statements: ReturnType<ReturnType<typeof getDb>['prepare']>[]
+): Promise<void> {
+  for (let i = 0; i < statements.length; i += D1_BATCH_CHUNK_SIZE) {
+    const chunk = statements.slice(i, i + D1_BATCH_CHUNK_SIZE);
+    await db.batch(chunk);
+  }
+}
+
 export async function createQuiz(creatorId: string, input: QuizInput): Promise<Quiz> {
+
   const db = getDb();
   const id = generateId('quiz');
   const now = nowIso();
@@ -183,7 +202,7 @@ export async function createQuiz(creatorId: string, input: QuizInput): Promise<Q
       )
   );
 
-  await db.batch([quizStatement, ...questionStatements]);
+  await runBatchChunked(db, [quizStatement, ...questionStatements]);
 
   return {
     id,
@@ -284,7 +303,10 @@ export async function updateQuiz(quizId: string, input: QuizInput): Promise<Quiz
       )
   );
 
-  await db.batch([quizStatement, deleteQuestionsStatement, ...questionStatements]);
+  // Delete must fully complete before the re-inserts run, so it stays in
+  // its own call ahead of the (potentially large, chunked) insert batch.
+  await db.batch([quizStatement, deleteQuestionsStatement]);
+  await runBatchChunked(db, questionStatements);
 
   return {
     ...existing,

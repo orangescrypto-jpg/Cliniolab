@@ -194,6 +194,18 @@ export function QuizForm({
 
   return (
     <div>
+      {/* Sticky top save bar - mirrors the bottom Save button. When a quiz has
+          many questions (e.g. 100+), scrolling all the way down just to save
+          an edit made near the top is tedious, so this stays reachable. */}
+      <div className="sticky top-0 z-10 -mx-4 mb-4 flex items-center justify-between gap-3 bg-paper/95 px-4 py-3 backdrop-blur">
+        {error && <p className="text-sm text-critical-500">{error}</p>}
+        <div className="ml-auto">
+          <Button onClick={handleSubmit} disabled={submitting}>
+            {submitting ? submittingLabel : submitLabel}
+          </Button>
+        </div>
+      </div>
+
       <Card className="space-y-5 p-6">
         <div>
           <label className="text-sm font-medium text-ink-700">Title</label>
@@ -285,12 +297,13 @@ export function QuizForm({
                 className="mt-2 w-32 rounded-md border border-ink-100 px-4 py-2 text-sm focus:border-pulse-400 focus:outline-none"
               />
             )}
-            <div className="mt-3 flex flex-col gap-2">
-              <Toggle checked={shuffleQuestions} onChange={setShuffleQuestions} label="Shuffle question order" />
-              <Toggle checked={shuffleOptions} onChange={setShuffleOptions} label="Shuffle answer options" />
-            </div>
           </div>
         )}
+
+        <div className="flex flex-col gap-2">
+          <Toggle checked={shuffleQuestions} onChange={setShuffleQuestions} label="Shuffle question order" />
+          <Toggle checked={shuffleOptions} onChange={setShuffleOptions} label="Shuffle answer options" />
+        </div>
 
         <div>
           <label className="text-sm font-medium text-ink-700">Visibility</label>

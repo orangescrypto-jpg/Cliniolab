@@ -62,6 +62,11 @@ export function StudyModeRunner({ quiz, questions }: StudyModeRunnerProps) {
     goToQuestion(current + 1);
   }
 
+  function goPrevious() {
+    if (current === 0) return;
+    goToQuestion(current - 1);
+  }
+
   return (
     <div className="mx-auto max-w-2xl px-6 py-16">
       <div className="flex items-center justify-between text-sm text-ink-400">
@@ -141,7 +146,10 @@ export function StudyModeRunner({ quiz, questions }: StudyModeRunnerProps) {
         )}
       </Card>
 
-      <div className="mt-6 flex justify-end">
+      <div className="mt-6 flex justify-between">
+        <Button variant="secondary" onClick={goPrevious} disabled={current === 0}>
+          Previous
+        </Button>
         <Button onClick={goNext} disabled={!revealed}>
           {isLast ? 'Finish studying' : 'Next question'}
         </Button>

@@ -12,14 +12,39 @@ interface StudyModeRunnerProps {
   questions: QuizQuestion[]; // includes correctAnswer, unlike QuizRunner's questions
 }
 
+/** Fisher-Yates shuffle, returns a new array without mutating the input. */
+function shuffleArray<T>(arr: T[]): T[] {
+  const copy = [...arr];
+  for (let i = copy.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [copy[i], copy[j]] = [copy[j], copy[i]];
+  }
+  return copy;
+}
+
 /**
  * Study Mode has no timer, no final score, and nothing is persisted to
  * quiz_attempts - it's pure learning, so it intentionally never touches
  * the leaderboard or dashboard history. Each question reveals the
  * correct answer and explanation immediately after the user answers it.
  */
-export function StudyModeRunner({ quiz, questions }: StudyModeRunnerProps) {
+export function StudyModeRunner({ quiz, questions: rawQuestions }: StudyModeRunnerProps) {
   const router = useRouter();
+
+  // Shuffle once per mount (i.e. every time the user starts/restarts study
+  // mode) when the creator has enabled shuffling for this quiz. Option ids
+  // are preserved so correctAnswer matching is unaffected by display order.
+  const [questions] = useState(() => {
+    let list = rawQuestions;
+    if (quiz.shuffleQuestions) list = shuffleArray(list);
+    if (quiz.shuffleOptions) {
+      list = list.map((q) =>
+        q.options ? { ...q, options: shuffleArray(q.options) } : q
+      );
+    }
+    return list;
+  });
+
   const [current, setCurrent] = useState(0);
   const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null);
   const [revealed, setRevealed] = useState(false);

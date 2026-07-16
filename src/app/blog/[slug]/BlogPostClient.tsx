@@ -33,6 +33,28 @@ function looksLikeHtml(content: string): boolean {
   return (tagMatches?.length ?? 0) >= 3;
 }
 
+/**
+ * Some posts were saved before "raw HTML mode" existed, or lost their
+ * <!DOCTYPE>/<html> wrapper somewhere along the way (e.g. sanitizeHtml
+ * strips those since they're not fragment-safe tags), even though the
+ * author clearly designed the content as a styled page rather than a
+ * simple article. isFullRawDocument() alone misses these, and they end
+ * up squeezed into the narrow article column with their own <style>
+ * rules fighting the surrounding max-w-2xl box.
+ *
+ * Heuristic: a fragment carrying its own <style> block (own layout/CSS
+ * intent), or with a fixed pixel width baked into inline styles, reads
+ * the same way a full document does — it wants control of its own
+ * width, not to sit inside the article column. Anything that matches
+ * gets the wide container even though it renders via the fragment path
+ * (sanitizeHtml + scoping), not the iframe.
+ */
+function looksLikeWideDesignedContent(content: string): boolean {
+  if (/<style[\s>]/i.test(content)) return true;
+  if (/width\s*:\s*\d{3,}px/i.test(content)) return true;
+  return false;
+}
+
 const FLATTEN_BOXED_CONTENT_CSS = `
   .post-content-flatten, .post-content-flatten * {
     max-width: 100% !important;
@@ -150,14 +172,12 @@ export function BlogPostClient({ slug }: { slug: string }) {
 function BlogPostBody({ post }: { post: BlogPost }) {
   const subcategoryName = useBlogSubcategoryName(post.blogCategoryId, post.blogSubcategoryId);
   const isRaw = isFullRawDocument(post.content);
-  // HTML-authored posts (raw documents, or contentFormat === 'html') keep
-  // the normal, readable article column — they're meant to sit alongside
-  // regular posts, not take over the page. Plain rich-text/markdown posts
-  // get the wide column instead, since that's where long TOCs, tables,
-  // and nested lists actually need the extra room. The admin's explicit
-  // "Full-width content" toggle still wins over everything else.
-  const isHtmlAuthored = isRaw || post.contentFormat === 'html' || looksLikeHtml(post.content);
-  const wide = post.fullWidth || !isHtmlAuthored;
+  // Covers old/edge-case posts that carry their own <style> or fixed
+  // pixel widths but, for whatever historical reason, don't trip the
+  // "full raw document" check — these still need a wide container
+  // instead of the narrow article column.
+  const isWideFragment = !isRaw && looksLikeWideDesignedContent(post.content);
+  const wide = isRaw || isWideFragment;
 
   return (
     <div className="py-16">
@@ -207,7 +227,7 @@ function BlogPostBody({ post }: { post: BlogPost }) {
           iframe rendering itself is reserved for true full documents.
           Plain markdown/article posts stay at readable article width. */}
       {isRaw ? (
-        <div className={`mx-auto mt-6 px-6 ${wide ? 'max-w-6xl' : 'max-w-2xl'}`}>
+        <div className="mx-auto mt-6 max-w-6xl px-6">
           <RawHtmlFrame html={post.content} />
         </div>
       ) : (

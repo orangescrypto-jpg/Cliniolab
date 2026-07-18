@@ -57,6 +57,22 @@ function ensureViewportMeta(html: string): string {
  *   table) scroll horizontally in its own box, rather than blowing out
  *   the whole page width.
  * - Forces all images/media to scale down to fit.
+ *
+ * IMPORTANT — do not force `width: auto !important` on generic block
+ * containers here. An earlier version of this override did that (on
+ * body/div/section/article/main/header/footer) to collapse fixed-pixel
+ * "boxed card" wrappers back to fluid width. That works for simple
+ * documents, but it actively breaks any author layout built with CSS
+ * Grid or Flexbox: a grid/flex *item* with `width: auto !important`
+ * stops stretching to fill its track/flex-basis and instead shrinks to
+ * its content's intrinsic size. A two-column `display:grid;
+ * grid-template-columns: 260px minmax(0,860px)` layout, for example,
+ * would have its main content column collapse to a narrow, "boxed"
+ * width with dead space beside it — the exact symptom this override
+ * exists to prevent, just reintroduced by the override itself.
+ * `max-width: 100%` alone (below) is sufficient to stop a fixed-pixel
+ * wrapper from overflowing the viewport, without fighting the author's
+ * own layout system.
  */
 const RESPONSIVE_OVERRIDE_CSS = `
 <style>
@@ -72,19 +88,17 @@ const RESPONSIVE_OVERRIDE_CSS = `
     padding-right: 16px !important;
     box-sizing: border-box !important;
   }
+
   /* Flatten the common "boxed card" pattern: a wrapper div (or the body
      itself) with its own white/light background, box-shadow, border,
      border-radius, or outer margin. This is what makes pasted HTML read
      as a floating rectangle instead of flowing text. Padding is left
-     alone so inner spacing/readability isn't disturbed.
-     Applied to every element (not just direct children of body) since
-     authors commonly nest the boxed wrapper a level or two deeper, e.g.
-     body > .page-wrapper > .card. Only the outer box chrome is stripped
-     -- background/shadow/border/radius/horizontal margin -- so inline
-     card-style elements the author actually wants (e.g. a callout box)
-     aren't visually destroyed, just prevented from constraining width. */
+     alone so inner spacing/readability isn't disturbed, and width/
+     max-width are deliberately NOT touched here — see the note above
+     about Grid/Flexbox layouts. A fixed-pixel wrapper is still capped
+     by the max-width:100% on html/body above; it just isn't forced to
+     "auto" anymore, which is what let Grid/Flex-based designs collapse. */
   body, body * {
-    max-width: 100% !important;
     background: transparent !important;
     box-shadow: none !important;
     border-radius: 0 !important;
@@ -92,17 +106,26 @@ const RESPONSIVE_OVERRIDE_CSS = `
     margin-left: 0 !important;
     margin-right: 0 !important;
   }
-  /* Only block-level containers get width:auto -- this is what actually
-     collapses a fixed-width boxed card (e.g. style="width:960px") back
-     to fluid. Left off other elements (buttons, spans, images, badges)
-     so intentional sizing on inline/inline-block content still works. */
-  body div, body section, body article, body main, body header, body footer {
-    width: auto !important;
+
+  /* Still cap anything that would overflow the viewport width, but as
+     a ceiling (max-width) rather than forcing a specific width value —
+     this keeps oversized fixed-pixel elements from causing horizontal
+     scroll without interfering with Grid/Flexbox track sizing. */
+  body * {
+    max-width: 100% !important;
   }
+
   img, video, iframe, canvas, svg { max-width: 100% !important; height: auto !important; }
   table { display: block !important; max-width: 100% !important; overflow-x: auto !important; }
   pre { max-width: 100% !important; overflow-x: auto !important; }
   * { box-sizing: border-box !important; }
+
+  /* Author layouts built with CSS Grid (e.g. a sidebar + main-content
+     template) already have their own @media collapse rules for mobile
+     in the vast majority of cases (this is standard practice for any
+     grid-based document). We don't need to, and must not, override
+     grid-template-columns ourselves — doing so would fight the
+     author's own responsive design instead of complementing it. */
 </style>
 `;
 
@@ -138,10 +161,12 @@ interface RawHtmlFrameProps {
 export function RawHtmlFrame({ html, maxHeightPx }: RawHtmlFrameProps) {
   const [height, setHeight] = useState(600);
   const [frameEl, setFrameEl] = useState<HTMLIFrameElement | null>(null);
+
   const scopedHtml = injectResponsiveOverrides(ensureViewportMeta(html));
 
   useEffect(() => {
     if (!frameEl) return;
+
     const resize = () => {
       try {
         const doc = frameEl.contentDocument;
@@ -153,8 +178,10 @@ export function RawHtmlFrame({ html, maxHeightPx }: RawHtmlFrameProps) {
         // Falls back to the last known/default height.
       }
     };
+
     frameEl.addEventListener('load', resize);
     const interval = setInterval(resize, 500);
+
     return () => {
       frameEl.removeEventListener('load', resize);
       clearInterval(interval);

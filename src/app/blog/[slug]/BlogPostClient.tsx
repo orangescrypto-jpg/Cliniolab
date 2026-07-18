@@ -176,7 +176,17 @@ function BlogPostBody({ post }: { post: BlogPost }) {
   // pixel widths but, for whatever historical reason, don't trip the
   // "full raw document" check — these still need a wide container
   // instead of the narrow article column.
-  const isWideFragment = !isRaw && looksLikeWideDesignedContent(post.content);
+  // Any post explicitly authored in raw-HTML mode (contentFormat === 'html')
+  // is treated as designed content and gets the wide container by default —
+  // not just ones that happen to carry a <style> block or a hardcoded pixel
+  // width. Someone who reaches for "HTML mode" instead of the normal Tiptap
+  // editor is doing so because they want layout control the narrow article
+  // column doesn't give them (custom tables, multi-column callouts, embeds,
+  // etc.), so a plain HTML fragment with no special markers should still
+  // read as "wide" rather than falling back to the narrow max-w-2xl column
+  // and looking boxed-in next to its own styling assumptions.
+  const isWideFragment =
+    !isRaw && (post.contentFormat === 'html' || looksLikeWideDesignedContent(post.content));
   const wide = isRaw || isWideFragment;
 
   return (

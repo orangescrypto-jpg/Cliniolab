@@ -62,9 +62,15 @@ const RESPONSIVE_OVERRIDE_CSS = `
 <style>
   html, body {
     max-width: 100% !important;
+    width: 100% !important;
     overflow-x: hidden !important;
     background: #F7F5F0 !important;
     margin: 0 !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+    padding-left: 16px !important;
+    padding-right: 16px !important;
+    box-sizing: border-box !important;
   }
   /* Flatten the common "boxed card" pattern: a wrapper div (or the body
      itself) with its own white/light background, box-shadow, border,

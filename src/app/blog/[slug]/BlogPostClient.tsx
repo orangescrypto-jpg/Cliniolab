@@ -187,7 +187,7 @@ function BlogPostBody({ post }: { post: BlogPost }) {
   // and looking boxed-in next to its own styling assumptions.
   const isWideFragment =
     !isRaw && (post.contentFormat === 'html' || looksLikeWideDesignedContent(post.content));
-  const wide = isRaw || isWideFragment;
+  const wide = isRaw || isWideFragment || post.fullWidth;
 
   return (
     <div className="py-16">

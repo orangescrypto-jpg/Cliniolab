@@ -1,5 +1,6 @@
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
+import { getCloudflareContext } from '@opennextjs/cloudflare';
 
 /**
  * Server-side Supabase client, for use in Server Components, Route Handlers,
@@ -8,8 +9,25 @@ import { cookies } from 'next/headers';
  */
 export async function getSupabaseServerClient() {
   const cookieStore = await cookies();
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+  // NEXT_PUBLIC_* vars set via the Cloudflare dashboard land in
+  // getCloudflareContext().env at runtime, not in process.env the way
+  // Node-hosted platforms (Vercel) expose them — so check both, preferring
+  // whichever is actually populated.
+  let cfEnv: Record<string, unknown> = {};
+  try {
+    cfEnv = getCloudflareContext().env as Record<string, unknown>;
+  } catch {
+    // Not running in a Workers/OpenNext context (e.g. Vercel) — process.env
+    // alone is authoritative there.
+  }
+
+  const url =
+    process.env.NEXT_PUBLIC_SUPABASE_URL ?? (cfEnv.NEXT_PUBLIC_SUPABASE_URL as string | undefined);
+  const anonKey =
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ??
+    (cfEnv.NEXT_PUBLIC_SUPABASE_ANON_KEY as string | undefined);
+
   if (!url || !anonKey) {
     throw new Error(
       'Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY environment variables.'

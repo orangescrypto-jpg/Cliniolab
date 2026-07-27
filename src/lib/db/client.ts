@@ -7,23 +7,21 @@
  * swappable and testable, and stops raw queries leaking into
  * components/routes.
  *
- * D1 is accessed three ways behind the same D1Database interface:
+ * D1 is accessed two ways behind the same D1Database interface:
  *  - OpenNext / Workers binding (Cloudflare Workers production, via
  *    @opennextjs/cloudflare / wrangler.toml [[d1_databases]])
- *  - Pages binding (legacy, via @cloudflare/next-on-pages), kept as a
- *    fallback for any environment still using that adapter
  *  - HTTP API (Vercel testing, via Cloudflare's REST API) — hits the
  *    SAME D1 database as production, just over HTTPS instead of a
  *    binding, since Vercel can't reach Workers bindings directly.
  *
  * Which one is used is controlled by DB_DRIVER ('d1' | 'http').
  * Defaults to 'http' when DB_DRIVER is unset and D1_API_TOKEN is
- * present (typical on Vercel), otherwise 'd1'. Within the 'd1' path,
- * the OpenNext binding is tried first, falling back to the Pages
- * binding if OpenNext's context helper isn't available.
+ * present (typical on Vercel), otherwise 'd1'.
  *
  * Service files never need to know which access method is active.
  */
+
+import { getCloudflareContext } from '@opennextjs/cloudflare';
 
 export interface D1Result<T = unknown> {
   results: T[];
@@ -55,50 +53,14 @@ function resolveDriver(): DbDriver {
   return process.env.D1_API_TOKEN ? 'http' : 'd1';
 }
 
-// Loaded via indirect eval, not a literal require(...), so Turbopack's
-// bundler and the TypeScript checker never try to resolve these modules
-// on Vercel, where neither @opennextjs/cloudflare nor
-// @cloudflare/next-on-pages is installed (no package, no type
-// declarations). Kept synchronous deliberately: getDb() is called from
-// ~150 sites across every service file, and making it async would
-// require awaiting all of them.
-
-function getOpenNextBindingDb(): D1Database | undefined {
-  try {
-    // eslint-disable-next-line no-eval
-    const dynamicRequire = eval('require') as NodeRequire;
-    const { getCloudflareContext } = dynamicRequire('@opennextjs/cloudflare') as {
-      getCloudflareContext: () => { env: Record<string, unknown> };
-    };
-    const env = getCloudflareContext().env as { DB?: D1Database };
-    return env.DB;
-  } catch {
-    return undefined;
-  }
-}
-
-function getPagesBindingDb(): D1Database | undefined {
-  try {
-    // eslint-disable-next-line no-eval
-    const dynamicRequire = eval('require') as NodeRequire;
-    const { getRequestContext } = dynamicRequire('@cloudflare/next-on-pages') as {
-      getRequestContext: () => { env: Record<string, unknown> };
-    };
-    const env = getRequestContext().env as { DB?: D1Database };
-    return env.DB;
-  } catch {
-    return undefined;
-  }
-}
-
 function getD1BindingDb(): D1Database {
-  const db = getOpenNextBindingDb() ?? getPagesBindingDb();
+  const { env } = getCloudflareContext();
+  const db = (env as unknown as { DB?: D1Database }).DB;
   if (!db) {
     throw new Error(
-      "D1 binding 'DB' is not available. Neither @opennextjs/cloudflare nor " +
-        '@cloudflare/next-on-pages could resolve it — confirm a [[d1_databases]] ' +
-        "binding named DB exists in wrangler.toml, or set DB_DRIVER=http to use " +
-        'the D1 HTTP API instead.'
+      "D1 binding 'DB' is not available from getCloudflareContext(). Confirm a " +
+        "[[d1_databases]] binding named DB exists in wrangler.toml, or set " +
+        'DB_DRIVER=http to use the D1 HTTP API instead.'
     );
   }
   return db;

@@ -7,16 +7,20 @@
  * swappable and testable, and stops raw queries leaking into
  * components/routes.
  *
- * D1 is accessed two ways behind the same D1Database interface:
- *  - Workers binding (Cloudflare Pages production, via
- *    @cloudflare/next-on-pages / wrangler.toml [[d1_databases]])
+ * D1 is accessed three ways behind the same D1Database interface:
+ *  - OpenNext / Workers binding (Cloudflare Workers production, via
+ *    @opennextjs/cloudflare / wrangler.toml [[d1_databases]])
+ *  - Pages binding (legacy, via @cloudflare/next-on-pages), kept as a
+ *    fallback for any environment still using that adapter
  *  - HTTP API (Vercel testing, via Cloudflare's REST API) — hits the
  *    SAME D1 database as production, just over HTTPS instead of a
  *    binding, since Vercel can't reach Workers bindings directly.
  *
  * Which one is used is controlled by DB_DRIVER ('d1' | 'http').
  * Defaults to 'http' when DB_DRIVER is unset and D1_API_TOKEN is
- * present (typical on Vercel), otherwise 'd1'.
+ * present (typical on Vercel), otherwise 'd1'. Within the 'd1' path,
+ * the OpenNext binding is tried first, falling back to the Pages
+ * binding if OpenNext's context helper isn't available.
  *
  * Service files never need to know which access method is active.
  */
@@ -51,32 +55,53 @@ function resolveDriver(): DbDriver {
   return process.env.D1_API_TOKEN ? 'http' : 'd1';
 }
 
-function getD1BindingDb(): D1Database {
-  // Loaded via indirect eval, not a literal require(...), so Turbopack's
-  // bundler and the TypeScript checker never try to resolve this module
-  // on Vercel, where @cloudflare/next-on-pages is never installed (no
-  // package, no type declarations). Kept synchronous deliberately:
-  // getDb() is called from ~150 sites across every service file, and
-  // making it async would require awaiting all of them.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let getRequestContext: () => { env: Record<string, unknown> };
+// Loaded via indirect eval, not a literal require(...), so Turbopack's
+// bundler and the TypeScript checker never try to resolve these modules
+// on Vercel, where neither @opennextjs/cloudflare nor
+// @cloudflare/next-on-pages is installed (no package, no type
+// declarations). Kept synchronous deliberately: getDb() is called from
+// ~150 sites across every service file, and making it async would
+// require awaiting all of them.
+
+function getOpenNextBindingDb(): D1Database | undefined {
   try {
     // eslint-disable-next-line no-eval
     const dynamicRequire = eval('require') as NodeRequire;
-    ({ getRequestContext } = dynamicRequire('@cloudflare/next-on-pages'));
+    const { getCloudflareContext } = dynamicRequire('@opennextjs/cloudflare') as {
+      getCloudflareContext: () => { env: Record<string, unknown> };
+    };
+    const env = getCloudflareContext().env as { DB?: D1Database };
+    return env.DB;
   } catch {
+    return undefined;
+  }
+}
+
+function getPagesBindingDb(): D1Database | undefined {
+  try {
+    // eslint-disable-next-line no-eval
+    const dynamicRequire = eval('require') as NodeRequire;
+    const { getRequestContext } = dynamicRequire('@cloudflare/next-on-pages') as {
+      getRequestContext: () => { env: Record<string, unknown> };
+    };
+    const env = getRequestContext().env as { DB?: D1Database };
+    return env.DB;
+  } catch {
+    return undefined;
+  }
+}
+
+function getD1BindingDb(): D1Database {
+  const db = getOpenNextBindingDb() ?? getPagesBindingDb();
+  if (!db) {
     throw new Error(
-      "@cloudflare/next-on-pages is not installed. This code path only runs on Cloudflare Pages; " +
-        'set DB_DRIVER=http (or D1_API_TOKEN) to use the D1 HTTP API instead.'
+      "D1 binding 'DB' is not available. Neither @opennextjs/cloudflare nor " +
+        '@cloudflare/next-on-pages could resolve it — confirm a [[d1_databases]] ' +
+        "binding named DB exists in wrangler.toml, or set DB_DRIVER=http to use " +
+        'the D1 HTTP API instead.'
     );
   }
-  const env = getRequestContext().env as { DB?: D1Database };
-  if (!env.DB) {
-    throw new Error(
-      "D1 binding 'DB' is not configured. Add a [[d1_databases]] binding named DB in wrangler.toml."
-    );
-  }
-  return env.DB;
+  return db;
 }
 
 let d1HttpSingleton: D1Database | undefined;

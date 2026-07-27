@@ -1,6 +1,7 @@
 import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 import type { CookieOptions } from '@supabase/ssr';
+import { getCloudflareContext } from '@opennextjs/cloudflare';
 
 /**
  * Refreshes the Supabase auth session cookie on every request. Required by
@@ -10,8 +11,23 @@ import type { CookieOptions } from '@supabase/ssr';
 export async function middleware(request: NextRequest) {
   let response = NextResponse.next({ request });
 
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  // NEXT_PUBLIC_* vars set via the Cloudflare dashboard land in
+  // getCloudflareContext().env at runtime, not in process.env the way
+  // Node-hosted platforms (Vercel) expose them — so check both, preferring
+  // whichever is actually populated.
+  let cfEnv: Record<string, unknown> = {};
+  try {
+    cfEnv = getCloudflareContext().env as Record<string, unknown>;
+  } catch {
+    // Not running in a Workers/OpenNext context (e.g. Vercel) — process.env
+    // alone is authoritative there.
+  }
+
+  const url =
+    process.env.NEXT_PUBLIC_SUPABASE_URL ?? (cfEnv.NEXT_PUBLIC_SUPABASE_URL as string | undefined);
+  const anonKey =
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ??
+    (cfEnv.NEXT_PUBLIC_SUPABASE_ANON_KEY as string | undefined);
   if (!url || !anonKey) return response;
 
   const supabase = createServerClient(url, anonKey, {

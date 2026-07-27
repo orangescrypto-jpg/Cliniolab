@@ -10,11 +10,11 @@ import { sendCommentReplyEmail } from '@/lib/email/emailService';
 export const dynamic = 'force-dynamic';
 
 interface RouteParams {
-  params: Promise<{ postId: string }>;
+  params: Promise<{ slug: string }>;
 }
 
 export async function GET(_request: Request, { params }: RouteParams) {
-  const { postId } = await params;
+  const { slug: postId } = await params;
   try {
     const enabled = await featureFlagService.isFeatureEnabled('comments');
     if (!enabled) return NextResponse.json({ comments: [], enabled: false });
@@ -23,7 +23,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
     const comments = await commentService.getCommentsForBlogPost(postId, user?.id);
     return NextResponse.json({ comments, enabled: true });
   } catch (err) {
-    console.error('[GET /api/blog/:postId/comments] failed', { postId, err });
+    console.error('[GET /api/blog/:slug/comments] failed', { postId, err });
     return NextResponse.json(
       { error: err instanceof Error ? err.message : 'Failed to load comments', comments: [], enabled: true },
       { status: 500 }
@@ -32,7 +32,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
 }
 
 export async function POST(request: Request, { params }: RouteParams) {
-  const { postId } = await params;
+  const { slug: postId } = await params;
   try {
     const enabled = await featureFlagService.isFeatureEnabled('comments');
     if (!enabled) return NextResponse.json({ error: 'Comments are currently disabled' }, { status: 403 });
@@ -72,7 +72,7 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     return NextResponse.json({ comment: { ...comment, authorName: user.displayName ?? user.email } }, { status: 201 });
   } catch (err) {
-    console.error('[POST /api/blog/:postId/comments] failed', { postId, err });
+    console.error('[POST /api/blog/:slug/comments] failed', { postId, err });
     return NextResponse.json(
       { error: err instanceof Error ? err.message : 'Failed to post comment' },
       { status: 500 }

@@ -18,6 +18,26 @@ export default function DashboardPage() {
   const [dismissingReportId, setDismissingReportId] = useState<string | null>(null);
   const [deletingQuizId, setDeletingQuizId] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [copiedQuizId, setCopiedQuizId] = useState<string | null>(null);
+
+  async function copyShareLink(quizId: string, shareSlug: string) {
+    const url = `${window.location.origin}/quizzes/shared/${shareSlug}`;
+    try {
+      await navigator.clipboard.writeText(url);
+    } catch {
+      const textarea = document.createElement('textarea');
+      textarea.value = url;
+      textarea.style.position = 'fixed';
+      textarea.style.opacity = '0';
+      document.body.appendChild(textarea);
+      textarea.focus();
+      textarea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textarea);
+    }
+    setCopiedQuizId(quizId);
+    setTimeout(() => setCopiedQuizId((current) => (current === quizId ? null : current)), 2000);
+  }
 
   useEffect(() => {
     if (!user) return;
@@ -197,6 +217,15 @@ export default function DashboardPage() {
               <Link href={`/quizzes/${quiz.id}/edit`}>
                 <Button size="sm" variant="secondary">Edit</Button>
               </Link>
+              {quiz.visibility === 'private' && quiz.shareSlug && (
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => copyShareLink(quiz.id, quiz.shareSlug!)}
+                >
+                  {copiedQuizId === quiz.id ? 'Copied!' : 'Copy link'}
+                </Button>
+              )}
               {quiz.visibility === 'private' && (
                 <Button size="sm" variant="secondary" onClick={() => regenerateLink(quiz.id)}>
                   Regenerate link

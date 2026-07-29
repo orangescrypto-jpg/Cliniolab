@@ -48,6 +48,7 @@ export function QuizRunner({ quiz, questions: rawQuestions, submitEndpoint }: Qu
   const [result, setResult] = useState<AttemptResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showSubmitConfirm, setShowSubmitConfirm] = useState(false);
+  const [resultFilter, setResultFilter] = useState<'all' | 'correct' | 'incorrect'>('all');
   const [flaggedQuestionIds, setFlaggedQuestionIds] = useState<Set<string>>(new Set());
   const [flaggingQuestionId, setFlaggingQuestionId] = useState<string | null>(null);
   const [flagError, setFlagError] = useState<string | null>(null);
@@ -184,8 +185,35 @@ export function QuizRunner({ quiz, questions: rawQuestions, submitEndpoint }: Qu
               dashboard and the leaderboard. This attempt&apos;s score is shown here but wasn&apos;t recorded.
             </p>
           )}
-          <div className="mt-8 space-y-4 text-left">
-            {result.perQuestion.map((pq, i) => {
+          <div className="mt-6 flex justify-center gap-2">
+            {(['all', 'correct', 'incorrect'] as const).map((f) => {
+              const count =
+                f === 'all'
+                  ? result.perQuestion.length
+                  : result.perQuestion.filter((pq) => (f === 'correct' ? pq.isCorrect : !pq.isCorrect)).length;
+              return (
+                <button
+                  key={f}
+                  type="button"
+                  onClick={() => setResultFilter(f)}
+                  className={`rounded-md border px-3 py-1.5 text-xs font-medium transition-colors ${
+                    resultFilter === f
+                      ? 'border-pulse-400 bg-pulse-50 text-pulse-700'
+                      : 'border-ink-100 text-ink-500 hover:bg-ink-50'
+                  }`}
+                >
+                  {f === 'all' ? 'All' : f === 'correct' ? 'Correct' : 'Incorrect'} ({count})
+                </button>
+              );
+            })}
+          </div>
+          <div className="mt-6 space-y-4 text-left">
+            {result.perQuestion
+              .map((pq, i) => ({ pq, i }))
+              .filter(({ pq }) =>
+                resultFilter === 'all' ? true : resultFilter === 'correct' ? pq.isCorrect : !pq.isCorrect
+              )
+              .map(({ pq, i }) => {
               const resolve = (value: string | null) => {
                 if (value === null) return null;
                 const match = pq.options.find((o) => o.id === value);
@@ -233,6 +261,13 @@ export function QuizRunner({ quiz, questions: rawQuestions, submitEndpoint }: Qu
               </div>
               );
             })}
+            {result.perQuestion.filter((pq) =>
+              resultFilter === 'all' ? true : resultFilter === 'correct' ? pq.isCorrect : !pq.isCorrect
+            ).length === 0 && (
+              <p className="py-6 text-center text-sm text-ink-400">
+                No {resultFilter} questions.
+              </p>
+            )}
           </div>
           {flagError && <p className="mt-3 text-xs text-critical-500">{flagError}</p>}
           <Button className="mt-8" onClick={() => router.push('/dashboard')}>

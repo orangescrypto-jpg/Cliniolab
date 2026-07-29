@@ -29,6 +29,8 @@ interface QuizRow {
   pricing: string;
   price_kobo: number | null;
   allow_flagging: number;
+  default_mark: number;
+  show_marks: number;
   created_at: string;
   updated_at: string;
 }
@@ -42,6 +44,7 @@ interface QuestionRow {
   correct_answer: string;
   explanation: string | null;
   sort_order: number;
+  mark: number | null;
 }
 
 function mapQuiz(row: QuizRow): Quiz {
@@ -66,6 +69,8 @@ function mapQuiz(row: QuizRow): Quiz {
     pricing: row.pricing as Quiz['pricing'],
     priceKobo: row.price_kobo,
     allowFlagging: row.allow_flagging === 1,
+    defaultMark: row.default_mark,
+    showMarks: row.show_marks === 1,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -81,6 +86,7 @@ function mapQuestion(row: QuestionRow): QuizQuestion {
     correctAnswer: row.correct_answer,
     explanation: row.explanation,
     sortOrder: row.sort_order,
+    mark: row.mark,
   };
 }
 
@@ -156,8 +162,8 @@ export async function createQuiz(creatorId: string, input: QuizInput): Promise<Q
         visibility, share_slug, link_expires_at, time_limit_seconds,
         shuffle_questions, shuffle_options,
         anti_cheat_enabled, retake_policy, retake_limit, status, pricing, price_kobo,
-        allow_flagging, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        allow_flagging, default_mark, show_marks, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .bind(
       id,
@@ -180,6 +186,8 @@ export async function createQuiz(creatorId: string, input: QuizInput): Promise<Q
       input.pricing ?? 'free',
       input.pricing === 'paid' ? input.priceKobo ?? null : null,
       input.allowFlagging ?? true ? 1 : 0,
+      input.defaultMark ?? 1,
+      input.showMarks ?? true ? 1 : 0,
       now,
       now
     );
@@ -187,8 +195,8 @@ export async function createQuiz(creatorId: string, input: QuizInput): Promise<Q
   const questionStatements = input.questions.map((q, index) =>
     db
       .prepare(
-        `INSERT INTO questions (id, quiz_id, type, prompt, options, correct_answer, explanation, sort_order)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+        `INSERT INTO questions (id, quiz_id, type, prompt, options, correct_answer, explanation, sort_order, mark)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .bind(
         generateId('q'),
@@ -198,7 +206,8 @@ export async function createQuiz(creatorId: string, input: QuizInput): Promise<Q
         q.options ? JSON.stringify(q.options) : null,
         q.correctAnswer,
         q.explanation ?? null,
-        index
+        index,
+        q.mark ?? null
       )
   );
 
@@ -225,6 +234,8 @@ export async function createQuiz(creatorId: string, input: QuizInput): Promise<Q
     pricing: input.pricing ?? 'free',
     priceKobo: input.pricing === 'paid' ? input.priceKobo ?? null : null,
     allowFlagging: input.allowFlagging ?? true,
+    defaultMark: input.defaultMark ?? 1,
+    showMarks: input.showMarks ?? true,
     createdAt: now,
     updatedAt: now,
   };
@@ -261,7 +272,7 @@ export async function updateQuiz(quizId: string, input: QuizInput): Promise<Quiz
         subcategory_id = ?, title = ?, description = ?, mode = ?, difficulty = ?,
         time_limit_seconds = ?, shuffle_questions = ?, shuffle_options = ?,
         anti_cheat_enabled = ?, retake_policy = ?, retake_limit = ?,
-        pricing = ?, price_kobo = ?, allow_flagging = ?, updated_at = ?
+        pricing = ?, price_kobo = ?, allow_flagging = ?, default_mark = ?, show_marks = ?, updated_at = ?
       WHERE id = ?`
     )
     .bind(
@@ -279,6 +290,8 @@ export async function updateQuiz(quizId: string, input: QuizInput): Promise<Quiz
       input.pricing ?? 'free',
       input.pricing === 'paid' ? input.priceKobo ?? null : null,
       input.allowFlagging ?? true ? 1 : 0,
+      input.defaultMark ?? 1,
+      input.showMarks ?? true ? 1 : 0,
       now,
       quizId
     );
@@ -288,8 +301,8 @@ export async function updateQuiz(quizId: string, input: QuizInput): Promise<Quiz
   const questionStatements = input.questions.map((q, index) =>
     db
       .prepare(
-        `INSERT INTO questions (id, quiz_id, type, prompt, options, correct_answer, explanation, sort_order)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+        `INSERT INTO questions (id, quiz_id, type, prompt, options, correct_answer, explanation, sort_order, mark)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .bind(
         generateId('q'),
@@ -299,7 +312,8 @@ export async function updateQuiz(quizId: string, input: QuizInput): Promise<Quiz
         q.options ? JSON.stringify(q.options) : null,
         q.correctAnswer,
         q.explanation ?? null,
-        index
+        index,
+        q.mark ?? null
       )
   );
 
@@ -326,6 +340,8 @@ export async function updateQuiz(quizId: string, input: QuizInput): Promise<Quiz
     pricing: input.pricing ?? 'free',
     priceKobo: input.pricing === 'paid' ? input.priceKobo ?? null : null,
     allowFlagging: input.allowFlagging ?? true,
+    defaultMark: input.defaultMark ?? 1,
+    showMarks: input.showMarks ?? true,
     updatedAt: now,
   };
 }

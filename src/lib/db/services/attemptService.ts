@@ -116,13 +116,18 @@ export async function submitAttempt(
 
   const answerMap = new Map(submission.answers.map((a) => [a.questionId, a.submittedAnswer]));
 
-  let score = 0;
+  let marksEarned = 0;
+  let totalMarks = 0;
   const perQuestion = questions.map((q) => {
     const submittedAnswer = answerMap.get(q.id) ?? null;
     const isCorrect =
       submittedAnswer !== null &&
       submittedAnswer.trim().toLowerCase() === q.correctAnswer.trim().toLowerCase();
-    if (isCorrect) score += 1;
+    const mark = q.mark ?? quiz.defaultMark;
+    totalMarks += mark;
+    if (isCorrect) {
+      marksEarned += mark;
+    }
     return {
       questionId: q.id,
       prompt: q.prompt,
@@ -131,10 +136,20 @@ export async function submitAttempt(
       isCorrect,
       explanation: q.explanation,
       options: q.options ?? [],
+      mark,
     };
   });
 
-  const percentage = (score / questions.length) * 100;
+  // `score`/`total_questions` on quiz_attempts drive percentage and
+  // leaderboard averages (AVG(score/total_questions*100)) throughout the
+  // app. Storing marks-earned/total-possible-marks in those columns
+  // instead of raw correct-answer counts keeps that math correct with no
+  // schema/query changes elsewhere, since percentage is defined
+  // identically either way. The actual question count is tracked
+  // separately (questions.length) for anything that needs to display it.
+  const score = marksEarned;
+  const marksColumnValue = totalMarks;
+  const percentage = totalMarks > 0 ? (marksEarned / totalMarks) * 100 : 0;
 
   // On unlimited-retake quizzes, only the first attempt is ever persisted.
   // Later attempts are graded and returned to the user but not written to
@@ -148,6 +163,9 @@ export async function submitAttempt(
         attemptId: generateId('unrecorded'), // not persisted; id is only for client-side keying
         score,
         totalQuestions: questions.length,
+        marksEarned,
+        totalMarks,
+        showMarks: quiz.showMarks,
         percentage,
         countedForLeaderboard: false,
         perQuestion,
@@ -170,7 +188,7 @@ export async function submitAttempt(
       submission.quizId,
       userId,
       score,
-      questions.length,
+      marksColumnValue,
       submission.timeTakenSeconds,
       1, // this is either the only attempt allowed, or the first (and only recorded) attempt
       now,
@@ -192,6 +210,9 @@ export async function submitAttempt(
     attemptId,
     score,
     totalQuestions: questions.length,
+    marksEarned,
+    totalMarks,
+    showMarks: quiz.showMarks,
     percentage,
     countedForLeaderboard: true,
     perQuestion,

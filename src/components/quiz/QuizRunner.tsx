@@ -47,6 +47,7 @@ export function QuizRunner({ quiz, questions: rawQuestions, submitEndpoint }: Qu
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<AttemptResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [showSubmitConfirm, setShowSubmitConfirm] = useState(false);
   const [flaggedQuestionIds, setFlaggedQuestionIds] = useState<Set<string>>(new Set());
   const [flaggingQuestionId, setFlaggingQuestionId] = useState<string | null>(null);
   const [flagError, setFlagError] = useState<string | null>(null);
@@ -95,6 +96,10 @@ export function QuizRunner({ quiz, questions: rawQuestions, submitEndpoint }: Qu
         flagged: markedForReview.has(q.id),
       })),
     [questions, answers, markedForReview]
+  );
+  const unansweredCount = useMemo(
+    () => questions.filter((q) => answers[q.id] === undefined || answers[q.id] === '').length,
+    [questions, answers]
   );
 
   // The timer's setInterval callback is created once and would otherwise
@@ -318,11 +323,38 @@ export function QuizRunner({ quiz, questions: rawQuestions, submitEndpoint }: Qu
             Next
           </Button>
         ) : (
-          <Button onClick={handleSubmit} disabled={submitting}>
+          <Button onClick={() => setShowSubmitConfirm(true)} disabled={submitting}>
             {submitting ? 'Submitting…' : 'Submit'}
           </Button>
         )}
       </div>
+
+      {showSubmitConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink-900/40 px-4">
+          <Card className="w-full max-w-sm p-6">
+            <h3 className="font-display text-lg font-semibold text-ink-800">Submit {quiz.mode === 'exam' ? 'exam' : 'quiz'}?</h3>
+            <p className="mt-2 text-sm text-ink-500">
+              {unansweredCount > 0
+                ? `You have ${unansweredCount} unanswered question${unansweredCount === 1 ? '' : 's'}. Once submitted, you can't change your answers.`
+                : "Once submitted, you can't change your answers."}
+            </p>
+            <div className="mt-6 flex justify-end gap-2">
+              <Button variant="secondary" onClick={() => setShowSubmitConfirm(false)}>
+                Keep reviewing
+              </Button>
+              <Button
+                onClick={() => {
+                  setShowSubmitConfirm(false);
+                  void handleSubmit();
+                }}
+                disabled={submitting}
+              >
+                {submitting ? 'Submitting…' : 'Yes, submit'}
+              </Button>
+            </div>
+          </Card>
+        </div>
+      )}
 
       <QuestionNavigator
         total={questions.length}

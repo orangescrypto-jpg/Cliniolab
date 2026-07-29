@@ -258,15 +258,8 @@ export function QuizRunner({ quiz, questions: rawQuestions, submitEndpoint }: Qu
       </div>
 
       <Card className="mt-8 p-6">
-        <div className="flex items-start justify-between gap-3">
-          <h2 className="font-display text-lg font-medium text-ink-800">{question.prompt}</h2>
-          {quiz.showMarks && (
-            <span className="shrink-0 rounded-full bg-ink-50 px-2.5 py-1 text-xs font-medium text-ink-500">
-              {question.mark ?? quiz.defaultMark} mark{(question.mark ?? quiz.defaultMark) === 1 ? '' : 's'}
-            </span>
-          )}
-        </div>
-        <div className="mt-3">
+        <h2 className="font-display text-lg font-medium text-ink-800">{question.prompt}</h2>
+        <div className="mt-3 flex flex-wrap items-center gap-2">
           <button
             type="button"
             onClick={() => toggleMarkForReview(question.id)}
@@ -278,6 +271,11 @@ export function QuizRunner({ quiz, questions: rawQuestions, submitEndpoint }: Qu
           >
             {markedForReview.has(question.id) ? 'Marked ✓' : 'Mark for review'}
           </button>
+          {quiz.showMarks && (
+            <span className="rounded-full bg-ink-50 px-2.5 py-1 text-xs font-medium text-ink-500">
+              {question.mark ?? quiz.defaultMark} mark{(question.mark ?? quiz.defaultMark) === 1 ? '' : 's'}
+            </span>
+          )}
         </div>
 
         <div className="mt-6 space-y-2">

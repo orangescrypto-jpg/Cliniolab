@@ -176,6 +176,7 @@ export function QuizRunner({ quiz, questions: rawQuestions, submitEndpoint }: Qu
           </p>
           <p className="mt-2 text-ink-500">
             {result.score} / {result.totalQuestions} correct
+            {result.showMarks && ` · ${result.marksEarned} / ${result.totalMarks} marks`}
           </p>
           {!result.countedForLeaderboard && (
             <p className="mt-3 text-xs text-flag-600">
@@ -194,7 +195,14 @@ export function QuizRunner({ quiz, questions: rawQuestions, submitEndpoint }: Qu
               const correctText = resolve(pq.correctAnswer);
               return (
               <div key={pq.questionId} className={`rounded-md border p-4 ${pq.isCorrect ? 'border-pulse-200 bg-pulse-50' : 'border-critical-200 bg-critical-50'}`}>
-                <p className="text-sm font-medium text-ink-700">{i + 1}. {pq.prompt}</p>
+                <div className="flex items-start justify-between gap-3">
+                  <p className="text-sm font-medium text-ink-700">{i + 1}. {pq.prompt}</p>
+                  {result.showMarks && (
+                    <span className="shrink-0 text-xs font-medium text-ink-400">
+                      {pq.isCorrect ? pq.mark : 0} / {pq.mark} mark{pq.mark === 1 ? '' : 's'}
+                    </span>
+                  )}
+                </div>
                 <p className="mt-1 text-sm text-ink-500">Your answer: {submittedText ?? '—'}</p>
                 {!pq.isCorrect && (
                   <p className="text-sm text-ink-500">Correct answer: {correctText}</p>
@@ -250,7 +258,14 @@ export function QuizRunner({ quiz, questions: rawQuestions, submitEndpoint }: Qu
       </div>
 
       <Card className="mt-8 p-6">
-        <h2 className="font-display text-lg font-medium text-ink-800">{question.prompt}</h2>
+        <div className="flex items-start justify-between gap-3">
+          <h2 className="font-display text-lg font-medium text-ink-800">{question.prompt}</h2>
+          {quiz.showMarks && (
+            <span className="shrink-0 rounded-full bg-ink-50 px-2.5 py-1 text-xs font-medium text-ink-500">
+              {question.mark ?? quiz.defaultMark} mark{(question.mark ?? quiz.defaultMark) === 1 ? '' : 's'}
+            </span>
+          )}
+        </div>
         <div className="mt-3">
           <button
             type="button"

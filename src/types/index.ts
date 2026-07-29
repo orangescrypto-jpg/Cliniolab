@@ -76,6 +76,8 @@ export interface Quiz {
   pricing: 'free' | 'paid';
   priceKobo: number | null;
   allowFlagging: boolean;
+  defaultMark: number;
+  showMarks: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -99,6 +101,8 @@ export interface QuizQuestion {
   correctAnswer: string;
   explanation: string | null;
   sortOrder: number;
+  /** Marks this question is worth. Null means "use the quiz's defaultMark". */
+  mark: number | null;
 }
 
 export interface QuestionOption {
@@ -125,6 +129,8 @@ export interface QuizInput {
   pricing?: 'free' | 'paid';
   priceKobo?: number;
   allowFlagging?: boolean;
+  defaultMark?: number;
+  showMarks?: boolean;
   questions: QuizQuestionInput[];
 }
 
@@ -134,6 +140,8 @@ export interface QuizQuestionInput {
   options?: QuestionOption[];
   correctAnswer: string;
   explanation?: string;
+  /** Marks this question is worth. Leave undefined/null to use the quiz's defaultMark. */
+  mark?: number | null;
 }
 
 // ============================================
@@ -170,6 +178,12 @@ export interface AttemptResult {
   attemptId: string;
   score: number;
   totalQuestions: number;
+  /** Marks earned. Equal to score when every question is worth 1 mark. */
+  marksEarned: number;
+  /** Total marks available across the quiz (sum of each question's mark). */
+  totalMarks: number;
+  /** Whether the quiz creator has marks visible to quiz-takers. */
+  showMarks: boolean;
   percentage: number;
   countedForLeaderboard: boolean;
   perQuestion: {
@@ -180,6 +194,7 @@ export interface AttemptResult {
     isCorrect: boolean;
     explanation: string | null;
     options: QuestionOption[];
+    mark: number;
   }[];
 }
 

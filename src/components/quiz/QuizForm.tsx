@@ -29,6 +29,7 @@ function emptyQuestion(): QuizQuestionInput {
     ],
     correctAnswer: '',
     explanation: '',
+    mark: null,
   };
 }
 
@@ -40,6 +41,7 @@ function toQuestionInput(q: QuizQuestion): QuizQuestionInput {
     options: q.options ?? undefined,
     correctAnswer: q.correctAnswer,
     explanation: q.explanation ?? undefined,
+    mark: q.mark,
   };
 }
 
@@ -83,6 +85,8 @@ export function QuizForm({
   const [platformFeePercent, setPlatformFeePercent] = useState(15);
   const [antiCheatEnabled, setAntiCheatEnabled] = useState(initialQuiz?.antiCheatEnabled ?? false);
   const [allowFlagging, setAllowFlagging] = useState(initialQuiz?.allowFlagging ?? true);
+  const [defaultMark, setDefaultMark] = useState(initialQuiz?.defaultMark ?? 1);
+  const [showMarks, setShowMarks] = useState(initialQuiz?.showMarks ?? true);
   const [retakePolicy, setRetakePolicy] = useState<RetakePolicy>(initialQuiz?.retakePolicy ?? 'unlimited');
   const [retakeLimit, setRetakeLimit] = useState(initialQuiz?.retakeLimit ?? 1);
   const [questions, setQuestions] = useState<QuizQuestionInput[]>(
@@ -161,6 +165,14 @@ export function QuizForm({
       setError('Exam / CBT mode requires a time limit.');
       return;
     }
+    if (defaultMark < 1) {
+      setError('Default mark must be at least 1.');
+      return;
+    }
+    if (questions.some((q) => q.mark != null && q.mark < 1)) {
+      setError('Question marks must be at least 1.');
+      return;
+    }
 
     const input: QuizInput = {
       subcategoryId,
@@ -178,6 +190,8 @@ export function QuizForm({
       retakePolicy: antiCheatEnabled ? retakePolicy : 'unlimited',
       retakeLimit: antiCheatEnabled && retakePolicy !== 'single' ? retakeLimit : undefined,
       allowFlagging,
+      defaultMark,
+      showMarks,
       pricing,
       priceKobo: pricing === 'paid' ? Math.round(priceNaira * 100) : undefined,
       questions,
@@ -458,6 +472,31 @@ export function QuizForm({
             so you can fix or remove them.
           </p>
         </div>
+
+        <div className="border-t border-ink-50 pt-4">
+          <label className="text-sm font-medium text-ink-700">Default mark per question</label>
+          <p className="mt-1 text-xs text-ink-400">
+            Applied to every question unless you set a custom mark on that question below.
+          </p>
+          <input
+            type="number"
+            min={1}
+            value={defaultMark}
+            onChange={(e) => setDefaultMark(Math.max(1, Number(e.target.value)))}
+            className="mt-2 w-32 rounded-md border border-ink-100 px-4 py-2 text-sm focus:border-pulse-400 focus:outline-none"
+          />
+          <div className="mt-4">
+            <Toggle
+              checked={showMarks}
+              onChange={setShowMarks}
+              label="Show marks to quiz-takers"
+            />
+            <p className="mt-1 text-xs text-ink-400">
+              On by default. When on, quiz-takers see how many marks each question is worth while
+              taking the quiz, and their marks earned on the results screen.
+            </p>
+          </div>
+        </div>
       </Card>
 
       <h2 className="mt-10 font-display text-xl font-semibold text-ink-800">Questions</h2>
@@ -467,6 +506,21 @@ export function QuizForm({
             <div className="flex items-center justify-between">
               <span className="text-sm font-medium text-ink-600">Question {qIndex + 1}</span>
               <div className="flex items-center gap-2">
+                <label className="flex items-center gap-1.5 text-xs text-ink-500">
+                  Mark
+                  <input
+                    type="number"
+                    min={1}
+                    value={q.mark ?? ''}
+                    onChange={(e) =>
+                      updateQuestion(qIndex, {
+                        mark: e.target.value === '' ? null : Math.max(1, Number(e.target.value)),
+                      })
+                    }
+                    placeholder={String(defaultMark)}
+                    className="w-16 rounded-md border border-ink-100 px-2 py-1 text-xs focus:border-pulse-400 focus:outline-none"
+                  />
+                </label>
                 <select
                   value={q.type}
                   onChange={(e) => updateQuestion(qIndex, {

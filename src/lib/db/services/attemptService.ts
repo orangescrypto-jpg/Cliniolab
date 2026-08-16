@@ -236,3 +236,33 @@ export async function getAttemptsByQuiz(quizId: string): Promise<QuizAttempt[]> 
     .all<AttemptRow>();
   return results.map(mapAttempt);
 }
+
+/**
+ * Question ids the user got wrong on their most recent *recorded* attempt
+ * of this quiz. Purely derived from quiz_attempts/attempt_answers - no
+ * separate "missed questions" table. On unlimited-retake quizzes only the
+ * first attempt is ever persisted (see submitAttempt), so this reflects
+ * that recorded attempt; on limited-retake/exam quizzes it reflects the
+ * most recent one. Returns an empty array if the user has no recorded
+ * attempt, or if their most recent recorded attempt had zero misses.
+ */
+export async function getMissedQuestionIds(quizId: string, userId: string): Promise<string[]> {
+  const db = getDb();
+  const latestAttempt = await db
+    .prepare(
+      'SELECT id FROM quiz_attempts WHERE quiz_id = ? AND user_id = ? ORDER BY started_at DESC LIMIT 1'
+    )
+    .bind(quizId, userId)
+    .first<{ id: string }>();
+
+  if (!latestAttempt) return [];
+
+  const { results } = await db
+    .prepare(
+      'SELECT question_id FROM attempt_answers WHERE attempt_id = ? AND is_correct = 0'
+    )
+    .bind(latestAttempt.id)
+    .all<{ question_id: string }>();
+
+  return results.map((r) => r.question_id);
+}

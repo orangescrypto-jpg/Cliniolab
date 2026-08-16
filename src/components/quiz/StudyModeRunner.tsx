@@ -48,11 +48,13 @@ export function StudyModeRunner({ quiz, questions: rawQuestions }: StudyModeRunn
   const [current, setCurrent] = useState(0);
   const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null);
   const [revealed, setRevealed] = useState(false);
-  // Tracks which questions have already been answered in this session, so
-  // the navigator grid stays accurate when the user jumps back and forth.
-  const [answeredIds, setAnsweredIds] = useState<Set<string>>(new Set());
+  // Tracks the actual answer given for each question (by id), so that
+  // navigating back to an already-answered question restores the selected
+  // option and the revealed/explanation state instead of resetting it.
+  const [answers, setAnswers] = useState<Record<string, string>>({});
 
   const question = questions[current];
+  const answeredIds = useMemo(() => new Set(Object.keys(answers)), [answers]);
   const isLast = current === questions.length - 1;
   const isCorrect = selectedAnswer !== null &&
     selectedAnswer.trim().toLowerCase() === question.correctAnswer.trim().toLowerCase();
@@ -70,13 +72,20 @@ export function StudyModeRunner({ quiz, questions: rawQuestions }: StudyModeRunn
     if (revealed) return; // lock in the answer once revealed
     setSelectedAnswer(answer);
     setRevealed(true);
-    setAnsweredIds((prev) => new Set(prev).add(question.id));
+    setAnswers((prev) => ({ ...prev, [question.id]: answer }));
   }
 
   function goToQuestion(index: number) {
     setCurrent(index);
-    setSelectedAnswer(null);
-    setRevealed(false);
+    const targetQuestion = questions[index];
+    const priorAnswer = answers[targetQuestion.id];
+    if (priorAnswer !== undefined) {
+      setSelectedAnswer(priorAnswer);
+      setRevealed(true);
+    } else {
+      setSelectedAnswer(null);
+      setRevealed(false);
+    }
   }
 
   function goNext() {

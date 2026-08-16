@@ -53,6 +53,19 @@ export function QuizDetailClient({ quizId }: { quizId: string }) {
 
   const isOwner = !!user && !!quiz && (quiz.creatorId === user.id || user.role === 'admin' || user.role === 'moderator');
 
+  // Auto-start when arriving via the "Retake missed only" button on the
+  // result screen - that's an explicit, deliberate re-entry the user just
+  // chose, not a first-time landing, so it shouldn't require a second
+  // manual "Start" click.
+  useEffect(() => {
+    if (!user || started) return;
+    if (typeof window === 'undefined') return;
+    if (new URLSearchParams(window.location.search).get('retakeMissed') === '1') {
+      void handleStart();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, started]);
+
   async function handleDelete() {
     if (!confirm('Delete this quiz permanently? This cannot be undone.')) return;
     setDeleteError(null);
@@ -78,10 +91,24 @@ export function QuizDetailClient({ quizId }: { quizId: string }) {
     setRequiresPurchase(false);
     setAttemptKey((k) => k + 1);
     try {
+      // "Retake missed only" arrives back here as a query param after the
+      // user clicks it on the result screen (see QuizRunner). It narrows
+      // the fetched question set to whatever they missed on their most
+      // recently *recorded* attempt - derived from quiz_attempts on the
+      // server, no separate storage. Consumed once, then stripped from
+      // the URL so a plain refresh afterwards goes back to the full quiz.
+      const params = new URLSearchParams(window.location.search);
+      const missedOnly = params.get('retakeMissed') === '1';
+      if (missedOnly) {
+        params.delete('retakeMissed');
+        const newUrl = `${window.location.pathname}${params.toString() ? `?${params.toString()}` : ''}`;
+        window.history.replaceState({}, '', newUrl);
+      }
+
       // Peek at the quiz's mode first via the normal endpoint (which
       // never leaks correctAnswer), then only hit the study-only endpoint
       // if the quiz is actually in Study Mode.
-      const res = await fetch(`/api/quizzes/${quizId}`);
+      const res = await fetch(`/api/quizzes/${quizId}${missedOnly ? '?missedOnly=1' : ''}`);
       const data = await res.json();
       if (!res.ok) {
         if (data.requiresPurchase) {

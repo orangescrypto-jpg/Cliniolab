@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { QuestionNavigator } from '@/components/quiz/QuestionNavigator';
+import { clearDraft, loadDraft, saveDraft } from '@/lib/localDraft';
 import type { AttemptResult, Quiz, QuizQuestion } from '@/types';
 
 interface QuizRunnerProps {
@@ -12,6 +13,27 @@ interface QuizRunnerProps {
   questions: Omit<QuizQuestion, 'correctAnswer'>[];
   submitEndpoint: string;
 }
+
+/**
+ * Draft autosave cache for an in-progress attempt. This is purely a
+ * device-local safety net so a refresh, crash, or accidental tab close
+ * doesn't lose answers before they've been submitted to D1 — it is never
+ * itself the graded record. It's cleared the moment a submit succeeds.
+ *
+ * Disabled entirely for anti-cheat exams: those are meant to be a single,
+ * uninterrupted sitting, and resuming a cached timer/answer state across a
+ * refresh would undermine that guarantee.
+ */
+interface AttemptDraft {
+  questionOrder: string[]; // question ids, in the shuffled order used this attempt
+  current: number;
+  answers: Record<string, string>;
+  markedForReview: string[];
+  startedAt: number;
+  remainingSeconds: number;
+}
+
+const DRAFT_NAMESPACE = 'attempt';
 
 /** Fisher-Yates shuffle, returns a new array without mutating the input. */
 function shuffleArray<T>(arr: T[]): T[] {
@@ -26,9 +48,20 @@ function shuffleArray<T>(arr: T[]): T[] {
 export function QuizRunner({ quiz, questions: rawQuestions, submitEndpoint }: QuizRunnerProps) {
   const router = useRouter();
 
+  // Anti-cheat exams intentionally never read or write a draft: no resume
+  // across a refresh, no clock recovery. Everything else (quizzes, and
+  // exams without anti-cheat) gets the resumable safety net.
+  const draftsEnabled = !quiz.antiCheatEnabled;
+
+  const initialDraft = useRef<AttemptDraft | null>(
+    draftsEnabled && typeof window !== 'undefined' ? loadDraft<AttemptDraft>(DRAFT_NAMESPACE, quiz.id) : null
+  ).current;
+
   // Shuffle once per attempt (on mount), not on every render, so the order
   // doesn't jump around as the user answers. Option IDs are preserved so
   // grading (which matches on option id) is unaffected by display order.
+  // If a resumable draft exists, reorder questions to match the order the
+  // user was actually attempting, rather than re-shuffling.
   const [questions] = useState(() => {
     let list = rawQuestions;
     if (quiz.shuffleQuestions) list = shuffleArray(list);
@@ -37,13 +70,23 @@ export function QuizRunner({ quiz, questions: rawQuestions, submitEndpoint }: Qu
         q.options ? { ...q, options: shuffleArray(q.options) } : q
       );
     }
+
+    if (initialDraft?.questionOrder?.length === list.length) {
+      const byId = new Map(list.map((q) => [q.id, q]));
+      const reordered = initialDraft.questionOrder
+        .map((id) => byId.get(id))
+        .filter((q): q is Omit<QuizQuestion, 'correctAnswer'> => q !== undefined);
+      if (reordered.length === list.length) return reordered;
+    }
     return list;
   });
 
-  const [current, setCurrent] = useState(0);
-  const [answers, setAnswers] = useState<Record<string, string>>({});
-  const [startedAt] = useState(() => Date.now());
-  const [remainingSeconds, setRemainingSeconds] = useState(quiz.timeLimitSeconds ?? 0);
+  const [current, setCurrent] = useState(initialDraft?.current ?? 0);
+  const [answers, setAnswers] = useState<Record<string, string>>(initialDraft?.answers ?? {});
+  const [startedAt] = useState(() => initialDraft?.startedAt ?? Date.now());
+  const [remainingSeconds, setRemainingSeconds] = useState(
+    initialDraft?.remainingSeconds ?? quiz.timeLimitSeconds ?? 0
+  );
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<AttemptResult | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -54,7 +97,9 @@ export function QuizRunner({ quiz, questions: rawQuestions, submitEndpoint }: Qu
   const [flagError, setFlagError] = useState<string | null>(null);
   // "Mark for review" during the attempt (CBT-style), distinct from the
   // post-result "report this question" flag above.
-  const [markedForReview, setMarkedForReview] = useState<Set<string>>(new Set());
+  const [markedForReview, setMarkedForReview] = useState<Set<string>>(
+    new Set(initialDraft?.markedForReview ?? [])
+  );
 
   function toggleMarkForReview(questionId: string) {
     setMarkedForReview((prev) => {
@@ -113,6 +158,22 @@ export function QuizRunner({ quiz, questions: rawQuestions, submitEndpoint }: Qu
     answersRef.current = answers;
   }, [answers]);
 
+  // Autosave a resumable draft of the in-progress attempt. Skipped
+  // entirely for anti-cheat exams (see draftsEnabled above), and stopped
+  // once a result has come back since there's nothing left to protect.
+  useEffect(() => {
+    if (!draftsEnabled || result) return;
+    const draft: AttemptDraft = {
+      questionOrder: questions.map((q) => q.id),
+      current,
+      answers,
+      markedForReview: Array.from(markedForReview),
+      startedAt,
+      remainingSeconds,
+    };
+    saveDraft(DRAFT_NAMESPACE, quiz.id, draft);
+  }, [draftsEnabled, result, quiz.id, questions, current, answers, markedForReview, startedAt, remainingSeconds]);
+
   async function handleSubmit() {
     if (submitting || result) return;
     setSubmitting(true);
@@ -137,6 +198,7 @@ export function QuizRunner({ quiz, questions: rawQuestions, submitEndpoint }: Qu
         return;
       }
       setResult(data.result);
+      if (draftsEnabled) clearDraft(DRAFT_NAMESPACE, quiz.id);
     } catch {
       setError('Network error while submitting. Please try again.');
     } finally {

@@ -1,14 +1,14 @@
 import { NextResponse } from 'next/server';
 import { getCurrentUser } from '@/lib/auth/currentUser';
 import { isOwnerOrStaff } from '@/lib/auth/permissions';
-import { quizPurchaseService, quizService } from '@/lib/db';
+import { attemptService, quizPurchaseService, quizService } from '@/lib/db';
 import type { QuizInput } from '@/types';
 
 interface RouteParams {
   params: Promise<{ quizId: string }>;
 }
 
-export async function GET(_request: Request, { params }: RouteParams) {
+export async function GET(request: Request, { params }: RouteParams) {
   const { quizId } = await params;
   const user = await getCurrentUser();
   if (!user) {
@@ -40,8 +40,22 @@ export async function GET(_request: Request, { params }: RouteParams) {
     }
   }
 
-  const questions = await quizService.getQuizQuestions(quizId);
+  let questions = await quizService.getQuizQuestions(quizId);
   const isOwnerOrModerator = isOwnerOrStaff(user.role, quiz.creatorId, user.id);
+
+  // ?missedOnly=1 narrows the question set down to whatever the user got
+  // wrong on their most recent recorded attempt of this quiz, derived
+  // entirely from quiz_attempts/attempt_answers - no separate "missed
+  // questions" storage. If they have no recorded attempt (or missed
+  // nothing), this returns the full set unchanged so "Retake missed" never
+  // produces a confusing empty quiz.
+  const { searchParams } = new URL(request.url);
+  if (searchParams.get('missedOnly') === '1') {
+    const missedIds = new Set(await attemptService.getMissedQuestionIds(quizId, user.id));
+    if (missedIds.size > 0) {
+      questions = questions.filter((q) => missedIds.has(q.id));
+    }
+  }
 
   // Strip correct answers before sending to the client during attempts;
   // they're only needed at grading time (handled server-side in /attempt).

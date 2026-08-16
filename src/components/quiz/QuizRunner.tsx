@@ -29,6 +29,8 @@ interface AttemptDraft {
   current: number;
   answers: Record<string, string>;
   markedForReview: string[];
+  confidence: Record<string, 'sure' | 'guessing'>;
+  skipped: string[];
   startedAt: number;
   remainingSeconds: number;
 }
@@ -92,6 +94,18 @@ export function QuizRunner({ quiz, questions: rawQuestions, submitEndpoint }: Qu
   const [error, setError] = useState<string | null>(null);
   const [showSubmitConfirm, setShowSubmitConfirm] = useState(false);
   const [resultFilter, setResultFilter] = useState<'all' | 'correct' | 'incorrect'>('all');
+  // Separate from resultFilter above (which filters the post-submit
+  // results screen). This filters the in-progress question navigator, so
+  // the user can jump between unanswered/answered/skipped questions while
+  // still attempting. Deliberately "answered" not "correct/incorrect" -
+  // correctness isn't known (or shown) until after submit.
+  const [progressFilter, setProgressFilter] = useState<'all' | 'unanswered' | 'answered' | 'skipped'>('all');
+  const [confidence, setConfidence] = useState<Record<string, 'sure' | 'guessing'>>(
+    initialDraft?.confidence ?? {}
+  );
+  // Questions explicitly skipped without answering, so they can be
+  // revisited or filtered separately from "answered".
+  const [skipped, setSkipped] = useState<Set<string>>(new Set(initialDraft?.skipped ?? []));
   const [flaggedQuestionIds, setFlaggedQuestionIds] = useState<Set<string>>(new Set());
   const [flaggingQuestionId, setFlaggingQuestionId] = useState<string | null>(null);
   const [flagError, setFlagError] = useState<string | null>(null);
@@ -108,6 +122,25 @@ export function QuizRunner({ quiz, questions: rawQuestions, submitEndpoint }: Qu
       else next.add(questionId);
       return next;
     });
+  }
+
+  function rateConfidence(level: 'sure' | 'guessing') {
+    setConfidence((prev) => ({ ...prev, [question.id]: level }));
+  }
+
+  function setAnswerAndUnskip(questionId: string, value: string) {
+    setAnswers((prev) => ({ ...prev, [questionId]: value }));
+    setSkipped((prev) => {
+      if (!prev.has(questionId)) return prev;
+      const next = new Set(prev);
+      next.delete(questionId);
+      return next;
+    });
+  }
+
+  function skipQuestion() {
+    setSkipped((prev) => new Set(prev).add(question.id));
+    setCurrent((c) => Math.min(questions.length - 1, c + 1));
   }
 
   // Whether this attempt is timed — true for exam mode (always) and for
@@ -148,6 +181,36 @@ export function QuizRunner({ quiz, questions: rawQuestions, submitEndpoint }: Qu
     [questions, answers]
   );
 
+  function isAnswered(questionId: string): boolean {
+    return answers[questionId] !== undefined && answers[questionId] !== '';
+  }
+
+  function matchesProgressFilter(questionId: string, filter: typeof progressFilter): boolean {
+    switch (filter) {
+      case 'unanswered':
+        return !isAnswered(questionId) && !skipped.has(questionId);
+      case 'answered':
+        return isAnswered(questionId);
+      case 'skipped':
+        return skipped.has(questionId);
+      default:
+        return true;
+    }
+  }
+
+  // Counts per progress filter, for the filter bar badges during the
+  // attempt itself (not the post-submit results screen).
+  const progressFilterCounts = useMemo(() => {
+    const counts = { all: questions.length, unanswered: 0, answered: 0, skipped: 0 };
+    for (const q of questions) {
+      if (matchesProgressFilter(q.id, 'unanswered')) counts.unanswered++;
+      if (matchesProgressFilter(q.id, 'answered')) counts.answered++;
+      if (matchesProgressFilter(q.id, 'skipped')) counts.skipped++;
+    }
+    return counts;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [questions, answers, skipped]);
+
   // The timer's setInterval callback is created once and would otherwise
   // close over the `answers` value from that render, so an auto-submit on
   // timeout would silently send an empty answer set even if the user had
@@ -168,11 +231,13 @@ export function QuizRunner({ quiz, questions: rawQuestions, submitEndpoint }: Qu
       current,
       answers,
       markedForReview: Array.from(markedForReview),
+      confidence,
+      skipped: Array.from(skipped),
       startedAt,
       remainingSeconds,
     };
     saveDraft(DRAFT_NAMESPACE, quiz.id, draft);
-  }, [draftsEnabled, result, quiz.id, questions, current, answers, markedForReview, startedAt, remainingSeconds]);
+  }, [draftsEnabled, result, quiz.id, questions, current, answers, markedForReview, confidence, skipped, startedAt, remainingSeconds]);
 
   async function handleSubmit() {
     if (submitting || result) return;
@@ -364,6 +429,28 @@ export function QuizRunner({ quiz, questions: rawQuestions, submitEndpoint }: Qu
         <div className="h-1 rounded-full bg-pulse-500 transition-all" style={{ width: `${progressPercent}%` }} />
       </div>
 
+      <div className="mt-4 flex flex-wrap items-center gap-2">
+        {([
+          { key: 'all', label: 'All' },
+          { key: 'unanswered', label: 'Unanswered' },
+          { key: 'answered', label: 'Answered' },
+          { key: 'skipped', label: 'Skipped' },
+        ] as const).map(({ key: k, label }) => (
+          <button
+            key={k}
+            type="button"
+            onClick={() => setProgressFilter(k)}
+            className={`rounded-md border px-2.5 py-1 text-xs font-medium transition-colors ${
+              progressFilter === k
+                ? 'border-pulse-400 bg-pulse-50 text-pulse-700'
+                : 'border-ink-100 text-ink-400 hover:bg-ink-50'
+            }`}
+          >
+            {label} {k !== 'all' && `(${progressFilterCounts[k]})`}
+          </button>
+        ))}
+      </div>
+
       <Card className="mt-8 p-6">
         <h2 className="font-display text-lg font-medium text-ink-800">{question.prompt}</h2>
         <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -385,12 +472,30 @@ export function QuizRunner({ quiz, questions: rawQuestions, submitEndpoint }: Qu
           )}
         </div>
 
+        <div className="mt-3 flex items-center gap-2">
+          <span className="text-xs text-ink-400">How confident are you?</span>
+          {(['sure', 'guessing'] as const).map((level) => (
+            <button
+              key={level}
+              type="button"
+              onClick={() => rateConfidence(level)}
+              className={`rounded-md border px-2.5 py-1 text-xs font-medium capitalize transition-colors ${
+                confidence[question.id] === level
+                  ? 'border-pulse-400 bg-pulse-50 text-pulse-700'
+                  : 'border-ink-100 text-ink-400 hover:bg-ink-50'
+              }`}
+            >
+              {level}
+            </button>
+          ))}
+        </div>
+
         <div className="mt-6 space-y-2">
           {question.type === 'mcq' &&
             question.options?.map((opt) => (
               <button
                 key={opt.id}
-                onClick={() => setAnswers((prev) => ({ ...prev, [question.id]: opt.id }))}
+                onClick={() => setAnswerAndUnskip(question.id, opt.id)}
                 className={`w-full rounded-md border px-4 py-3 text-left text-sm transition-colors ${
                   answers[question.id] === opt.id
                     ? 'border-pulse-400 bg-pulse-50 text-pulse-700'
@@ -405,7 +510,7 @@ export function QuizRunner({ quiz, questions: rawQuestions, submitEndpoint }: Qu
             ['True', 'False'].map((label) => (
               <button
                 key={label}
-                onClick={() => setAnswers((prev) => ({ ...prev, [question.id]: label }))}
+                onClick={() => setAnswerAndUnskip(question.id, label)}
                 className={`w-full rounded-md border px-4 py-3 text-left text-sm transition-colors ${
                   answers[question.id] === label
                     ? 'border-pulse-400 bg-pulse-50 text-pulse-700'
@@ -420,7 +525,7 @@ export function QuizRunner({ quiz, questions: rawQuestions, submitEndpoint }: Qu
             <input
               type="text"
               value={answers[question.id] ?? ''}
-              onChange={(e) => setAnswers((prev) => ({ ...prev, [question.id]: e.target.value }))}
+              onChange={(e) => setAnswerAndUnskip(question.id, e.target.value)}
               placeholder="Type your answer"
               className="w-full rounded-md border border-ink-100 px-4 py-3 text-sm focus:border-pulse-400 focus:outline-none"
             />
@@ -438,15 +543,22 @@ export function QuizRunner({ quiz, questions: rawQuestions, submitEndpoint }: Qu
         >
           Previous
         </Button>
-        {current < questions.length - 1 ? (
-          <Button onClick={() => setCurrent((c) => Math.min(questions.length - 1, c + 1))}>
-            Next
-          </Button>
-        ) : (
-          <Button onClick={() => setShowSubmitConfirm(true)} disabled={submitting}>
-            {submitting ? 'Submitting…' : 'Submit'}
-          </Button>
-        )}
+        <div className="flex gap-2">
+          {!isAnswered(question.id) && (
+            <Button variant="secondary" onClick={skipQuestion}>
+              Skip
+            </Button>
+          )}
+          {current < questions.length - 1 ? (
+            <Button onClick={() => setCurrent((c) => Math.min(questions.length - 1, c + 1))}>
+              Next
+            </Button>
+          ) : (
+            <Button onClick={() => setShowSubmitConfirm(true)} disabled={submitting}>
+              {submitting ? 'Submitting…' : 'Submit'}
+            </Button>
+          )}
+        </div>
       </div>
 
       {showSubmitConfirm && (

@@ -1,16 +1,38 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { QuestionNavigator } from '@/components/quiz/QuestionNavigator';
+import { clearDraft, loadDraft, saveDraft } from '@/lib/localDraft';
 import type { Quiz, QuizQuestion } from '@/types';
 
 interface StudyModeRunnerProps {
   quiz: Quiz;
   questions: QuizQuestion[]; // includes correctAnswer, unlike QuizRunner's questions
 }
+
+type ResultFilter = 'all' | 'unanswered' | 'incorrect' | 'skipped';
+
+/**
+ * What gets cached in localStorage for a resumable Study Mode session.
+ * This is a device-local convenience cache only — never the source of
+ * truth. `questionOrder` is stored (rather than re-deriving from a fresh
+ * shuffle) so that resuming after a refresh points `current` at the same
+ * question the user was actually looking at, even when shuffleQuestions
+ * is enabled and a fresh shuffle would otherwise produce a different order.
+ */
+interface StudyDraft {
+  questionOrder: string[]; // question ids, in the shuffled order used this session
+  current: number;
+  answers: Record<string, string>;
+  skipped: string[];
+  confidence: Record<string, 'sure' | 'guessing'>;
+  resultFilter: ResultFilter;
+}
+
+const DRAFT_NAMESPACE = 'study';
 
 /** Fisher-Yates shuffle, returns a new array without mutating the input. */
 function shuffleArray<T>(arr: T[]): T[] {
@@ -27,13 +49,26 @@ function shuffleArray<T>(arr: T[]): T[] {
  * quiz_attempts - it's pure learning, so it intentionally never touches
  * the leaderboard or dashboard history. Each question reveals the
  * correct answer and explanation immediately after the user answers it.
+ *
+ * Session progress (current position, answers, skips, confidence, filter)
+ * is cached in localStorage so a refresh or accidental tab close doesn't
+ * lose your place. That cache is purely local and disposable; it's cleared
+ * once you finish studying.
  */
 export function StudyModeRunner({ quiz, questions: rawQuestions }: StudyModeRunnerProps) {
   const router = useRouter();
 
+  // Try to resume a prior session for this quiz before falling back to a
+  // fresh shuffle. Only used on the very first render.
+  const initialDraft = useRef<StudyDraft | null>(
+    typeof window !== 'undefined' ? loadDraft<StudyDraft>(DRAFT_NAMESPACE, quiz.id) : null
+  ).current;
+
   // Shuffle once per mount (i.e. every time the user starts/restarts study
   // mode) when the creator has enabled shuffling for this quiz. Option ids
   // are preserved so correctAnswer matching is unaffected by display order.
+  // If a resumable draft exists, reorder questions to match the order the
+  // user was actually studying in, rather than re-shuffling.
   const [questions] = useState(() => {
     let list = rawQuestions;
     if (quiz.shuffleQuestions) list = shuffleArray(list);
@@ -42,16 +77,36 @@ export function StudyModeRunner({ quiz, questions: rawQuestions }: StudyModeRunn
         q.options ? { ...q, options: shuffleArray(q.options) } : q
       );
     }
+
+    if (initialDraft?.questionOrder?.length === list.length) {
+      const byId = new Map(list.map((q) => [q.id, q]));
+      const reordered = initialDraft.questionOrder
+        .map((id) => byId.get(id))
+        .filter((q): q is QuizQuestion => q !== undefined);
+      if (reordered.length === list.length) return reordered;
+    }
     return list;
   });
 
-  const [current, setCurrent] = useState(0);
-  const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null);
-  const [revealed, setRevealed] = useState(false);
+  const [current, setCurrent] = useState(initialDraft?.current ?? 0);
+  // If resuming a draft that already had an answer for the resumed
+  // question, restore the revealed state immediately instead of showing
+  // it as fresh/unanswered.
+  const resumedAnswer = initialDraft?.answers?.[questions[initialDraft?.current ?? 0]?.id ?? ''];
+  const [selectedAnswer, setSelectedAnswer] = useState<string | null>(resumedAnswer ?? null);
+  const [revealed, setRevealed] = useState(resumedAnswer !== undefined);
   // Tracks the actual answer given for each question (by id), so that
   // navigating back to an already-answered question restores the selected
   // option and the revealed/explanation state instead of resetting it.
-  const [answers, setAnswers] = useState<Record<string, string>>({});
+  const [answers, setAnswers] = useState<Record<string, string>>(initialDraft?.answers ?? {});
+  // Questions explicitly skipped without answering, so they can be
+  // revisited or filtered separately from "answered".
+  const [skipped, setSkipped] = useState<Set<string>>(new Set(initialDraft?.skipped ?? []));
+  // Self-rated confidence, captured just before the answer is revealed.
+  const [confidence, setConfidence] = useState<Record<string, 'sure' | 'guessing'>>(
+    initialDraft?.confidence ?? {}
+  );
+  const [resultFilter, setResultFilter] = useState<ResultFilter>(initialDraft?.resultFilter ?? 'all');
 
   const question = questions[current];
   const answeredIds = useMemo(() => new Set(Object.keys(answers)), [answers]);
@@ -68,11 +123,76 @@ export function StudyModeRunner({ quiz, questions: rawQuestions }: StudyModeRunn
     [questions, answeredIds]
   );
 
+  function matchesFilter(q: QuizQuestion, filter: ResultFilter): boolean {
+    switch (filter) {
+      case 'unanswered':
+        return !answeredIds.has(q.id) && !skipped.has(q.id);
+      case 'incorrect':
+        return (
+          answeredIds.has(q.id) &&
+          answers[q.id].trim().toLowerCase() !== q.correctAnswer.trim().toLowerCase()
+        );
+      case 'skipped':
+        return skipped.has(q.id);
+      default:
+        return true;
+    }
+  }
+
+  // Counts per filter, for the filter bar badges.
+  const filterCounts = useMemo(() => {
+    const counts: Record<ResultFilter, number> = { all: questions.length, unanswered: 0, incorrect: 0, skipped: 0 };
+    for (const q of questions) {
+      if (matchesFilter(q, 'unanswered')) counts.unanswered++;
+      if (matchesFilter(q, 'incorrect')) counts.incorrect++;
+      if (matchesFilter(q, 'skipped')) counts.skipped++;
+    }
+    return counts;
+  }, [questions, answeredIds, skipped, answers]);
+
+  // Which question indices match the active filter, used for the
+  // navigator grid below.
+  const filteredIndices = useMemo(
+    () => questions.map((q, i) => ({ q, i })).filter(({ q }) => matchesFilter(q, resultFilter)).map(({ i }) => i),
+    [questions, resultFilter, answeredIds, skipped, answers]
+  );
+
+  // Persist a resumable snapshot on every relevant state change. Cheap and
+  // synchronous, and everything here is small (ids + short strings), so
+  // there's no need to debounce.
+  useEffect(() => {
+    const draft: StudyDraft = {
+      questionOrder: questions.map((q) => q.id),
+      current,
+      answers,
+      skipped: Array.from(skipped),
+      confidence,
+      resultFilter,
+    };
+    saveDraft(DRAFT_NAMESPACE, quiz.id, draft);
+  }, [quiz.id, questions, current, answers, skipped, confidence, resultFilter]);
+
+  function rateConfidence(level: 'sure' | 'guessing') {
+    setConfidence((prev) => ({ ...prev, [question.id]: level }));
+  }
+
   function selectAnswer(answer: string) {
     if (revealed) return; // lock in the answer once revealed
     setSelectedAnswer(answer);
     setRevealed(true);
     setAnswers((prev) => ({ ...prev, [question.id]: answer }));
+    setSkipped((prev) => {
+      if (!prev.has(question.id)) return prev;
+      const next = new Set(prev);
+      next.delete(question.id);
+      return next;
+    });
+  }
+
+  function skipQuestion() {
+    if (revealed) return;
+    setSkipped((prev) => new Set(prev).add(question.id));
+    goNext();
   }
 
   function goToQuestion(index: number) {
@@ -90,6 +210,7 @@ export function StudyModeRunner({ quiz, questions: rawQuestions }: StudyModeRunn
 
   function goNext() {
     if (isLast) {
+      clearDraft(DRAFT_NAMESPACE, quiz.id);
       router.push(`/quizzes/${quiz.id}`);
       return;
     }
@@ -114,8 +235,50 @@ export function StudyModeRunner({ quiz, questions: rawQuestions }: StudyModeRunn
         />
       </div>
 
+      <div className="mt-4 flex flex-wrap items-center gap-2">
+        {([
+          { key: 'all', label: 'All' },
+          { key: 'unanswered', label: 'Unanswered' },
+          { key: 'incorrect', label: 'Incorrect' },
+          { key: 'skipped', label: 'Skipped' },
+        ] as const).map(({ key: k, label }) => (
+          <button
+            key={k}
+            type="button"
+            onClick={() => setResultFilter(k)}
+            className={`rounded-md border px-2.5 py-1 text-xs font-medium transition-colors ${
+              resultFilter === k
+                ? 'border-pulse-400 bg-pulse-50 text-pulse-700'
+                : 'border-ink-100 text-ink-400 hover:bg-ink-50'
+            }`}
+          >
+            {label} {k !== 'all' && `(${filterCounts[k]})`}
+          </button>
+        ))}
+      </div>
+
       <Card className="mt-8 p-6">
         <h2 className="font-display text-lg font-medium text-ink-800">{question.prompt}</h2>
+
+        {!revealed && (
+          <div className="mt-3 flex items-center gap-2">
+            <span className="text-xs text-ink-400">How confident are you?</span>
+            {(['sure', 'guessing'] as const).map((level) => (
+              <button
+                key={level}
+                type="button"
+                onClick={() => rateConfidence(level)}
+                className={`rounded-md border px-2.5 py-1 text-xs font-medium capitalize transition-colors ${
+                  confidence[question.id] === level
+                    ? 'border-pulse-400 bg-pulse-50 text-pulse-700'
+                    : 'border-ink-100 text-ink-400 hover:bg-ink-50'
+                }`}
+              >
+                {level}
+              </button>
+            ))}
+          </div>
+        )}
 
         <div className="mt-6 space-y-2">
           {question.type === 'mcq' &&
@@ -184,17 +347,30 @@ export function StudyModeRunner({ quiz, questions: rawQuestions }: StudyModeRunn
         <Button variant="secondary" onClick={goPrevious} disabled={current === 0}>
           Previous
         </Button>
-        <Button onClick={goNext} disabled={!revealed}>
-          {isLast ? 'Finish studying' : 'Next question'}
-        </Button>
+        <div className="flex gap-2">
+          {!revealed && (
+            <Button variant="secondary" onClick={skipQuestion}>
+              Skip
+            </Button>
+          )}
+          <Button onClick={goNext} disabled={!revealed}>
+            {isLast ? 'Finish studying' : 'Next question'}
+          </Button>
+        </div>
       </div>
 
+      {resultFilter !== 'all' && (
+        <p className="mt-6 text-xs text-ink-400">
+          Showing all questions below — highlighted numbers match the &ldquo;
+          {resultFilter}&rdquo; filter ({filteredIndices.length}).
+        </p>
+      )}
       <QuestionNavigator
         total={questions.length}
         current={current}
         states={navigatorStates}
         onJump={goToQuestion}
-        className="mt-6"
+        className="mt-2"
       />
     </div>
   );

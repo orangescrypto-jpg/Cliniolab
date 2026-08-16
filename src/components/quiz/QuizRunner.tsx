@@ -282,9 +282,8 @@ export function QuizRunner({ quiz, questions: rawQuestions, submitEndpoint }: Qu
                 return match ? match.text : value;
               };
               const submittedText = resolve(pq.submittedAnswer);
-              const correctText = resolve(pq.correctAnswer);
               return (
-              <div key={pq.questionId} className={`rounded-md border p-4 ${pq.isCorrect ? 'border-pulse-200 bg-pulse-50' : 'border-critical-200 bg-critical-50'}`}>
+              <div key={pq.questionId} className="rounded-md border border-ink-100 bg-white p-4">
                 <div className="flex items-start justify-between gap-3">
                   <p className="text-sm font-medium text-ink-700">{i + 1}. {pq.prompt}</p>
                   {result.showMarks && (
@@ -294,9 +293,6 @@ export function QuizRunner({ quiz, questions: rawQuestions, submitEndpoint }: Qu
                   )}
                 </div>
                 <p className="mt-1 text-sm text-ink-500">Your answer: {submittedText ?? '—'}</p>
-                {!pq.isCorrect && (
-                  <p className="text-sm text-ink-500">Correct answer: {correctText}</p>
-                )}
                 {pq.explanation && (
                   <p className="mt-2 whitespace-pre-line text-sm leading-relaxed text-ink-600">
                     {pq.explanation}
@@ -332,9 +328,23 @@ export function QuizRunner({ quiz, questions: rawQuestions, submitEndpoint }: Qu
             )}
           </div>
           {flagError && <p className="mt-3 text-xs text-critical-500">{flagError}</p>}
-          <Button className="mt-8" onClick={() => router.push('/dashboard')}>
-            Go to dashboard
-          </Button>
+          <div className="mt-8 flex flex-wrap justify-center gap-2">
+            {result.perQuestion.some((pq) => !pq.isCorrect) && (
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  const url = new URL(window.location.href);
+                  url.searchParams.set('retakeMissed', '1');
+                  window.location.href = url.toString();
+                }}
+              >
+                Retake missed only
+              </Button>
+            )}
+            <Button onClick={() => router.push('/dashboard')}>
+              Go to dashboard
+            </Button>
+          </div>
         </Card>
       </div>
     );

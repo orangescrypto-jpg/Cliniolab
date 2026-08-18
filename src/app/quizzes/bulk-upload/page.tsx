@@ -75,6 +75,71 @@ function csvEscape(value: string): string {
   return value;
 }
 
+/** Same three example questions as CSV_TEMPLATE, shaped as the JSON upload format. */
+const JSON_TEMPLATE = {
+  quizzes: [
+    {
+      title: 'Cardiac Basics',
+      subcategory: 'Cardiology',
+      mode: 'quiz',
+      difficulty: 'medium',
+      timeLimitMinutes: 10,
+      questions: [
+        {
+          type: 'mcq',
+          prompt: 'Which chamber pumps blood to the lungs?',
+          options: ['Right atrium', 'Right ventricle', 'Left atrium', 'Left ventricle'],
+          correctAnswer: 'Right ventricle',
+          explanation: 'The right ventricle pumps deoxygenated blood to the lungs.',
+        },
+        {
+          type: 'true_false',
+          prompt: 'The mitral valve is on the right side of the heart.',
+          correctAnswer: 'False',
+          explanation: 'The mitral valve is on the left side, between atrium and ventricle.',
+        },
+      ],
+    },
+    {
+      title: 'NCLEX Mock Exam A',
+      subcategory: 'Exam Prep',
+      mode: 'exam',
+      difficulty: 'hard',
+      timeLimitMinutes: 30,
+      questions: [
+        {
+          type: 'fill_blank',
+          prompt: 'The normal adult resting heart rate range is ___ to ___ bpm.',
+          correctAnswer: '60-100',
+          explanation: 'Normal sinus rhythm for adults is generally 60-100 beats per minute.',
+        },
+      ],
+    },
+  ],
+};
+
+type TemplateFormat = 'xlsx' | 'xls' | 'ods' | 'csv' | 'json';
+
+const TEMPLATE_FORMAT_OPTIONS: { value: TemplateFormat; label: string }[] = [
+  { value: 'xlsx', label: 'Excel (.xlsx)' },
+  { value: 'xls', label: 'Excel 97-2003 (.xls)' },
+  { value: 'ods', label: 'OpenDocument (.ods)' },
+  { value: 'csv', label: 'CSV (.csv)' },
+  { value: 'json', label: 'JSON (.json)' },
+];
+
+function downloadBlob(content: string, filename: string, mimeType: string) {
+  const blob = new Blob([content], { type: mimeType });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}
+
 /**
  * Reads any supported spreadsheet (xlsx, xls, ods, csv) with SheetJS and
  * returns the first sheet as a plain grid of strings — same shape the old
@@ -231,6 +296,7 @@ export default function BulkUploadPage() {
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submittedCount, setSubmittedCount] = useState<number | null>(null);
+  const [templateFormat, setTemplateFormat] = useState<TemplateFormat>('xlsx');
 
   const subcategoryLookup = useMemo(() => {
     const map = new Map<string, string>();
@@ -285,8 +351,24 @@ export default function BulkUploadPage() {
     }
   }
 
-  /** Builds the template as a real .xlsx workbook — easiest format for quiz makers to edit. */
-  function downloadTemplate() {
+  /** Builds a downloadable template in whichever of the accepted formats is selected. */
+  function downloadTemplate(format: TemplateFormat = templateFormat) {
+    if (format === 'csv') {
+      downloadBlob(CSV_TEMPLATE, 'cliniolab-bulk-quiz-template.csv', 'text/csv;charset=utf-8');
+      return;
+    }
+
+    if (format === 'json') {
+      downloadBlob(
+        JSON.stringify(JSON_TEMPLATE, null, 2),
+        'cliniolab-bulk-quiz-template.json',
+        'application/json'
+      );
+      return;
+    }
+
+    // xlsx, xls, and ods all go through the same SheetJS workbook, just
+    // written out with a different bookType/extension.
     const rows = CSV_TEMPLATE.split('\n').map((line) => parseTemplateLine(line));
     const worksheet = XLSX.utils.aoa_to_sheet(rows);
     worksheet['!cols'] = CSV_HEADERS.map((h) =>
@@ -294,7 +376,9 @@ export default function BulkUploadPage() {
     );
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, 'Quiz Upload');
-    XLSX.writeFile(workbook, 'cliniolab-bulk-quiz-template.xlsx');
+
+    const bookType = format === 'xls' ? 'biff8' : format === 'ods' ? 'ods' : 'xlsx';
+    XLSX.writeFile(workbook, `cliniolab-bulk-quiz-template.${format}`, { bookType });
   }
 
   function parseTemplateLine(line: string): string[] {
@@ -425,9 +509,21 @@ export default function BulkUploadPage() {
             called out before anything is published — nothing goes live until you hit Publish.
           </li>
         </ol>
-        <div className="flex flex-wrap gap-3 pt-2">
-          <Button variant="secondary" onClick={downloadTemplate}>
-            Download template (.xlsx)
+        <div className="flex flex-wrap items-center gap-3 pt-2">
+          <select
+            value={templateFormat}
+            onChange={(e) => setTemplateFormat(e.target.value as TemplateFormat)}
+            className="rounded-md border border-ink-200 bg-white px-3 py-2 text-sm text-ink-700"
+            aria-label="Template format"
+          >
+            {TEMPLATE_FORMAT_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+          <Button variant="secondary" onClick={() => downloadTemplate()}>
+            Download template
           </Button>
           <Button variant="ghost" onClick={() => fileInputRef.current?.click()}>
             Choose file to upload

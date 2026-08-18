@@ -83,6 +83,64 @@ export async function getSubcategoryBySlug(
   return row ? mapSubcategory(row) : null;
 }
 
+function slugify(name: string): string {
+  return name.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+}
+
+/**
+ * Looks up a category by (case-insensitive) name via its slug, creating it
+ * if it doesn't exist yet. Mirrors getOrCreateBlogSubcategory's pattern —
+ * one row per distinct category name, ever, reused on every later match
+ * rather than duplicated. Used by bulk quiz upload so a spreadsheet can
+ * introduce a brand-new category without an admin creating it first.
+ */
+export async function getOrCreateCategory(name: string): Promise<Category> {
+  const db = getDb();
+  const slug = slugify(name);
+
+  const existing = await db
+    .prepare('SELECT * FROM categories WHERE slug = ?')
+    .bind(slug)
+    .first<CategoryRow>();
+  if (existing) return mapCategory(existing);
+
+  const id = generateId('cat');
+  await db
+    .prepare('INSERT INTO categories (id, name, slug, sort_order) VALUES (?, ?, ?, 0)')
+    .bind(id, name, slug)
+    .run();
+  return { id, name, slug, description: null, sortOrder: 0 };
+}
+
+/**
+ * Same idea as getOrCreateCategory, but scoped to one category — slugs are
+ * only unique per category (see schema: UNIQUE(category_id, slug)), so the
+ * same subcategory name can legitimately exist under two different
+ * categories without colliding. Matching only within categoryId is what
+ * prevents bulk upload from either creating a duplicate subcategory under
+ * the same category, or accidentally reusing a same-named subcategory
+ * that actually belongs to a different category.
+ */
+export async function getOrCreateSubcategory(categoryId: string, name: string): Promise<Subcategory> {
+  const db = getDb();
+  const slug = slugify(name);
+
+  const existing = await db
+    .prepare('SELECT * FROM subcategories WHERE category_id = ? AND slug = ?')
+    .bind(categoryId, slug)
+    .first<SubcategoryRow>();
+  if (existing) return mapSubcategory(existing);
+
+  const id = generateId('sub');
+  await db
+    .prepare(
+      'INSERT INTO subcategories (id, category_id, name, slug, sort_order) VALUES (?, ?, ?, ?, 0)'
+    )
+    .bind(id, categoryId, name, slug)
+    .run();
+  return { id, categoryId, name, slug, description: null, sortOrder: 0 };
+}
+
 export async function createCategory(input: {
   name: string;
   slug: string;

@@ -19,6 +19,7 @@ const links = [
   { href: '/admin/homepage-video', label: 'Homepage Video' },
   { href: '/admin/banners', label: 'Banners' },
   { href: '/admin/related-content', label: 'Related Content' },
+  { href: '/admin/leaderboard', label: 'Leaderboard' },
   { href: '/admin/cookie-consent', label: 'Cookie Consent' },
   { href: '/admin/reports', label: 'Reports' },
   { href: '/admin/feedback', label: 'Feedback' },

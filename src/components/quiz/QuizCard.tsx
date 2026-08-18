@@ -52,6 +52,7 @@ export function QuizCard({ quiz }: { quiz: QuizWithStats }) {
               title={quiz.title}
               stats={{
                 creatorName: quiz.creatorName,
+                creatorContact: quiz.creatorContact,
                 mode: quiz.mode,
                 pricing: quiz.pricing,
                 priceKobo: quiz.priceKobo,
@@ -59,6 +60,11 @@ export function QuizCard({ quiz }: { quiz: QuizWithStats }) {
                 questionCount: quiz.questionCount,
                 retakePolicy: quiz.retakePolicy,
                 retakeLimit: quiz.retakeLimit,
+                difficulty: quiz.difficulty,
+                categoryName: quiz.categoryName,
+                subcategoryName: quiz.subcategoryName,
+                attemptCount: quiz.attemptCount,
+                averageScorePercent: quiz.averageScorePercent,
               }}
             />
           </div>

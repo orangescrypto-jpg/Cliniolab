@@ -11,7 +11,7 @@ import { QuizLeaderboardSection } from '@/components/quiz/QuizLeaderboardSection
 import { RelatedQuizzes } from '@/components/quiz/RelatedQuizzes';
 import { Button } from '@/components/ui/Button';
 import { Card, DifficultyBadge } from '@/components/ui/Card';
-import type { Quiz, QuizQuestion } from '@/types';
+import type { Quiz, QuizQuestion, QuizWithStats } from '@/types';
 
 const MODE_LABELS: Record<Quiz['mode'], string> = {
   study: 'Study Mode',
@@ -19,11 +19,33 @@ const MODE_LABELS: Record<Quiz['mode'], string> = {
   exam: 'Exam / CBT Mode',
 };
 
+const RETAKE_LABELS: Record<Quiz['retakePolicy'], (limit: number | null) => string> = {
+  unlimited: () => 'Unlimited attempts',
+  single: () => '1 attempt',
+  daily_limit: (limit) => `${limit ?? 1} attempt${limit === 1 ? '' : 's'} per day`,
+  cooldown: (limit) => `${limit ?? 1} attempt${limit === 1 ? '' : 's'} (cooldown applies)`,
+};
+
 function formatNaira(kobo: number): string {
   return `₦${(kobo / 100).toLocaleString('en-NG')}`;
 }
 
-export function QuizDetailClient({ quizId }: { quizId: string }) {
+function formatTime(seconds: number | null): string | null {
+  if (!seconds) return null;
+  const totalMinutes = Math.round(seconds / 60);
+  const hrs = Math.floor(totalMinutes / 60);
+  const mins = totalMinutes % 60;
+  if (hrs > 0) return `${hrs}h${mins > 0 ? ` ${mins}m` : ''}`;
+  return `${mins} min`;
+}
+
+export function QuizDetailClient({
+  quizId,
+  previewStats,
+}: {
+  quizId: string;
+  previewStats?: QuizWithStats | null;
+}) {
   const router = useRouter();
   const { user, loading } = useAuth();
   const [quiz, setQuiz] = useState<Quiz | null>(null);
@@ -163,13 +185,65 @@ export function QuizDetailClient({ quizId }: { quizId: string }) {
   if (loading) return null;
 
   if (!user) {
+    // Logged-out visitors still see the shareable preview (title, price,
+    // time, question count, attempts) - same info a shared link unfurls
+    // to - they just can't start the quiz without logging in.
     return (
-      <div className="mx-auto max-w-xl px-6 py-24 text-center">
-        <h1 className="font-display text-2xl font-semibold text-ink-800">Login required</h1>
-        <p className="mt-2 text-ink-500">You need an account to attempt this quiz.</p>
-        <Button className="mt-6" onClick={() => (window.location.href = '/login')}>
-          Log in
-        </Button>
+      <div className="mx-auto max-w-2xl px-6 py-16">
+        <Card className="p-8">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              {previewStats && <DifficultyBadge difficulty={previewStats.difficulty} />}
+              <h1 className="mt-2 font-display text-2xl font-semibold text-ink-800">
+                {previewStats?.title ?? 'Quiz'}
+              </h1>
+              {previewStats && (
+                <span className="mt-1 inline-block font-mono text-xs uppercase tracking-wide text-pulse-600">
+                  {MODE_LABELS[previewStats.mode]}
+                </span>
+              )}
+            </div>
+          </div>
+          {previewStats?.description && <p className="mt-2 text-ink-500">{previewStats.description}</p>}
+
+          {previewStats && (
+            <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-2 rounded-md border border-ink-100 bg-ink-50/50 p-4 text-sm sm:grid-cols-3">
+              <div>
+                <dt className="text-xs uppercase tracking-wide text-ink-400">Creator</dt>
+                <dd className="text-ink-700">{previewStats.creatorName ?? 'Anonymous'}</dd>
+              </div>
+              <div>
+                <dt className="text-xs uppercase tracking-wide text-ink-400">Price</dt>
+                <dd className="text-ink-700">
+                  {previewStats.pricing === 'paid' && previewStats.priceKobo
+                    ? formatNaira(previewStats.priceKobo)
+                    : 'Free'}
+                </dd>
+              </div>
+              {formatTime(previewStats.timeLimitSeconds) && (
+                <div>
+                  <dt className="text-xs uppercase tracking-wide text-ink-400">Estimated time</dt>
+                  <dd className="text-ink-700">{formatTime(previewStats.timeLimitSeconds)}</dd>
+                </div>
+              )}
+              <div>
+                <dt className="text-xs uppercase tracking-wide text-ink-400">Questions</dt>
+                <dd className="text-ink-700">{previewStats.questionCount}</dd>
+              </div>
+              <div>
+                <dt className="text-xs uppercase tracking-wide text-ink-400">Trials allowed</dt>
+                <dd className="text-ink-700">
+                  {RETAKE_LABELS[previewStats.retakePolicy]?.(previewStats.retakeLimit) ?? '—'}
+                </dd>
+              </div>
+            </dl>
+          )}
+
+          <p className="mt-6 text-ink-500">You need an account to attempt this quiz.</p>
+          <Button className="mt-3" onClick={() => (window.location.href = '/login')}>
+            Log in
+          </Button>
+        </Card>
       </div>
     );
   }
@@ -208,6 +282,40 @@ export function QuizDetailClient({ quizId }: { quizId: string }) {
           )}
         </div>
         {quiz?.description && <p className="mt-2 text-ink-500">{quiz.description}</p>}
+
+        {previewStats && (
+          <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-2 rounded-md border border-ink-100 bg-ink-50/50 p-4 text-sm sm:grid-cols-3">
+            <div>
+              <dt className="text-xs uppercase tracking-wide text-ink-400">Creator</dt>
+              <dd className="text-ink-700">{previewStats.creatorName ?? 'Anonymous'}</dd>
+            </div>
+            <div>
+              <dt className="text-xs uppercase tracking-wide text-ink-400">Price</dt>
+              <dd className="text-ink-700">
+                {previewStats.pricing === 'paid' && previewStats.priceKobo
+                  ? formatNaira(previewStats.priceKobo)
+                  : 'Free'}
+              </dd>
+            </div>
+            {formatTime(previewStats.timeLimitSeconds) && (
+              <div>
+                <dt className="text-xs uppercase tracking-wide text-ink-400">Estimated time</dt>
+                <dd className="text-ink-700">{formatTime(previewStats.timeLimitSeconds)}</dd>
+              </div>
+            )}
+            <div>
+              <dt className="text-xs uppercase tracking-wide text-ink-400">Questions</dt>
+              <dd className="text-ink-700">{previewStats.questionCount}</dd>
+            </div>
+            <div>
+              <dt className="text-xs uppercase tracking-wide text-ink-400">Trials allowed</dt>
+              <dd className="text-ink-700">
+                {RETAKE_LABELS[previewStats.retakePolicy]?.(previewStats.retakeLimit) ?? '—'}
+              </dd>
+            </div>
+          </dl>
+        )}
+
         {error && <p className="mt-4 text-sm text-critical-500">{error}</p>}
         {deleteError && <p className="mt-4 text-sm text-critical-500">{deleteError}</p>}
 

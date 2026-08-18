@@ -16,6 +16,7 @@ interface UserRow {
   payout_bank_name: string | null;
   payout_account_number: string | null;
   payout_account_name: string | null;
+  contact_phone: string | null;
   created_at: string;
 }
 
@@ -35,6 +36,7 @@ function mapUser(row: UserRow): AppUser {
     payoutBankName: row.payout_bank_name,
     payoutAccountNumber: row.payout_account_number,
     payoutAccountName: row.payout_account_name,
+    contactPhone: row.contact_phone,
     createdAt: row.created_at,
   };
 }
@@ -74,6 +76,7 @@ export async function ensureUserRecord(
     payoutBankName: null,
     payoutAccountNumber: null,
     payoutAccountName: null,
+    contactPhone: null,
     createdAt,
   };
 }
@@ -131,6 +134,17 @@ export async function adjustCreatorBalance(userId: string, deltaKobo: number): P
     .prepare('UPDATE users SET creator_balance_kobo = creator_balance_kobo + ? WHERE id = ?')
     .bind(deltaKobo, userId)
     .run();
+}
+
+/**
+ * Saves (or clears, with null) a creator's contact number. Shown on the
+ * share text of every public quiz they create/have created — fetched live
+ * from the users table on each share, so an update here applies
+ * immediately to all of their existing quizzes with no per-quiz edits.
+ */
+export async function updateContactPhone(userId: string, contactPhone: string | null): Promise<void> {
+  const db = getDb();
+  await db.prepare('UPDATE users SET contact_phone = ? WHERE id = ?').bind(contactPhone, userId).run();
 }
 
 export async function updateEmailPreferences(

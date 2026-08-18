@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { featureFlagService, leaderboardService } from '@/lib/db';
+import { featureFlagService, leaderboardService, siteSettingsService } from '@/lib/db';
 
 interface RouteParams {
   params: Promise<{ quizId: string }>;
@@ -10,6 +10,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
   const enabled = await featureFlagService.isFeatureEnabled('leaderboard_per_quiz');
   if (!enabled) return NextResponse.json({ enabled: false, entries: [] });
 
-  const entries = await leaderboardService.getQuizLeaderboard(quizId);
+  const limit = await siteSettingsService.getLeaderboardSize();
+  const entries = await leaderboardService.getQuizLeaderboard(quizId, limit);
   return NextResponse.json({ enabled: true, entries });
 }

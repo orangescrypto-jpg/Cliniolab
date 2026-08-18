@@ -442,7 +442,7 @@ export default function BulkUploadPage() {
       <div className="mx-auto max-w-xl px-6 py-24 text-center">
         <h1 className="font-display text-2xl font-semibold text-ink-800">Login required</h1>
         <p className="mt-2 text-ink-500">You need an account to upload quizzes.</p>
-        <Button className="mt-6" onClick={() => router.push('/login')}>Log in</Button>
+        <Button className="mt-6" onClick={() => router.push('/login?next=/quizzes/bulk-upload')}>Log in</Button>
       </div>
     );
   }

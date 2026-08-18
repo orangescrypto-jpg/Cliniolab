@@ -4,6 +4,7 @@ import { useState } from 'react';
 
 export interface ShareStats {
   creatorName?: string | null;
+  creatorContact?: string | null;
   mode?: 'study' | 'quiz' | 'exam';
   priceKobo?: number | null;
   pricing?: 'free' | 'paid';
@@ -11,12 +12,23 @@ export interface ShareStats {
   questionCount?: number;
   retakePolicy?: 'unlimited' | 'single' | 'daily_limit' | 'cooldown';
   retakeLimit?: number | null;
+  difficulty?: 'easy' | 'medium' | 'hard';
+  categoryName?: string;
+  subcategoryName?: string;
+  attemptCount?: number;
+  averageScorePercent?: number | null;
 }
 
 const MODE_LABELS: Record<NonNullable<ShareStats['mode']>, string> = {
   study: 'Study Mode',
   quiz: 'Quiz Mode',
   exam: 'CBT (Computer-Based Test) Mode',
+};
+
+const DIFFICULTY_LABELS: Record<NonNullable<ShareStats['difficulty']>, string> = {
+  easy: 'Easy',
+  medium: 'Medium',
+  hard: 'Hard',
 };
 
 function formatNaira(kobo: number): string {
@@ -53,6 +65,15 @@ function buildShareText(title: string, url: string, stats?: ShareStats): string 
   if (stats.mode) {
     lines.push(`Available in: ${MODE_LABELS[stats.mode]}`);
   }
+
+  const category = [stats.categoryName, stats.subcategoryName].filter(Boolean).join(' > ');
+  if (category) {
+    lines.push(`Category: ${category}`);
+  }
+  if (stats.difficulty) {
+    lines.push(`Difficulty: ${DIFFICULTY_LABELS[stats.difficulty]}`);
+  }
+
   lines.push('');
   lines.push(
     `Price: ${stats.pricing === 'paid' && stats.priceKobo ? formatNaira(stats.priceKobo) : 'Free'}`
@@ -62,6 +83,23 @@ function buildShareText(title: string, url: string, stats?: ShareStats): string 
     lines.push(`Questions: ${stats.questionCount}`);
   }
   lines.push(`Trials allowed: ${formatTrials(stats)}`);
+
+  // Only show attempt stats once a meaningful number of people have taken
+  // it -- "0 attempts" or a single early attempt reads as a red flag
+  // rather than social proof, so we hold off until there's something to show.
+  if (typeof stats.attemptCount === 'number' && stats.attemptCount >= 5) {
+    const avg =
+      typeof stats.averageScorePercent === 'number' ? ` · Avg score ${Math.round(stats.averageScorePercent)}%` : '';
+    lines.push(`${stats.attemptCount.toLocaleString('en-NG')} attempts${avg}`);
+  }
+
+  lines.push('');
+  lines.push('an e-test at Cliniolab');
+
+  if (stats.creatorContact) {
+    lines.push(`For inquiries or assistance, contact: ${stats.creatorContact}`);
+  }
+
   lines.push('');
   lines.push(url);
 

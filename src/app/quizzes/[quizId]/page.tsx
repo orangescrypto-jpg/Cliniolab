@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { quizService } from '@/lib/db';
+import { getQuizzesWithStatsByIds } from '@/lib/db/services/quizService';
 import { QuizDetailClient } from './QuizDetailClient';
 
 const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || 'https://cliniolab.com';
@@ -14,13 +15,35 @@ const MODE_LABELS: Record<string, string> = {
   exam: 'CBT Exam',
 };
 
+const RETAKE_LABELS: Record<string, (limit: number | null) => string> = {
+  unlimited: () => 'Unlimited attempts',
+  single: () => '1 attempt',
+  daily_limit: (limit) => `${limit ?? 1} attempt${limit === 1 ? '' : 's'} per day`,
+  cooldown: (limit) => `${limit ?? 1} attempt${limit === 1 ? '' : 's'} (cooldown applies)`,
+};
+
+function formatPrice(pricing: 'free' | 'paid', priceKobo: number | null): string {
+  if (pricing === 'free' || !priceKobo) return 'Free';
+  return `₦${(priceKobo / 100).toLocaleString('en-NG')}`;
+}
+
+function formatTime(seconds: number | null): string | null {
+  if (!seconds) return null;
+  const totalMinutes = Math.round(seconds / 60);
+  const hrs = Math.floor(totalMinutes / 60);
+  const mins = totalMinutes % 60;
+  if (hrs > 0) return `${hrs}h${mins > 0 ? ` ${mins}m` : ''}`;
+  return `${mins} min`;
+}
+
 /**
  * Per-quiz metadata, generated server-side. This is the highest-value SEO
  * surface on the whole platform - people searching a specific clinical
  * topic ("pharmacology dosage calculation quiz", "UBTH nursing entrance
- * past questions") land on one quiz page, not the homepage. Without this,
- * every quiz page shared the same generic site title/description even
- * though each one is now in the sitemap.
+ * past questions") land on one quiz page, not the homepage. The OG
+ * description also doubles as the "shareable preview card" info
+ * (price, time, question count, attempts) so links unfurl richly in
+ * WhatsApp/Telegram/Twitter, similar to QuizzerWeb's quiz preview cards.
  */
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
   const { quizId } = await params;
@@ -34,9 +57,30 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 
   const modeLabel = MODE_LABELS[quiz.mode] ?? 'Quiz';
   const title = `${quiz.title} — ${modeLabel} | Cliniolab`;
-  const description =
-    quiz.description?.slice(0, 160) ??
-    `Practice ${quiz.title} on Cliniolab, a nursing and clinical exam practice platform.`;
+
+  // Pull stats (question count, creator, price, retake policy) the same
+  // way the bookmarks page does, so the OG card matches what's shown
+  // on-page rather than only the base quiz description.
+  const [withStats] = await getQuizzesWithStatsByIds([quiz.id]).catch(() => []);
+
+  const price = formatPrice(quiz.pricing, quiz.priceKobo);
+  const time = formatTime(quiz.timeLimitSeconds);
+  const attempts = RETAKE_LABELS[quiz.retakePolicy]?.(quiz.retakeLimit) ?? 'See quiz for attempt limit';
+
+  const statsLine = [
+    `By ${withStats?.creatorName ?? 'Cliniolab'}`,
+    modeLabel,
+    `Price: ${price}`,
+    time ? `Time: ${time}` : null,
+    withStats ? `${withStats.questionCount} question${withStats.questionCount === 1 ? '' : 's'}` : null,
+    attempts,
+  ]
+    .filter(Boolean)
+    .join(' · ');
+
+  const description = quiz.description?.slice(0, 140)
+    ? `${quiz.description.slice(0, 140)} — ${statsLine}`
+    : `${statsLine}. Practice ${quiz.title} on Cliniolab, a nursing and clinical exam practice platform.`;
 
   return {
     title,
@@ -61,5 +105,17 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 
 export default async function QuizDetailPage({ params }: PageProps) {
   const { quizId } = await params;
-  return <QuizDetailClient quizId={quizId} />;
+
+  // Public preview stats (price, time, question count, attempts, creator)
+  // fetched server-side so they're visible on first paint, matching the
+  // QuizzerWeb-style summary card, and available even before the
+  // login-gated client fetch resolves. Only fetched for public quizzes -
+  // private ones keep their existing gated flow untouched.
+  const quiz = await quizService.getQuizById(quizId).catch(() => null);
+  const previewStats =
+    quiz && quiz.visibility === 'public'
+      ? (await getQuizzesWithStatsByIds([quizId]).catch(() => []))[0] ?? null
+      : null;
+
+  return <QuizDetailClient quizId={quizId} previewStats={previewStats} />;
 }

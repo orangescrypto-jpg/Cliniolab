@@ -240,7 +240,12 @@ export function QuizDetailClient({
           )}
 
           <p className="mt-6 text-ink-500">You need an account to attempt this quiz.</p>
-          <Button className="mt-3" onClick={() => (window.location.href = '/login')}>
+          <Button
+            className="mt-3"
+            onClick={() =>
+              (window.location.href = `/login?next=${encodeURIComponent(window.location.pathname)}`)
+            }
+          >
             Log in
           </Button>
         </Card>

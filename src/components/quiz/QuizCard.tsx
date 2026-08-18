@@ -50,6 +50,16 @@ export function QuizCard({ quiz }: { quiz: QuizWithStats }) {
             <ShareButton
               url={typeof window !== 'undefined' ? `${window.location.origin}/quizzes/${quiz.id}` : ''}
               title={quiz.title}
+              stats={{
+                creatorName: quiz.creatorName,
+                mode: quiz.mode,
+                pricing: quiz.pricing,
+                priceKobo: quiz.priceKobo,
+                timeLimitSeconds: quiz.timeLimitSeconds,
+                questionCount: quiz.questionCount,
+                retakePolicy: quiz.retakePolicy,
+                retakeLimit: quiz.retakeLimit,
+              }}
             />
           </div>
         )}

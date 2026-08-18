@@ -40,7 +40,12 @@ export default function EditQuizPage() {
       <div className="mx-auto max-w-xl px-6 py-24 text-center">
         <h1 className="font-display text-2xl font-semibold text-ink-800">Login required</h1>
         <p className="mt-2 text-ink-500">You need an account to edit a quiz.</p>
-        <Button className="mt-6" onClick={() => router.push('/login')}>Log in</Button>
+        <Button
+          className="mt-6"
+          onClick={() => router.push(`/login?next=${encodeURIComponent(`/quizzes/${params.quizId}/edit`)}`)}
+        >
+          Log in
+        </Button>
       </div>
     );
   }

@@ -14,6 +14,7 @@ interface StudyModeRunnerProps {
 }
 
 type ResultFilter = 'all' | 'unanswered' | 'incorrect' | 'skipped';
+type SummaryFilter = 'all' | 'correct' | 'incorrect';
 
 /**
  * What gets cached in localStorage for a resumable Study Mode session.
@@ -107,6 +108,13 @@ export function StudyModeRunner({ quiz, questions: rawQuestions }: StudyModeRunn
     initialDraft?.confidence ?? {}
   );
   const [resultFilter, setResultFilter] = useState<ResultFilter>(initialDraft?.resultFilter ?? 'all');
+  // Whether the "Finish studying" summary screen is showing. Distinct from
+  // navigating past the last question — the summary is a deliberate final
+  // step, shown in place instead of redirecting straight back to the quiz
+  // page, so a study session ends with the same kind of results/missed-
+  // answers breakdown Quiz/Exam mode already gives.
+  const [showSummary, setShowSummary] = useState(false);
+  const [summaryFilter, setSummaryFilter] = useState<SummaryFilter>('all');
 
   const question = questions[current];
   const answeredIds = useMemo(() => new Set(Object.keys(answers)), [answers]);
@@ -210,16 +218,139 @@ export function StudyModeRunner({ quiz, questions: rawQuestions }: StudyModeRunn
 
   function goNext() {
     if (isLast) {
-      clearDraft(DRAFT_NAMESPACE, quiz.id);
-      router.push(`/quizzes/${quiz.id}`);
+      setShowSummary(true);
       return;
     }
     goToQuestion(current + 1);
   }
 
+  function finishStudying() {
+    clearDraft(DRAFT_NAMESPACE, quiz.id);
+    router.push(`/quizzes/${quiz.id}`);
+  }
+
   function goPrevious() {
     if (current === 0) return;
     goToQuestion(current - 1);
+  }
+
+  const answeredCount = questions.filter((q) => answeredIds.has(q.id)).length;
+  const correctCount = questions.filter(
+    (q) =>
+      answeredIds.has(q.id) &&
+      answers[q.id].trim().toLowerCase() === q.correctAnswer.trim().toLowerCase()
+  ).length;
+  const percentage = answeredCount > 0 ? (correctCount / answeredCount) * 100 : 0;
+
+  function resolveOptionText(q: QuizQuestion, value: string | undefined): string | null {
+    if (value === undefined) return null;
+    if (q.type === 'mcq') {
+      return q.options?.find((o) => o.id === value)?.text ?? value;
+    }
+    return value;
+  }
+
+  if (showSummary) {
+    const summaryRows = questions
+      .map((q, i) => ({ q, i }))
+      .filter(({ q }) => {
+        if (summaryFilter === 'all') return true;
+        const isRight =
+          answeredIds.has(q.id) && answers[q.id] !== undefined &&
+          answers[q.id].trim().toLowerCase() === q.correctAnswer.trim().toLowerCase();
+        return summaryFilter === 'correct' ? isRight : !isRight;
+      });
+
+    return (
+      <div className="mx-auto max-w-2xl px-6 py-16">
+        <Card className="p-8 text-center">
+          <p className="font-mono text-xs uppercase tracking-widest text-pulse-600">Study Session Results</p>
+          <p className="mt-4 font-display text-5xl font-semibold text-ink-800">
+            {Math.round(percentage)}%
+          </p>
+          <p className="mt-2 text-ink-500">
+            {correctCount} / {answeredCount} answered correctly
+            {answeredCount < questions.length &&
+              ` · ${questions.length - answeredCount} question${questions.length - answeredCount === 1 ? '' : 's'} unanswered`}
+          </p>
+          <p className="mt-3 text-xs text-ink-400">
+            Study Mode isn&apos;t scored or saved to your dashboard — this is just a recap of this session.
+          </p>
+
+          <div className="mt-6 flex justify-center gap-2">
+            {(['all', 'correct', 'incorrect'] as const).map((f) => {
+              const count =
+                f === 'all'
+                  ? questions.length
+                  : questions.filter((q) => {
+                      const isRight =
+                        answeredIds.has(q.id) && answers[q.id] !== undefined &&
+                        answers[q.id].trim().toLowerCase() === q.correctAnswer.trim().toLowerCase();
+                      return f === 'correct' ? isRight : !isRight;
+                    }).length;
+              return (
+                <button
+                  key={f}
+                  type="button"
+                  onClick={() => setSummaryFilter(f)}
+                  className={`rounded-md border px-3 py-1.5 text-xs font-medium transition-colors ${
+                    summaryFilter === f
+                      ? 'border-pulse-400 bg-pulse-50 text-pulse-700'
+                      : 'border-ink-100 text-ink-500 hover:bg-ink-50'
+                  }`}
+                >
+                  {f === 'all' ? 'All' : f === 'correct' ? 'Correct' : 'Incorrect'} ({count})
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="mt-6 space-y-4 text-left">
+            {summaryRows.map(({ q, i }) => {
+              const wasAnswered = answeredIds.has(q.id);
+              const submittedText = resolveOptionText(q, answers[q.id]);
+              const isRight =
+                wasAnswered && answers[q.id].trim().toLowerCase() === q.correctAnswer.trim().toLowerCase();
+              return (
+                <div key={q.id} className="rounded-md border border-ink-100 bg-white p-4">
+                  <p className="text-sm font-medium text-ink-700">{i + 1}. {q.prompt}</p>
+                  <p className={`mt-1 text-sm ${!wasAnswered ? 'text-ink-400' : isRight ? 'text-pulse-600' : 'text-critical-600'}`}>
+                    {wasAnswered ? `Your answer: ${submittedText}` : skipped.has(q.id) ? 'Skipped' : 'Not answered'}
+                  </p>
+                  {!isRight && (
+                    <p className="mt-1 text-sm text-ink-600">
+                      Correct answer:{' '}
+                      {q.type === 'mcq'
+                        ? q.options?.find((o) => o.id === q.correctAnswer)?.text ?? q.correctAnswer
+                        : q.correctAnswer}
+                    </p>
+                  )}
+                  {q.explanation && (
+                    <p className="mt-2 whitespace-pre-line text-sm leading-relaxed text-ink-600">
+                      {q.explanation}
+                    </p>
+                  )}
+                </div>
+              );
+            })}
+            {summaryRows.length === 0 && (
+              <p className="py-6 text-center text-sm text-ink-400">
+                No {summaryFilter} questions.
+              </p>
+            )}
+          </div>
+
+          <div className="mt-8 flex flex-wrap justify-center gap-2">
+            {answeredCount < questions.length && (
+              <Button variant="secondary" onClick={() => setShowSummary(false)}>
+                Back to studying
+              </Button>
+            )}
+            <Button onClick={finishStudying}>Done</Button>
+          </div>
+        </Card>
+      </div>
+    );
   }
 
   return (

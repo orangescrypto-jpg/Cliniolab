@@ -2,6 +2,7 @@
 
 import { useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import * as XLSX from 'xlsx';
 import { useAuth } from '@/lib/auth/AuthProvider';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
@@ -74,44 +75,52 @@ function csvEscape(value: string): string {
   return value;
 }
 
-/** Minimal RFC-4180-ish CSV line splitter that handles quoted commas. */
-function parseCsv(text: string): string[][] {
-  const rows: string[][] = [];
-  let row: string[] = [];
-  let field = '';
-  let inQuotes = false;
+/**
+ * Reads any supported spreadsheet (xlsx, xls, ods, csv) with SheetJS and
+ * returns the first sheet as a plain grid of strings — same shape the old
+ * CSV-only parser produced, so the rest of the pipeline doesn't change.
+ */
+async function parseSpreadsheet(file: File): Promise<string[][]> {
+  const buffer = await file.arrayBuffer();
+  const workbook = XLSX.read(buffer, { type: 'array' });
+  const firstSheetName = workbook.SheetNames[0];
+  const sheet = workbook.Sheets[firstSheetName];
+  const grid = XLSX.utils.sheet_to_json<string[]>(sheet, {
+    header: 1,
+    raw: false,
+    defval: '',
+  });
+  return grid
+    .map((row) => row.map((cell) => (cell ?? '').toString()))
+    .filter((r) => r.some((cell) => cell.trim() !== ''));
+}
 
-  for (let i = 0; i < text.length; i++) {
-    const char = text[i];
-    if (inQuotes) {
-      if (char === '"' && text[i + 1] === '"') {
-        field += '"';
-        i++;
-      } else if (char === '"') {
-        inQuotes = false;
-      } else {
-        field += char;
-      }
-    } else if (char === '"') {
-      inQuotes = true;
-    } else if (char === ',') {
-      row.push(field);
-      field = '';
-    } else if (char === '\n' || char === '\r') {
-      if (char === '\r' && text[i + 1] === '\n') i++;
-      row.push(field);
-      rows.push(row);
-      row = [];
-      field = '';
-    } else {
-      field += char;
+/**
+ * Checks the header row against the expected columns and returns
+ * human-readable warnings for anything missing, misspelled, or extra —
+ * this is what lets a quiz maker see exactly what to fix instead of
+ * silently getting empty/skipped rows.
+ */
+function validateHeaders(header: string[]): string[] {
+  const warnings: string[] = [];
+  const normalized = header.map((h) => h.trim().toLowerCase());
+  const required = ['quiz_title', 'subcategory', 'question_type', 'prompt', 'correct_answer'];
+
+  for (const col of required) {
+    if (!normalized.includes(col)) {
+      warnings.push(`Missing required column "${col}". Add it as a header in row 1.`);
     }
   }
-  if (field.length > 0 || row.length > 0) {
-    row.push(field);
-    rows.push(row);
+
+  const known = new Set<string>(CSV_HEADERS);
+  const unknown = header.filter((h) => h.trim() && !known.has(h.trim().toLowerCase()));
+  if (unknown.length > 0) {
+    warnings.push(
+      `Unrecognized column${unknown.length > 1 ? 's' : ''}: ${unknown.join(', ')}. Check for typos — these will be ignored.`
+    );
   }
-  return rows.filter((r) => r.some((cell) => cell.trim() !== ''));
+
+  return warnings;
 }
 
 function buildQuestionInput(cols: Record<string, string>): {
@@ -152,7 +161,7 @@ function rowsToQuizInputs(
 ): { quizzes: QuizInput[]; warnings: string[] } {
   const [header, ...body] = rows;
   const idx = (name: string) => header.findIndex((h) => h.trim().toLowerCase() === name);
-  const warnings: string[] = [];
+  const warnings: string[] = validateHeaders(header);
 
   const colIndex: Record<string, number> = {};
   for (const h of CSV_HEADERS) colIndex[h] = idx(h);
@@ -248,18 +257,24 @@ export default function BulkUploadPage() {
     setSubmittedCount(null);
     setFileName(file.name);
     const lookup = await ensureSubcategoriesLoaded();
-    const text = await file.text();
+    const lowerName = file.name.toLowerCase();
 
     try {
-      if (file.name.toLowerCase().endsWith('.json')) {
+      if (lowerName.endsWith('.json')) {
+        const text = await file.text();
         const data = JSON.parse(text);
         const quizzes: QuizInput[] = Array.isArray(data) ? data : data.quizzes;
         if (!Array.isArray(quizzes)) throw new Error('JSON must be an array or { "quizzes": [...] }');
         setParsedQuizzes(quizzes);
         setWarnings([]);
       } else {
-        const rows = parseCsv(text);
-        if (rows.length < 2) throw new Error('CSV has no data rows.');
+        // Handles .xlsx, .xls, .ods, and .csv — all read the same way via SheetJS.
+        const rows = await parseSpreadsheet(file);
+        if (rows.length < 2) {
+          throw new Error(
+            'No data rows found. Row 1 must be the column headers, with your questions starting on row 2.'
+          );
+        }
         const { quizzes, warnings: w } = rowsToQuizInputs(rows, lookup);
         setParsedQuizzes(quizzes);
         setWarnings(w);
@@ -270,14 +285,46 @@ export default function BulkUploadPage() {
     }
   }
 
+  /** Builds the template as a real .xlsx workbook — easiest format for quiz makers to edit. */
   function downloadTemplate() {
-    const blob = new Blob([CSV_TEMPLATE], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'cliniolab-bulk-quiz-template.csv';
-    a.click();
-    URL.revokeObjectURL(url);
+    const rows = CSV_TEMPLATE.split('\n').map((line) => parseTemplateLine(line));
+    const worksheet = XLSX.utils.aoa_to_sheet(rows);
+    worksheet['!cols'] = CSV_HEADERS.map((h) =>
+      h === 'prompt' || h === 'explanation' ? { wch: 40 } : { wch: 16 }
+    );
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Quiz Upload');
+    XLSX.writeFile(workbook, 'cliniolab-bulk-quiz-template.xlsx');
+  }
+
+  function parseTemplateLine(line: string): string[] {
+    // The CSV_TEMPLATE constant is already comma-escaped; reuse the same
+    // quoted-comma-aware split so the xlsx template gets clean cells.
+    const result: string[] = [];
+    let field = '';
+    let inQuotes = false;
+    for (let i = 0; i < line.length; i++) {
+      const char = line[i];
+      if (inQuotes) {
+        if (char === '"' && line[i + 1] === '"') {
+          field += '"';
+          i++;
+        } else if (char === '"') {
+          inQuotes = false;
+        } else {
+          field += char;
+        }
+      } else if (char === '"') {
+        inQuotes = true;
+      } else if (char === ',') {
+        result.push(field);
+        field = '';
+      } else {
+        field += char;
+      }
+    }
+    result.push(field);
+    return result;
   }
 
   async function handleSubmit() {
@@ -320,8 +367,8 @@ export default function BulkUploadPage() {
     <div className="mx-auto max-w-3xl px-6 py-16">
       <h1 className="font-display text-3xl font-semibold text-ink-800">Upload many quizzes</h1>
       <p className="mt-2 text-ink-500">
-        Create several quizzes at once from a spreadsheet or JSON file, instead of building
-        them one by one.
+        Create several quizzes at once from a spreadsheet, instead of building them one by
+        one. Download the template, fill it in, upload it — that's it.
       </p>
 
       {/* Guided walkthrough */}
@@ -329,12 +376,27 @@ export default function BulkUploadPage() {
         <h2 className="font-display text-lg font-semibold text-ink-800">How it works</h2>
         <ol className="ml-4 list-decimal space-y-2 text-sm text-ink-600">
           <li>
-            Download the CSV template below and open it in Excel, Google Sheets, or Numbers.
+            Download the template below and open it in Excel, Google Sheets, Numbers, or any
+            spreadsheet app. Row 1 (the headers) must stay exactly as it is — don't rename,
+            reorder, or delete columns.
           </li>
           <li>
-            Each row is one <strong>question</strong>. Give every question for the same quiz the
-            same <code className="rounded bg-ink-50 px-1">quiz_title</code> — that's how rows get
-            grouped into one quiz.
+            Each row is one <strong>question</strong>. Start your questions on row 2. Give every
+            question for the same quiz the exact same{' '}
+            <code className="rounded bg-ink-50 px-1">quiz_title</code> (spelled identically,
+            including capitalization) — that's how rows get grouped into one quiz.
+          </li>
+          <li>
+            <code className="rounded bg-ink-50 px-1">question_type</code> must be one of{' '}
+            <strong>mcq</strong>, <strong>true_false</strong>, or <strong>fill_blank</strong>.
+            For <strong>mcq</strong>, fill in <code className="rounded bg-ink-50 px-1">option_1</code>
+            {' '}through <code className="rounded bg-ink-50 px-1">option_4</code> and make{' '}
+            <code className="rounded bg-ink-50 px-1">correct_answer</code> match one of them{' '}
+            <em>exactly</em>, including punctuation and spacing. For{' '}
+            <strong>true_false</strong>, leave the option columns blank and set{' '}
+            <code className="rounded bg-ink-50 px-1">correct_answer</code> to "True" or "False".
+            For <strong>fill_blank</strong>, leave the option columns blank and put the accepted
+            text answer in <code className="rounded bg-ink-50 px-1">correct_answer</code>.
           </li>
           <li>
             Set <code className="rounded bg-ink-50 px-1">mode</code> per quiz to{' '}
@@ -351,11 +413,21 @@ export default function BulkUploadPage() {
             category name from Cliniolab (e.g. "Cardiology", "Exam Prep"). Rows with an unknown
             subcategory are skipped and listed as a warning before you upload.
           </li>
-          <li>Save as CSV, come back here, and upload the file. Review the preview, then publish.</li>
+          <li>
+            <code className="rounded bg-ink-50 px-1">difficulty</code> is optional —{' '}
+            <strong>easy</strong>, <strong>medium</strong>, or <strong>hard</strong>. Leave it
+            blank and it defaults to medium.{' '}
+            <code className="rounded bg-ink-50 px-1">explanation</code> is optional too, and
+            shown to the learner after they answer.
+          </li>
+          <li>
+            Save the file and upload it below. You'll get a preview with any problem rows
+            called out before anything is published — nothing goes live until you hit Publish.
+          </li>
         </ol>
         <div className="flex flex-wrap gap-3 pt-2">
           <Button variant="secondary" onClick={downloadTemplate}>
-            Download CSV template
+            Download template (.xlsx)
           </Button>
           <Button variant="ghost" onClick={() => fileInputRef.current?.click()}>
             Choose file to upload
@@ -363,7 +435,7 @@ export default function BulkUploadPage() {
           <input
             ref={fileInputRef}
             type="file"
-            accept=".csv,.json,text/csv,application/json"
+            accept=".xlsx,.xls,.ods,.csv,.json,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv,application/json"
             className="hidden"
             onChange={(e) => {
               const file = e.target.files?.[0];
@@ -372,10 +444,10 @@ export default function BulkUploadPage() {
           />
         </div>
         <p className="text-xs text-ink-400">
-          Accepts <strong>.csv</strong> (recommended, spreadsheet-friendly) or{' '}
-          <strong>.json</strong> (an array of quiz objects, or{' '}
-          <code className="rounded bg-ink-50 px-1">{'{ "quizzes": [...] }'}</code>, for anyone
-          exporting from another tool).
+          Accepts <strong>.xlsx</strong>, <strong>.xls</strong>, <strong>.ods</strong>, and{' '}
+          <strong>.csv</strong> spreadsheets, or <strong>.json</strong> (an array of quiz
+          objects, or <code className="rounded bg-ink-50 px-1">{'{ "quizzes": [...] }'}</code>,
+          for anyone exporting from another tool).
         </p>
       </Card>
 

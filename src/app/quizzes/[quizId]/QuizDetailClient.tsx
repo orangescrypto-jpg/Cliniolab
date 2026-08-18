@@ -278,7 +278,20 @@ export function QuizDetailClient({
             )}
           </div>
           {quiz && quiz.visibility === 'public' && typeof window !== 'undefined' && (
-            <ShareButton url={window.location.href} title={quiz.title} />
+            <ShareButton
+              url={window.location.href}
+              title={quiz.title}
+              stats={{
+                creatorName: quiz.creatorName,
+                mode: quiz.mode,
+                pricing: quiz.pricing,
+                priceKobo: quiz.priceKobo,
+                timeLimitSeconds: quiz.timeLimitSeconds,
+                questionCount: quiz.questionCount,
+                retakePolicy: quiz.retakePolicy,
+                retakeLimit: quiz.retakeLimit,
+              }}
+            />
           )}
         </div>
         {quiz?.description && <p className="mt-2 text-ink-500">{quiz.description}</p>}

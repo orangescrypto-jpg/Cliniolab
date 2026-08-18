@@ -277,19 +277,25 @@ export function QuizDetailClient({
               </span>
             )}
           </div>
-          {quiz && quiz.visibility === 'public' && typeof window !== 'undefined' && (
+          {previewStats && previewStats.visibility === 'public' && typeof window !== 'undefined' && (
             <ShareButton
               url={window.location.href}
-              title={quiz.title}
+              title={previewStats.title}
               stats={{
-                creatorName: quiz.creatorName,
-                mode: quiz.mode,
-                pricing: quiz.pricing,
-                priceKobo: quiz.priceKobo,
-                timeLimitSeconds: quiz.timeLimitSeconds,
-                questionCount: quiz.questionCount,
-                retakePolicy: quiz.retakePolicy,
-                retakeLimit: quiz.retakeLimit,
+                creatorName: previewStats.creatorName,
+                creatorContact: previewStats.creatorContact,
+                mode: previewStats.mode,
+                pricing: previewStats.pricing,
+                priceKobo: previewStats.priceKobo,
+                timeLimitSeconds: previewStats.timeLimitSeconds,
+                questionCount: previewStats.questionCount,
+                retakePolicy: previewStats.retakePolicy,
+                retakeLimit: previewStats.retakeLimit,
+                difficulty: previewStats.difficulty,
+                categoryName: previewStats.categoryName,
+                subcategoryName: previewStats.subcategoryName,
+                attemptCount: previewStats.attemptCount,
+                averageScorePercent: previewStats.averageScorePercent,
               }}
             />
           )}

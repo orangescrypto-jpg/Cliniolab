@@ -36,6 +36,7 @@ interface AttemptDraft {
 }
 
 const DRAFT_NAMESPACE = 'attempt';
+const RESULT_NAMESPACE = 'attempt-result';
 
 /** Fisher-Yates shuffle, returns a new array without mutating the input. */
 function shuffleArray<T>(arr: T[]): T[] {
@@ -57,6 +58,15 @@ export function QuizRunner({ quiz, questions: rawQuestions, submitEndpoint }: Qu
 
   const initialDraft = useRef<AttemptDraft | null>(
     draftsEnabled && typeof window !== 'undefined' ? loadDraft<AttemptDraft>(DRAFT_NAMESPACE, quiz.id) : null
+  ).current;
+
+  // If the user already submitted and then reloaded (or came back later)
+  // before navigating away from the results screen, restore the cached
+  // result instead of dropping them into a brand-new attempt. Same
+  // draftsEnabled gate as the in-progress draft above -- anti-cheat exams
+  // never cache anything client-side.
+  const initialResult = useRef<AttemptResult | null>(
+    draftsEnabled && typeof window !== 'undefined' ? loadDraft<AttemptResult>(RESULT_NAMESPACE, quiz.id) : null
   ).current;
 
   // Shuffle once per attempt (on mount), not on every render, so the order
@@ -90,7 +100,7 @@ export function QuizRunner({ quiz, questions: rawQuestions, submitEndpoint }: Qu
     initialDraft?.remainingSeconds ?? quiz.timeLimitSeconds ?? 0
   );
   const [submitting, setSubmitting] = useState(false);
-  const [result, setResult] = useState<AttemptResult | null>(null);
+  const [result, setResult] = useState<AttemptResult | null>(initialResult ?? null);
   const [error, setError] = useState<string | null>(null);
   const [showSubmitConfirm, setShowSubmitConfirm] = useState(false);
   const [resultFilter, setResultFilter] = useState<'all' | 'correct' | 'incorrect'>('all');
@@ -263,7 +273,13 @@ export function QuizRunner({ quiz, questions: rawQuestions, submitEndpoint }: Qu
         return;
       }
       setResult(data.result);
-      if (draftsEnabled) clearDraft(DRAFT_NAMESPACE, quiz.id);
+      if (draftsEnabled) {
+        clearDraft(DRAFT_NAMESPACE, quiz.id);
+        // Cache the result itself now, so a reload of this results screen
+        // restores it instead of starting a fresh attempt. Cleared only
+        // once the user actually navigates away (see leaveResults below).
+        saveDraft(RESULT_NAMESPACE, quiz.id, data.result);
+      }
     } catch {
       setError('Network error while submitting. Please try again.');
     } finally {
@@ -292,6 +308,14 @@ export function QuizRunner({ quiz, questions: rawQuestions, submitEndpoint }: Qu
     } finally {
       setFlaggingQuestionId(null);
     }
+  }
+
+  // Clears the cached results-screen state. Called when the user actually
+  // leaves this results screen for good (dashboard, or starting a fresh
+  // "retake missed" attempt) -- NOT on a plain reload, which is exactly
+  // the case this cache exists to survive.
+  function leaveResults() {
+    if (draftsEnabled) clearDraft(RESULT_NAMESPACE, quiz.id);
   }
 
   if (result) {
@@ -398,6 +422,7 @@ export function QuizRunner({ quiz, questions: rawQuestions, submitEndpoint }: Qu
               <Button
                 variant="secondary"
                 onClick={() => {
+                  leaveResults();
                   const url = new URL(window.location.href);
                   url.searchParams.set('retakeMissed', '1');
                   window.location.href = url.toString();
@@ -406,7 +431,12 @@ export function QuizRunner({ quiz, questions: rawQuestions, submitEndpoint }: Qu
                 Retake missed only
               </Button>
             )}
-            <Button onClick={() => router.push('/dashboard')}>
+            <Button
+              onClick={() => {
+                leaveResults();
+                router.push('/dashboard');
+              }}
+            >
               Go to dashboard
             </Button>
           </div>

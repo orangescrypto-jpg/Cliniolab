@@ -1,11 +1,12 @@
 'use client';
 
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import * as XLSX from 'xlsx';
 import { useAuth } from '@/lib/auth/AuthProvider';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
+import { clearDraft, loadDraft, saveDraft } from '@/lib/localDraft';
 import type { QuizInput, QuizMode, QuizDifficulty, QuestionType, QuestionOption } from '@/types';
 
 // ---------------------------------------------------------------------------
@@ -15,7 +16,7 @@ import type { QuizInput, QuizMode, QuizDifficulty, QuestionType, QuestionOption 
 // row for that quiz so the sheet stays easy to skim in a spreadsheet.
 //
 // Columns:
-//   quiz_title, subcategory, mode, difficulty, time_limit_minutes,
+//   quiz_title, category, subcategory, mode, difficulty, time_limit_minutes,
 //   question_type, prompt, option_1, option_2, option_3, option_4,
 //   correct_answer, explanation
 //
@@ -28,10 +29,15 @@ import type { QuizInput, QuizMode, QuizDifficulty, QuestionType, QuestionOption 
 // - For fill_blank: correct_answer is the accepted text answer; option
 //   columns are ignored.
 // - time_limit_minutes: leave blank for no timer. Required for exam mode.
+// - category: only needed if "subcategory" doesn't already exist on
+//   Cliniolab. When both are new, both get created together (see
+//   "Add new categories?" step during upload). Leave blank if
+//   "subcategory" already exists — the existing one is matched as before.
 // ---------------------------------------------------------------------------
 
 const CSV_HEADERS = [
   'quiz_title',
+  'category',
   'subcategory',
   'mode',
   'difficulty',
@@ -49,19 +55,19 @@ const CSV_HEADERS = [
 const CSV_TEMPLATE = [
   CSV_HEADERS.join(','),
   [
-    'Cardiac Basics', 'Cardiology', 'quiz', 'medium', '10',
+    'Cardiac Basics', 'Medicine', 'Cardiology', 'quiz', 'medium', '10',
     'mcq', 'Which chamber pumps blood to the lungs?',
     'Right atrium', 'Right ventricle', 'Left atrium', 'Left ventricle',
     'Right ventricle', 'The right ventricle pumps deoxygenated blood to the lungs.',
   ].map(csvEscape).join(','),
   [
-    'Cardiac Basics', 'Cardiology', 'quiz', 'medium', '10',
+    'Cardiac Basics', 'Medicine', 'Cardiology', 'quiz', 'medium', '10',
     'true_false', 'The mitral valve is on the right side of the heart.',
     '', '', '', '',
     'False', 'The mitral valve is on the left side, between atrium and ventricle.',
   ].map(csvEscape).join(','),
   [
-    'NCLEX Mock Exam A', 'Exam Prep', 'exam', 'hard', '30',
+    'NCLEX Mock Exam A', 'Nursing', 'Exam Prep', 'exam', 'hard', '30',
     'fill_blank', 'The normal adult resting heart rate range is ___ to ___ bpm.',
     '', '', '', '',
     '60-100', 'Normal sinus rhythm for adults is generally 60-100 beats per minute.',
@@ -80,6 +86,7 @@ const JSON_TEMPLATE = {
   quizzes: [
     {
       title: 'Cardiac Basics',
+      category: 'Medicine',
       subcategory: 'Cardiology',
       mode: 'quiz',
       difficulty: 'medium',
@@ -102,6 +109,7 @@ const JSON_TEMPLATE = {
     },
     {
       title: 'NCLEX Mock Exam A',
+      category: 'Nursing',
       subcategory: 'Exam Prep',
       mode: 'exam',
       difficulty: 'hard',
@@ -219,11 +227,22 @@ function buildQuestionInput(cols: Record<string, string>): {
   return { type, prompt, correctAnswer, explanation };
 }
 
-/** Groups flat CSV rows into per-quiz QuizInput objects, in first-seen order. */
+/**
+ * Groups flat CSV rows into per-quiz QuizInput objects, in first-seen
+ * order. Any quiz whose subcategory isn't in subcategoryLookup is held
+ * back (not built, not warned-and-dropped) and reported in
+ * `unresolvedSubcategories` instead, so the caller can offer to create
+ * those categories/subcategories and re-run this same grouping once
+ * they're resolved, rather than forcing a stop-fix-reupload cycle.
+ */
 function rowsToQuizInputs(
   rows: string[][],
   subcategoryLookup: Map<string, string>
-): { quizzes: QuizInput[]; warnings: string[] } {
+): {
+  quizzes: QuizInput[];
+  warnings: string[];
+  unresolvedSubcategories: { category: string; subcategory: string; quizTitles: string[] }[];
+} {
   const [header, ...body] = rows;
   const idx = (name: string) => header.findIndex((h) => h.trim().toLowerCase() === name);
   const warnings: string[] = validateHeaders(header);
@@ -249,11 +268,30 @@ function rowsToQuizInputs(
   });
 
   const quizzes: QuizInput[] = [];
+  // Keyed by "category\u0000subcategory" (case-insensitive) so the same
+  // pair mentioned across several quizzes is only reported once, with
+  // every affected quiz title listed together.
+  const unresolvedMap = new Map<string, { category: string; subcategory: string; quizTitles: string[] }>();
+
   for (const [title, { meta, rows: qRows }] of grouped) {
     const subcategoryName = meta.subcategory.trim();
     const subcategoryId = subcategoryLookup.get(subcategoryName.toLowerCase());
+
     if (!subcategoryId) {
-      warnings.push(`Quiz "${title}": subcategory "${subcategoryName}" not recognized, skipped.`);
+      const categoryName = meta.category.trim();
+      if (!categoryName) {
+        // No category given and the subcategory doesn't exist -- can't
+        // auto-create without a parent category, so this stays a hard
+        // skip, same as before.
+        warnings.push(
+          `Quiz "${title}": subcategory "${subcategoryName}" not recognized, and no "category" column value was given to create it under. Add a category name for this row, or use an existing subcategory. Skipped.`
+        );
+        continue;
+      }
+      const key = `${categoryName.toLowerCase()}\u0000${subcategoryName.toLowerCase()}`;
+      const entry = unresolvedMap.get(key);
+      if (entry) entry.quizTitles.push(title);
+      else unresolvedMap.set(key, { category: categoryName, subcategory: subcategoryName, quizTitles: [title] });
       continue;
     }
 
@@ -281,8 +319,17 @@ function rowsToQuizInputs(
     });
   }
 
-  return { quizzes, warnings };
+  return { quizzes, warnings, unresolvedSubcategories: Array.from(unresolvedMap.values()) };
 }
+
+
+/** Raw JSON upload shape: category/subcategory as names, resolved to a
+ *  subcategoryId the same way CSV rows are, before reaching QuizInput. */
+type JsonQuizDraft = Omit<QuizInput, 'subcategoryId'> & {
+  category?: string;
+  subcategory: string;
+  subcategoryId?: string;
+};
 
 export default function BulkUploadPage() {
   const router = useRouter();
@@ -298,14 +345,32 @@ export default function BulkUploadPage() {
   const [submittedCount, setSubmittedCount] = useState<number | null>(null);
   const [templateFormat, setTemplateFormat] = useState<TemplateFormat>('xlsx');
 
+  // Held between "we found unrecognized subcategories" and the user
+  // deciding whether to create them, so we can re-run grouping afterward
+  // without asking them to re-select/re-upload the file.
+  const [pendingRows, setPendingRows] = useState<string[][] | null>(null);
+  const [pendingJsonDrafts, setPendingJsonDrafts] = useState<JsonQuizDraft[] | null>(null);
+  const [unresolvedSubcategories, setUnresolvedSubcategories] = useState<
+    { category: string; subcategory: string; quizTitles: string[] }[]
+  >([]);
+  const [creatingSubcategories, setCreatingSubcategories] = useState(false);
+
+  // Resumable draft of the parsed-but-not-yet-published preview, so
+  // closing the tab or refreshing after a big upload doesn't force
+  // re-picking the file and re-parsing from scratch. Mirrors the same
+  // save/load/clear pattern QuizRunner and StudyModeRunner use for
+  // in-progress attempts, just namespaced for this page instead of a
+  // specific quiz id.
+  const PREVIEW_DRAFT_NAMESPACE = 'bulk-upload-preview';
+  const PREVIEW_DRAFT_ID = 'current';
+
   const subcategoryLookup = useMemo(() => {
     const map = new Map<string, string>();
     for (const s of subcategoryOptions) map.set(s.name.toLowerCase(), s.id);
     return map;
   }, [subcategoryOptions]);
 
-  async function ensureSubcategoriesLoaded() {
-    if (subcategoryOptions.length > 0) return subcategoryLookup;
+  async function loadSubcategories(): Promise<Map<string, string>> {
     const res = await fetch('/api/categories');
     const data = await res.json();
     const options = (data.subcategories ?? []).map((s: { id: string; name: string }) => ({
@@ -318,10 +383,56 @@ export default function BulkUploadPage() {
     return map;
   }
 
+  async function ensureSubcategoriesLoaded() {
+    if (subcategoryOptions.length > 0) return subcategoryLookup;
+    return loadSubcategories();
+  }
+
+  // Restore a preview left in progress from an earlier visit (e.g. the tab
+  // was closed before hitting Publish). Runs once on mount.
+  const restoredDraft = useRef(false);
+  if (!restoredDraft.current && typeof window !== 'undefined') {
+    restoredDraft.current = true;
+    const draft = loadDraft<{
+      fileName: string;
+      parsedQuizzes: QuizInput[];
+      warnings: string[];
+    }>(PREVIEW_DRAFT_NAMESPACE, PREVIEW_DRAFT_ID);
+    if (draft && draft.parsedQuizzes.length > 0) {
+      // Deferred to a microtask so this doesn't try to setState during
+      // the initial render pass.
+      queueMicrotask(() => {
+        setFileName(draft.fileName);
+        setParsedQuizzes(draft.parsedQuizzes);
+        setWarnings(draft.warnings);
+      });
+    }
+  }
+
+  // Autosave the preview as soon as there's something worth protecting.
+  // Cleared on successful publish or explicit cancel (see handleSubmit /
+  // the Cancel button below) — never on a plain reload, which is exactly
+  // the case this exists to survive.
+  useEffect(() => {
+    if (parsedQuizzes.length === 0) {
+      clearDraft(PREVIEW_DRAFT_NAMESPACE, PREVIEW_DRAFT_ID);
+      return;
+    }
+    saveDraft(PREVIEW_DRAFT_NAMESPACE, PREVIEW_DRAFT_ID, { fileName, parsedQuizzes, warnings });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fileName, parsedQuizzes, warnings]);
+
+  function clearPreviewDraft() {
+    clearDraft(PREVIEW_DRAFT_NAMESPACE, PREVIEW_DRAFT_ID);
+  }
+
   async function handleFile(file: File) {
     setSubmitError(null);
     setSubmittedCount(null);
     setFileName(file.name);
+    setUnresolvedSubcategories([]);
+    setPendingRows(null);
+    setPendingJsonDrafts(null);
     const lookup = await ensureSubcategoriesLoaded();
     const lowerName = file.name.toLowerCase();
 
@@ -329,10 +440,9 @@ export default function BulkUploadPage() {
       if (lowerName.endsWith('.json')) {
         const text = await file.text();
         const data = JSON.parse(text);
-        const quizzes: QuizInput[] = Array.isArray(data) ? data : data.quizzes;
-        if (!Array.isArray(quizzes)) throw new Error('JSON must be an array or { "quizzes": [...] }');
-        setParsedQuizzes(quizzes);
-        setWarnings([]);
+        const drafts: JsonQuizDraft[] = Array.isArray(data) ? data : data.quizzes;
+        if (!Array.isArray(drafts)) throw new Error('JSON must be an array or { "quizzes": [...] }');
+        applyJsonDrafts(drafts, lookup);
       } else {
         // Handles .xlsx, .xls, .ods, and .csv — all read the same way via SheetJS.
         const rows = await parseSpreadsheet(file);
@@ -341,13 +451,118 @@ export default function BulkUploadPage() {
             'No data rows found. Row 1 must be the column headers, with your questions starting on row 2.'
           );
         }
-        const { quizzes, warnings: w } = rowsToQuizInputs(rows, lookup);
-        setParsedQuizzes(quizzes);
-        setWarnings(w);
+        applyRows(rows, lookup);
       }
     } catch (err) {
       setParsedQuizzes([]);
       setSubmitError(err instanceof Error ? err.message : 'Could not parse file.');
+    }
+  }
+
+  /** Runs CSV/XLSX rows through the grouping logic and updates state, holding the raw rows onto pendingRows if anything needs a category/subcategory to be created first. */
+  function applyRows(rows: string[][], lookup: Map<string, string>) {
+    const { quizzes, warnings: w, unresolvedSubcategories: unresolved } = rowsToQuizInputs(rows, lookup);
+    setParsedQuizzes(quizzes);
+    setWarnings(w);
+    if (unresolved.length > 0) {
+      setPendingRows(rows);
+      setUnresolvedSubcategories(unresolved);
+    } else {
+      setPendingRows(null);
+      setUnresolvedSubcategories([]);
+    }
+  }
+
+  /** Same idea as applyRows, but for parsed JSON quiz drafts (category/subcategory as plain names instead of a pre-resolved subcategoryId). */
+  function applyJsonDrafts(drafts: JsonQuizDraft[], lookup: Map<string, string>) {
+    const quizzes: QuizInput[] = [];
+    const unresolvedMap = new Map<string, { category: string; subcategory: string; quizTitles: string[] }>();
+
+    for (const draft of drafts) {
+      const subcategoryName = (draft.subcategoryId ? '' : draft.subcategory || '').trim();
+      const subcategoryId = draft.subcategoryId || lookup.get(subcategoryName.toLowerCase());
+
+      if (!subcategoryId) {
+        const categoryName = (draft.category || '').trim();
+        if (!categoryName) continue; // can't auto-create or resolve; drop silently like before
+        const key = `${categoryName.toLowerCase()}\u0000${subcategoryName.toLowerCase()}`;
+        const entry = unresolvedMap.get(key);
+        if (entry) entry.quizTitles.push(draft.title);
+        else unresolvedMap.set(key, { category: categoryName, subcategory: subcategoryName, quizTitles: [draft.title] });
+        continue;
+      }
+
+      quizzes.push({
+        subcategoryId,
+        title: draft.title,
+        description: draft.description,
+        mode: draft.mode,
+        difficulty: draft.difficulty,
+        visibility: draft.visibility,
+        linkExpiry: draft.linkExpiry,
+        customExpiryDate: draft.customExpiryDate,
+        timeLimitSeconds: draft.timeLimitSeconds,
+        shuffleQuestions: draft.shuffleQuestions,
+        shuffleOptions: draft.shuffleOptions,
+        antiCheatEnabled: draft.antiCheatEnabled,
+        retakePolicy: draft.retakePolicy,
+        retakeLimit: draft.retakeLimit,
+        pricing: draft.pricing,
+        priceKobo: draft.priceKobo,
+        allowFlagging: draft.allowFlagging,
+        defaultMark: draft.defaultMark,
+        showMarks: draft.showMarks,
+        questions: draft.questions,
+      } satisfies QuizInput);
+    }
+
+    setParsedQuizzes(quizzes);
+    setWarnings([]);
+    const unresolved = Array.from(unresolvedMap.values());
+    if (unresolved.length > 0) {
+      setPendingJsonDrafts(drafts);
+      setUnresolvedSubcategories(unresolved);
+    } else {
+      setPendingJsonDrafts(null);
+      setUnresolvedSubcategories([]);
+    }
+  }
+
+  /**
+   * Creates every unresolved (category, subcategory) pair via the resolve
+   * API — reusing an existing category/subcategory by name instead of
+   * duplicating it (see getOrCreateCategory/getOrCreateSubcategory) — then
+   * re-runs grouping against the now-complete subcategory list so the
+   * quizzes that were waiting on them get included without a re-upload.
+   */
+  async function createUnresolvedSubcategories() {
+    if (unresolvedSubcategories.length === 0) return;
+    setCreatingSubcategories(true);
+    setSubmitError(null);
+    try {
+      const res = await fetch('/api/categories/resolve', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          pairs: unresolvedSubcategories.map((u) => ({ category: u.category, subcategory: u.subcategory })),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setSubmitError(data.error ?? 'Failed to create categories');
+        return;
+      }
+      const lookup = await loadSubcategories();
+      setUnresolvedSubcategories([]);
+      if (pendingRows) {
+        applyRows(pendingRows, lookup);
+      } else if (pendingJsonDrafts) {
+        applyJsonDrafts(pendingJsonDrafts, lookup);
+      }
+    } catch {
+      setSubmitError('Network error while creating categories. Please try again.');
+    } finally {
+      setCreatingSubcategories(false);
     }
   }
 
@@ -429,6 +644,7 @@ export default function BulkUploadPage() {
       setSubmittedCount(data.quizzes?.length ?? parsedQuizzes.length);
       setParsedQuizzes([]);
       setFileName(null);
+      clearPreviewDraft();
     } catch {
       setSubmitError('Network error while uploading. Please try again.');
     } finally {
@@ -452,7 +668,8 @@ export default function BulkUploadPage() {
       <h1 className="font-display text-3xl font-semibold text-ink-800">Upload many quizzes</h1>
       <p className="mt-2 text-ink-500">
         Create several quizzes at once from a spreadsheet, instead of building them one by
-        one. Download the template, fill it in, upload it — that's it.
+        one. Download the template, fill it in, upload it — that's it. If you close the tab
+        before publishing, your preview is saved and picks back up when you return.
       </p>
 
       {/* Guided walkthrough */}
@@ -493,9 +710,14 @@ export default function BulkUploadPage() {
             timer — required for exam mode, optional for quiz mode, ignored for study mode.
           </li>
           <li>
-            Fill <code className="rounded bg-ink-50 px-1">subcategory</code> with an exact
-            category name from Cliniolab (e.g. "Cardiology", "Exam Prep"). Rows with an unknown
-            subcategory are skipped and listed as a warning before you upload.
+            Fill <code className="rounded bg-ink-50 px-1">subcategory</code> with an existing
+            subcategory name from Cliniolab (e.g. "Cardiology", "Exam Prep") if you know it
+            already exists. If it doesn&apos;t exist yet, also fill in{' '}
+            <code className="rounded bg-ink-50 px-1">category</code> (e.g. "Medicine",
+            "Nursing") — you&apos;ll be offered a one-click option to create both before your
+            quizzes are published. A subcategory name can safely repeat under different
+            categories (e.g. "Basics" under both Cardiology and Respiratory) without creating
+            duplicates.
           </li>
           <li>
             <code className="rounded bg-ink-50 px-1">difficulty</code> is optional —{' '}
@@ -553,6 +775,33 @@ export default function BulkUploadPage() {
         </p>
       )}
 
+      {unresolvedSubcategories.length > 0 && (
+        <Card className="mt-4 border-pulse-200 bg-pulse-50 p-4">
+          <p className="text-sm font-medium text-pulse-700">
+            {unresolvedSubcategories.length} new categor{unresolvedSubcategories.length === 1 ? 'y' : 'ies'} in
+            this file
+          </p>
+          <p className="mt-1 text-xs text-ink-600">
+            These category/subcategory pairs don&apos;t exist on Cliniolab yet. Create them to include
+            the quizzes waiting on them, or fix the file and re-upload if any of these were a typo.
+          </p>
+          <ul className="mt-3 space-y-1 text-xs text-ink-600">
+            {unresolvedSubcategories.map((u, i) => (
+              <li key={i}>
+                <span className="font-medium text-ink-800">{u.category}</span> {'>'} {u.subcategory}
+                {' — '}
+                {u.quizTitles.length} quiz{u.quizTitles.length === 1 ? '' : 'zes'} ({u.quizTitles.join(', ')})
+              </li>
+            ))}
+          </ul>
+          <Button className="mt-3" size="sm" onClick={createUnresolvedSubcategories} disabled={creatingSubcategories}>
+            {creatingSubcategories
+              ? 'Creating…'
+              : `Create ${unresolvedSubcategories.length} categor${unresolvedSubcategories.length === 1 ? 'y' : 'ies'} & continue`}
+          </Button>
+        </Card>
+      )}
+
       {warnings.length > 0 && (
         <Card className="mt-4 border-flag-200 bg-flag-50 p-4">
           <p className="text-sm font-medium text-flag-700">Some rows were skipped</p>
@@ -590,7 +839,14 @@ export default function BulkUploadPage() {
             <Button onClick={handleSubmit} disabled={submitting}>
               {submitting ? 'Publishing…' : `Publish ${parsedQuizzes.length} quizzes`}
             </Button>
-            <Button variant="secondary" onClick={() => { setParsedQuizzes([]); setFileName(null); }}>
+            <Button
+              variant="secondary"
+              onClick={() => {
+                setParsedQuizzes([]);
+                setFileName(null);
+                clearPreviewDraft();
+              }}
+            >
               Cancel
             </Button>
           </div>

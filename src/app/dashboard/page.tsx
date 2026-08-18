@@ -129,9 +129,14 @@ export default function DashboardPage() {
         <h1 className="font-display text-3xl font-semibold text-ink-800">
           Welcome back, {user.displayName ?? user.email}
         </h1>
-        <Link href="/dashboard/email-preferences" className="text-sm font-medium text-pulse-600 hover:text-pulse-700">
-          Email preferences
-        </Link>
+        <div className="flex items-center gap-4">
+          <Link href="/dashboard/creator-settings" className="text-sm font-medium text-pulse-600 hover:text-pulse-700">
+            Creator settings
+          </Link>
+          <Link href="/dashboard/email-preferences" className="text-sm font-medium text-pulse-600 hover:text-pulse-700">
+            Email preferences
+          </Link>
+        </div>
       </div>
 
       {user.currentStreakDays > 0 && (

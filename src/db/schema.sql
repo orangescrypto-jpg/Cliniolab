@@ -15,6 +15,7 @@ CREATE TABLE users (
   payout_bank_name TEXT,
   payout_account_number TEXT,
   payout_account_name TEXT,
+  contact_phone TEXT,               -- optional, shown on shared quiz text ("contact: ...")
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 

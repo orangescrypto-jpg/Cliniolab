@@ -162,6 +162,39 @@ export async function setPlatformFeePercent(percent: number): Promise<void> {
  * This is a single platform-level setting, not per-resource — admin sets
  * it once and it governs every paid resource purchase going forward.
  */
+/**
+ * Site-wide count of entries shown on every leaderboard (general, category,
+ * and per-quiz). One knob for all three, matching how they're rendered.
+ */
+const DEFAULT_LEADERBOARD_SIZE = 10;
+
+function clampLeaderboardSize(count: number): number {
+  if (!Number.isFinite(count)) return DEFAULT_LEADERBOARD_SIZE;
+  return Math.min(100, Math.max(3, Math.round(count)));
+}
+
+export async function getLeaderboardSize(): Promise<number> {
+  const db = getDb();
+  const row = await db
+    .prepare('SELECT * FROM site_settings WHERE key = ?')
+    .bind('leaderboard_size')
+    .first<SettingRow>();
+  if (!row) return DEFAULT_LEADERBOARD_SIZE;
+  const parsed = Number(row.value);
+  return Number.isFinite(parsed) ? clampLeaderboardSize(parsed) : DEFAULT_LEADERBOARD_SIZE;
+}
+
+export async function setLeaderboardSize(count: number): Promise<void> {
+  const db = getDb();
+  await db
+    .prepare(
+      `INSERT INTO site_settings (key, value, updated_at) VALUES (?, ?, ?)
+       ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`
+    )
+    .bind('leaderboard_size', String(clampLeaderboardSize(count)), nowIso())
+    .run();
+}
+
 export async function getResourcePaymentMode(): Promise<ResourcePaymentMode> {
   const db = getDb();
   const row = await db

@@ -446,7 +446,8 @@ export async function listLatestPublicQuizzes(limit = 20): Promise<QuizWithStats
         (SELECT COUNT(*) FROM comments WHERE quiz_id = q.id) as comment_count,
         c.name as category_name,
         s.name as subcategory_name,
-        u.display_name as creator_name
+        u.display_name as creator_name,
+        u.contact_phone as creator_contact
       FROM quizzes q
       JOIN subcategories s ON s.id = q.subcategory_id
       JOIN categories c ON c.id = s.category_id
@@ -456,7 +457,7 @@ export async function listLatestPublicQuizzes(limit = 20): Promise<QuizWithStats
       LIMIT ?`
     )
     .bind(limit)
-    .all<QuizRow & { question_count: number; attempt_count: number; avg_score: number | null; comment_count: number; category_name: string; subcategory_name: string; creator_name: string | null }>();
+    .all<QuizRow & { question_count: number; attempt_count: number; avg_score: number | null; comment_count: number; category_name: string; subcategory_name: string; creator_name: string | null; creator_contact: string | null }>();
 
   return results.map((row) => ({
     ...mapQuiz(row),
@@ -467,6 +468,7 @@ export async function listLatestPublicQuizzes(limit = 20): Promise<QuizWithStats
     categoryName: row.category_name,
     subcategoryName: row.subcategory_name,
     creatorName: row.creator_name ?? 'Anonymous',
+    creatorContact: row.creator_contact,
   }));
 }
 
@@ -494,7 +496,8 @@ export async function listLatestPublicQuizzesPaginated(
           (SELECT COUNT(*) FROM comments WHERE quiz_id = q.id) as comment_count,
           c.name as category_name,
           s.name as subcategory_name,
-          u.display_name as creator_name
+          u.display_name as creator_name,
+        u.contact_phone as creator_contact
         FROM quizzes q
         JOIN subcategories s ON s.id = q.subcategory_id
         JOIN categories c ON c.id = s.category_id
@@ -504,7 +507,7 @@ export async function listLatestPublicQuizzesPaginated(
         LIMIT ? OFFSET ?`
       )
       .bind(pageSize, offset)
-      .all<QuizRow & { question_count: number; attempt_count: number; avg_score: number | null; comment_count: number; category_name: string; subcategory_name: string; creator_name: string | null }>(),
+      .all<QuizRow & { question_count: number; attempt_count: number; avg_score: number | null; comment_count: number; category_name: string; subcategory_name: string; creator_name: string | null; creator_contact: string | null }>(),
     db
       .prepare(
         `SELECT COUNT(*) as total FROM quizzes q
@@ -523,6 +526,7 @@ export async function listLatestPublicQuizzesPaginated(
       categoryName: row.category_name,
       subcategoryName: row.subcategory_name,
       creatorName: row.creator_name ?? 'Anonymous',
+    creatorContact: row.creator_contact,
     })),
     total: countRow?.total ?? 0,
     page,
@@ -551,7 +555,8 @@ export async function getQuizzesWithStatsByIds(ids: string[]): Promise<QuizWithS
         (SELECT COUNT(*) FROM comments WHERE quiz_id = q.id) as comment_count,
         c.name as category_name,
         s.name as subcategory_name,
-        u.display_name as creator_name
+        u.display_name as creator_name,
+        u.contact_phone as creator_contact
       FROM quizzes q
       JOIN subcategories s ON s.id = q.subcategory_id
       JOIN categories c ON c.id = s.category_id
@@ -559,7 +564,7 @@ export async function getQuizzesWithStatsByIds(ids: string[]): Promise<QuizWithS
       WHERE q.id IN (${placeholders})`
     )
     .bind(...ids)
-    .all<QuizRow & { question_count: number; attempt_count: number; avg_score: number | null; comment_count: number; category_name: string; subcategory_name: string; creator_name: string | null }>();
+    .all<QuizRow & { question_count: number; attempt_count: number; avg_score: number | null; comment_count: number; category_name: string; subcategory_name: string; creator_name: string | null; creator_contact: string | null }>();
 
   return results.map((row) => ({
     ...mapQuiz(row),
@@ -570,6 +575,7 @@ export async function getQuizzesWithStatsByIds(ids: string[]): Promise<QuizWithS
     categoryName: row.category_name,
     subcategoryName: row.subcategory_name,
     creatorName: row.creator_name ?? 'Anonymous',
+    creatorContact: row.creator_contact,
   }));
 }
 
@@ -581,7 +587,8 @@ export async function listQuizzesByCategory(categoryId: string, limit?: number):
       (SELECT COUNT(*) FROM quiz_attempts WHERE quiz_id = q.id) as attempt_count,
       (SELECT AVG(CAST(score AS REAL) / total_questions * 100) FROM quiz_attempts WHERE quiz_id = q.id) as avg_score,
       (SELECT COUNT(*) FROM comments WHERE quiz_id = q.id) as comment_count,
-      u.display_name as creator_name
+      u.display_name as creator_name,
+        u.contact_phone as creator_contact
     FROM quizzes q
     JOIN subcategories s ON s.id = q.subcategory_id
     JOIN users u ON u.id = q.creator_id
@@ -589,7 +596,7 @@ export async function listQuizzesByCategory(categoryId: string, limit?: number):
     ORDER BY q.created_at DESC${limit ? ' LIMIT ?' : ''}`;
 
   const stmt = limit ? db.prepare(query).bind(categoryId, limit) : db.prepare(query).bind(categoryId);
-  const { results } = await stmt.all<QuizRow & { question_count: number; attempt_count: number; avg_score: number | null; comment_count: number; creator_name: string | null }>();
+  const { results } = await stmt.all<QuizRow & { question_count: number; attempt_count: number; avg_score: number | null; comment_count: number; creator_name: string | null; creator_contact: string | null }>();
 
   return results.map((row) => ({
     ...mapQuiz(row),
@@ -598,6 +605,7 @@ export async function listQuizzesByCategory(categoryId: string, limit?: number):
     averageScorePercent: row.avg_score,
     commentCount: row.comment_count,
     creatorName: row.creator_name ?? 'Anonymous',
+    creatorContact: row.creator_contact,
   }));
 }
 
@@ -611,14 +619,15 @@ export async function listQuizzesBySubcategory(subcategoryId: string): Promise<Q
         (SELECT COUNT(*) FROM quiz_attempts WHERE quiz_id = q.id) as attempt_count,
         (SELECT AVG(CAST(score AS REAL) / total_questions * 100) FROM quiz_attempts WHERE quiz_id = q.id) as avg_score,
         (SELECT COUNT(*) FROM comments WHERE quiz_id = q.id) as comment_count,
-        u.display_name as creator_name
+        u.display_name as creator_name,
+        u.contact_phone as creator_contact
       FROM quizzes q
       JOIN users u ON u.id = q.creator_id
       WHERE q.subcategory_id = ? AND q.visibility = 'public' AND q.status = 'published'
       ORDER BY q.created_at DESC`
     )
     .bind(subcategoryId)
-    .all<QuizRow & { question_count: number; attempt_count: number; avg_score: number | null; comment_count: number; creator_name: string | null }>();
+    .all<QuizRow & { question_count: number; attempt_count: number; avg_score: number | null; comment_count: number; creator_name: string | null; creator_contact: string | null }>();
 
   return results.map((row) => ({
     ...mapQuiz(row),
@@ -627,6 +636,7 @@ export async function listQuizzesBySubcategory(subcategoryId: string): Promise<Q
     averageScorePercent: row.avg_score,
     commentCount: row.comment_count,
     creatorName: row.creator_name ?? 'Anonymous',
+    creatorContact: row.creator_contact,
   }));
 }
 
@@ -651,7 +661,8 @@ export async function listRelatedQuizzes(
     (SELECT COUNT(*) FROM quiz_attempts WHERE quiz_id = q.id) as attempt_count,
     (SELECT AVG(CAST(score AS REAL) / total_questions * 100) FROM quiz_attempts WHERE quiz_id = q.id) as avg_score,
     (SELECT COUNT(*) FROM comments WHERE quiz_id = q.id) as comment_count,
-    u.display_name as creator_name
+    u.display_name as creator_name,
+        u.contact_phone as creator_contact
   `;
   type Row = QuizRow & {
     question_count: number;
@@ -659,6 +670,7 @@ export async function listRelatedQuizzes(
     avg_score: number | null;
     comment_count: number;
     creator_name: string | null;
+    creator_contact: string | null;
   };
 
   function toQuizWithStats(row: Row): QuizWithStats {
@@ -669,6 +681,7 @@ export async function listRelatedQuizzes(
       averageScorePercent: row.avg_score,
       commentCount: row.comment_count,
       creatorName: row.creator_name ?? 'Anonymous',
+    creatorContact: row.creator_contact,
     };
   }
 
@@ -766,7 +779,8 @@ export async function listRelatedQuizzesByLabel(
     (SELECT COUNT(*) FROM quiz_attempts WHERE quiz_id = q.id) as attempt_count,
     (SELECT AVG(CAST(score AS REAL) / total_questions * 100) FROM quiz_attempts WHERE quiz_id = q.id) as avg_score,
     (SELECT COUNT(*) FROM comments WHERE quiz_id = q.id) as comment_count,
-    u.display_name as creator_name
+    u.display_name as creator_name,
+        u.contact_phone as creator_contact
   `;
   type Row = QuizRow & {
     question_count: number;
@@ -774,6 +788,7 @@ export async function listRelatedQuizzesByLabel(
     avg_score: number | null;
     comment_count: number;
     creator_name: string | null;
+    creator_contact: string | null;
   };
 
   function toQuizWithStats(row: Row): QuizWithStats {
@@ -784,6 +799,7 @@ export async function listRelatedQuizzesByLabel(
       averageScorePercent: row.avg_score,
       commentCount: row.comment_count,
       creatorName: row.creator_name ?? 'Anonymous',
+    creatorContact: row.creator_contact,
     };
   }
 

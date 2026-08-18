@@ -19,6 +19,7 @@ export interface AppUser {
   payoutBankName: string | null;
   payoutAccountNumber: string | null;
   payoutAccountName: string | null;
+  contactPhone: string | null;
   createdAt: string;
 }
 
@@ -90,6 +91,7 @@ export interface QuizWithStats extends Quiz {
   categoryName?: string;
   subcategoryName?: string;
   creatorName?: string;
+  creatorContact?: string | null;
 }
 
 export interface QuizQuestion {

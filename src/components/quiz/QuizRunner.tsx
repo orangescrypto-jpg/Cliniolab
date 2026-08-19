@@ -32,7 +32,13 @@ interface AttemptDraft {
   confidence: Record<string, 'sure' | 'guessing'>;
   skipped: string[];
   startedAt: number;
-  remainingSeconds: number;
+  // Absolute deadline (ms since epoch), not a countdown. A countdown
+  // number only advances while this tab's JS is actively running an
+  // interval, so it's meaningless the moment the tab is closed,
+  // backgrounded, or the device sleeps -- exactly the case this exists to
+  // survive. A fixed deadline can be checked against wall-clock time
+  // whenever the person actually comes back, however long that takes.
+  deadline: number | null;
 }
 
 const DRAFT_NAMESPACE = 'attempt';
@@ -96,8 +102,19 @@ export function QuizRunner({ quiz, questions: rawQuestions, submitEndpoint }: Qu
   const [current, setCurrent] = useState(initialDraft?.current ?? 0);
   const [answers, setAnswers] = useState<Record<string, string>>(initialDraft?.answers ?? {});
   const [startedAt] = useState(() => initialDraft?.startedAt ?? Date.now());
-  const [remainingSeconds, setRemainingSeconds] = useState(
-    initialDraft?.remainingSeconds ?? quiz.timeLimitSeconds ?? 0
+  // Fixed point in time the attempt must end by, computed once (either
+  // recovered from the draft, or freshly derived from startedAt + the
+  // quiz's time limit). Never recomputed from a countdown -- see
+  // AttemptDraft.deadline above for why.
+  const [deadline] = useState<number | null>(() => {
+    if (initialDraft?.deadline) return initialDraft.deadline;
+    if (!quiz.timeLimitSeconds) return null;
+    return startedAt + quiz.timeLimitSeconds * 1000;
+  });
+  // Purely a display value, recomputed each tick from `deadline` — never
+  // itself the source of truth for whether time is up.
+  const [remainingSeconds, setRemainingSeconds] = useState(() =>
+    deadline ? Math.max(0, Math.round((deadline - Date.now()) / 1000)) : 0
   );
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<AttemptResult | null>(initialResult ?? null);
@@ -157,19 +174,53 @@ export function QuizRunner({ quiz, questions: rawQuestions, submitEndpoint }: Qu
   // quiz mode when the creator opted into a time limit for a speed-drill.
   const hasTimer = !!quiz.timeLimitSeconds;
 
+  // The single source of truth for "is time up" — always re-derived from
+  // the fixed deadline against the current wall clock, never from a
+  // counter that only moves while this tab is actively running. Called
+  // on mount, on every tick, and whenever the tab regains focus, so a
+  // person who was away for the interval's callback to matter (tab
+  // closed, phone locked, app backgrounded) gets auto-submitted using
+  // whatever was in their draft the moment they're back, rather than the
+  // timer silently having "kept going" with no one watching.
+  function checkDeadline() {
+    if (!deadline || result) return;
+    const secondsLeft = Math.max(0, Math.round((deadline - Date.now()) / 1000));
+    setRemainingSeconds(secondsLeft);
+    if (secondsLeft <= 0) {
+      void handleSubmit();
+    }
+  }
+
+  // Runs once, synchronously on mount (before the first paint the user
+  // would otherwise see of a question), so returning to an already-expired
+  // attempt submits immediately instead of briefly showing a stale timer.
+  const checkedOnMount = useRef(false);
+  const [autoSubmittingExpired, setAutoSubmittingExpired] = useState(false);
+  if (!checkedOnMount.current && deadline) {
+    checkedOnMount.current = true;
+    if (Date.now() >= deadline) {
+      setAutoSubmittingExpired(true);
+      // Deferred one tick: handleSubmit reads component state/refs that
+      // aren't fully wired up mid-render.
+      queueMicrotask(() => void handleSubmit());
+    }
+  }
+
   useEffect(() => {
     if (!hasTimer || result) return;
-    const interval = setInterval(() => {
-      setRemainingSeconds((prev) => {
-        if (prev <= 1) {
-          clearInterval(interval);
-          void handleSubmit();
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-    return () => clearInterval(interval);
+    const interval = setInterval(checkDeadline, 1000);
+    // Also re-check the instant the tab/app regains focus, rather than
+    // waiting up to a full second for the next interval tick — covers the
+    // common "unlocked phone, glanced at the screen" case as fast as
+    // possible.
+    function onVisibilityChange() {
+      if (document.visibilityState === 'visible') checkDeadline();
+    }
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hasTimer, result]);
 
@@ -244,10 +295,10 @@ export function QuizRunner({ quiz, questions: rawQuestions, submitEndpoint }: Qu
       confidence,
       skipped: Array.from(skipped),
       startedAt,
-      remainingSeconds,
+      deadline,
     };
     saveDraft(DRAFT_NAMESPACE, quiz.id, draft);
-  }, [draftsEnabled, result, quiz.id, questions, current, answers, markedForReview, confidence, skipped, startedAt, remainingSeconds]);
+  }, [draftsEnabled, result, quiz.id, questions, current, answers, markedForReview, confidence, skipped, startedAt, deadline]);
 
   async function handleSubmit() {
     if (submitting || result) return;
@@ -316,6 +367,16 @@ export function QuizRunner({ quiz, questions: rawQuestions, submitEndpoint }: Qu
   // the case this cache exists to survive.
   function leaveResults() {
     if (draftsEnabled) clearDraft(RESULT_NAMESPACE, quiz.id);
+  }
+
+  if (autoSubmittingExpired && !result) {
+    return (
+      <div className="mx-auto max-w-2xl px-6 py-24 text-center">
+        <p className="text-ink-500">
+          Your time ran out while you were away. Submitting the answers you had…
+        </p>
+      </div>
+    );
   }
 
   if (result) {

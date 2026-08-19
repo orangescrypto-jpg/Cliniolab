@@ -35,13 +35,13 @@ export default function NewQuizPage() {
 
   return (
     <div className="mx-auto max-w-3xl px-6 py-16">
-      <div className="flex items-start justify-between gap-4">
+      <div className="flex flex-col items-start gap-4 sm:flex-row sm:items-center sm:justify-between">
         <h1 className="font-display text-3xl font-semibold text-ink-800">Create a quiz</h1>
         <Link
           href="/quizzes/bulk-upload"
-          className="mt-2 shrink-0 text-sm font-medium text-pulse-600 hover:text-pulse-700"
+          className="inline-flex shrink-0 items-center justify-center rounded-full border border-pulse-600 px-4 py-2 text-sm font-medium text-pulse-600 hover:bg-pulse-600 hover:text-white"
         >
-          Adding many questions? Upload in bulk →
+          Upload Bulk Questions
         </Link>
       </div>
       <div className="mt-8">

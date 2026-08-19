@@ -29,6 +29,7 @@ export async function POST(request: Request, { params }: RouteParams) {
   try {
     const result = await attemptService.submitAttempt(user.id, {
       quizId,
+      questionIds: Array.isArray(body.questionIds) ? body.questionIds : undefined,
       answers: body.answers,
       timeTakenSeconds: body.timeTakenSeconds ?? 0,
     });

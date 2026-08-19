@@ -1,6 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { useAuth } from '@/lib/auth/AuthProvider';
 import { Button } from '@/components/ui/Button';
 import { QuizForm } from '@/components/quiz/QuizForm';
@@ -34,7 +35,15 @@ export default function NewQuizPage() {
 
   return (
     <div className="mx-auto max-w-3xl px-6 py-16">
-      <h1 className="font-display text-3xl font-semibold text-ink-800">Create a quiz</h1>
+      <div className="flex items-start justify-between gap-4">
+        <h1 className="font-display text-3xl font-semibold text-ink-800">Create a quiz</h1>
+        <Link
+          href="/quizzes/bulk-upload"
+          className="mt-2 shrink-0 text-sm font-medium text-pulse-600 hover:text-pulse-700"
+        >
+          Adding many questions? Upload in bulk →
+        </Link>
+      </div>
       <div className="mt-8">
         <QuizForm
           submitLabel="Publish quiz"

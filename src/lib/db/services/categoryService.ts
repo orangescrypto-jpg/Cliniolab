@@ -199,12 +199,60 @@ export async function updateCategory(
   await db.prepare(`UPDATE categories SET ${fields.join(', ')} WHERE id = ?`).bind(...values).run();
 }
 
-export async function deleteCategory(id: string): Promise<void> {
+export async function countQuizzesInSubcategory(subcategoryId: string): Promise<number> {
   const db = getDb();
-  await db.prepare('DELETE FROM categories WHERE id = ?').bind(id).run();
+  const row = await db
+    .prepare('SELECT COUNT(*) as count FROM quizzes WHERE subcategory_id = ?')
+    .bind(subcategoryId)
+    .first<{ count: number }>();
+  return row?.count ?? 0;
 }
 
-export async function deleteSubcategory(id: string): Promise<void> {
+/**
+ * Deletes a subcategory only if no quiz currently references it -- quizzes.
+ * subcategory_id is NOT NULL with no cascade, so deleting out from under a
+ * quiz would either be rejected by the DB or (if FK enforcement is off)
+ * leave the quiz pointing at a dead id. Callers should surface the
+ * returned reason to the admin rather than attempt the delete anyway.
+ */
+export async function deleteSubcategory(
+  id: string
+): Promise<{ deleted: true } | { deleted: false; reason: string; quizCount: number }> {
+  const quizCount = await countQuizzesInSubcategory(id);
+  if (quizCount > 0) {
+    return {
+      deleted: false,
+      reason: `${quizCount} quiz${quizCount === 1 ? '' : 'zes'} still use this subcategory. Move or delete ${quizCount === 1 ? 'it' : 'them'} first.`,
+      quizCount,
+    };
+  }
   const db = getDb();
   await db.prepare('DELETE FROM subcategories WHERE id = ?').bind(id).run();
+  return { deleted: true };
+}
+
+/**
+ * Deletes a category only if it has no subcategories left under it.
+ * (Subcategories themselves are protected from deletion while quizzes
+ * reference them -- see deleteSubcategory -- so this transitively blocks
+ * deleting a category that still has quizzes anywhere under it.)
+ */
+export async function deleteCategory(
+  id: string
+): Promise<{ deleted: true } | { deleted: false; reason: string; subcategoryCount: number }> {
+  const db = getDb();
+  const row = await db
+    .prepare('SELECT COUNT(*) as count FROM subcategories WHERE category_id = ?')
+    .bind(id)
+    .first<{ count: number }>();
+  const subcategoryCount = row?.count ?? 0;
+  if (subcategoryCount > 0) {
+    return {
+      deleted: false,
+      reason: `${subcategoryCount} subcategor${subcategoryCount === 1 ? 'y' : 'ies'} still under this category. Delete ${subcategoryCount === 1 ? 'it' : 'them'} first.`,
+      subcategoryCount,
+    };
+  }
+  await db.prepare('DELETE FROM categories WHERE id = ?').bind(id).run();
+  return { deleted: true };
 }

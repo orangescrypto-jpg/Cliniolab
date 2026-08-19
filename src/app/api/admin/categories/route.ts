@@ -50,3 +50,33 @@ export async function POST(request: Request) {
   });
   return NextResponse.json({ category }, { status: 201 });
 }
+
+export async function DELETE(request: Request) {
+  const user = await getCurrentUser();
+  if (!user) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  if (!permissions.canAccessAdminPanel(user.role)) {
+    return NextResponse.json({ error: 'Admin access required' }, { status: 403 });
+  }
+
+  let body: { type: 'category' | 'subcategory'; id: string };
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
+  }
+
+  if (!body.id || (body.type !== 'category' && body.type !== 'subcategory')) {
+    return NextResponse.json({ error: '"id" and a valid "type" are required' }, { status: 400 });
+  }
+
+  const result =
+    body.type === 'subcategory'
+      ? await categoryService.deleteSubcategory(body.id)
+      : await categoryService.deleteCategory(body.id);
+
+  if (!result.deleted) {
+    return NextResponse.json({ error: result.reason }, { status: 409 });
+  }
+
+  return NextResponse.json({ success: true });
+}

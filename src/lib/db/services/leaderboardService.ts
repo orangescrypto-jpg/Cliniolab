@@ -35,7 +35,7 @@ export async function getGeneralLeaderboard(limit = 16): Promise<LeaderboardEntr
       JOIN users u ON u.id = a.user_id
       WHERE a.counts_for_leaderboard = 1
       GROUP BY a.user_id
-      ORDER BY total_score DESC
+      ORDER BY avg_percentage DESC
       LIMIT ?`
     )
     .bind(limit)
@@ -63,7 +63,7 @@ export async function getCategoryLeaderboard(
       JOIN subcategories s ON s.id = q.subcategory_id
       WHERE a.counts_for_leaderboard = 1 AND s.category_id = ?
       GROUP BY a.user_id
-      ORDER BY total_score DESC
+      ORDER BY avg_percentage DESC
       LIMIT ?`
     )
     .bind(categoryId, limit)

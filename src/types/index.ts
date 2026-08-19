@@ -172,6 +172,16 @@ export interface AttemptAnswer {
 
 export interface AttemptSubmission {
   quizId: string;
+  /**
+   * Question ids the client actually presented this attempt (e.g. the
+   * narrowed set from a "retake missed only" run). Optional for backward
+   * compatibility with any other caller; when present, grading and
+   * totalQuestions/totalMarks are scoped to exactly this set instead of
+   * every question in the quiz — otherwise a narrowed retake would
+   * silently grade every question it didn't re-ask as wrong. See
+   * submitAttempt in attemptService.ts.
+   */
+  questionIds?: string[];
   answers: { questionId: string; submittedAnswer: string }[];
   timeTakenSeconds: number;
 }

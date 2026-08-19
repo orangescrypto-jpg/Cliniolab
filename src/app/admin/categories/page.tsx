@@ -16,6 +16,10 @@ export default function AdminCategoriesPage() {
   const [newSubName, setNewSubName] = useState('');
   const [newSubCategoryId, setNewSubCategoryId] = useState('');
   const [error, setError] = useState<string | null>(null);
+  // Which item is pending a delete-confirmation click ("click again to
+  // confirm" instead of a modal, since this list is usually short).
+  const [confirmingDelete, setConfirmingDelete] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   function load() {
     fetch('/api/categories')
@@ -67,6 +71,34 @@ export default function AdminCategoriesPage() {
     }
   }
 
+  async function deleteItem(type: 'category' | 'subcategory', id: string) {
+    if (confirmingDelete !== id) {
+      // First click just arms the confirmation; the button itself
+      // switches to "Confirm delete" so there's no separate modal to
+      // build for what should be a rare, careful action.
+      setConfirmingDelete(id);
+      return;
+    }
+    setError(null);
+    setDeletingId(id);
+    try {
+      const res = await fetch('/api/admin/categories', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type, id }),
+      });
+      if (res.ok) {
+        load();
+      } else {
+        const data = await res.json();
+        setError(data.error);
+      }
+    } finally {
+      setConfirmingDelete(null);
+      setDeletingId(null);
+    }
+  }
+
   return (
     <div>
       <h1 className="font-display text-2xl font-semibold text-ink-800">Categories</h1>
@@ -112,10 +144,46 @@ export default function AdminCategoriesPage() {
       <div className="mt-8 space-y-6">
         {categories.map((cat) => (
           <div key={cat.id}>
-            <h3 className="font-medium text-ink-800">{cat.name}</h3>
+            <div className="flex items-center gap-2">
+              <h3 className="font-medium text-ink-800">{cat.name}</h3>
+              <button
+                type="button"
+                onClick={() => deleteItem('category', cat.id)}
+                disabled={deletingId === cat.id}
+                className={`text-xs font-medium ${
+                  confirmingDelete === cat.id
+                    ? 'text-critical-600 underline'
+                    : 'text-ink-400 hover:text-critical-500'
+                }`}
+              >
+                {deletingId === cat.id
+                  ? 'Deleting…'
+                  : confirmingDelete === cat.id
+                    ? 'Confirm delete?'
+                    : 'Delete'}
+              </button>
+            </div>
             <ul className="mt-2 space-y-1">
               {subcategories.filter((s) => s.categoryId === cat.id).map((sub) => (
-                <li key={sub.id} className="text-sm text-ink-500">— {sub.name}</li>
+                <li key={sub.id} className="flex items-center gap-2 text-sm text-ink-500">
+                  <span>— {sub.name}</span>
+                  <button
+                    type="button"
+                    onClick={() => deleteItem('subcategory', sub.id)}
+                    disabled={deletingId === sub.id}
+                    className={`text-xs font-medium ${
+                      confirmingDelete === sub.id
+                        ? 'text-critical-600 underline'
+                        : 'text-ink-400 hover:text-critical-500'
+                    }`}
+                  >
+                    {deletingId === sub.id
+                      ? 'Deleting…'
+                      : confirmingDelete === sub.id
+                        ? 'Confirm delete?'
+                        : 'Delete'}
+                  </button>
+                </li>
               ))}
             </ul>
           </div>

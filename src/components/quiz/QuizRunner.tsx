@@ -432,6 +432,7 @@ export function QuizRunner({ quiz, questions: rawQuestions, submitEndpoint }: Qu
                 return match ? match.text : value;
               };
               const submittedText = resolve(pq.submittedAnswer);
+              const correctText = resolve(pq.correctAnswer);
               return (
               <div key={pq.questionId} className="rounded-md border border-ink-100 bg-white p-4">
                 <div className="flex items-start justify-between gap-3">
@@ -442,7 +443,12 @@ export function QuizRunner({ quiz, questions: rawQuestions, submitEndpoint }: Qu
                     </span>
                   )}
                 </div>
-                <p className="mt-1 text-sm text-ink-500">Your answer: {submittedText ?? '—'}</p>
+                <p className={`mt-1 text-sm ${pq.isCorrect ? 'text-pulse-600' : 'text-critical-600'}`}>
+                  Your answer: {submittedText ?? '—'}
+                </p>
+                {!pq.isCorrect && (
+                  <p className="mt-1 text-sm text-ink-600">Correct answer: {correctText ?? '—'}</p>
+                )}
                 {pq.explanation && (
                   <p className="mt-2 whitespace-pre-line text-sm leading-relaxed text-ink-600">
                     {pq.explanation}

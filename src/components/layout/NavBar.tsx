@@ -70,6 +70,12 @@ export function NavBar() {
               >
                 Dashboard
               </Link>
+              <Link
+                href="/quizzes/bulk-upload"
+                className="text-sm font-medium text-ink-500 hover:text-ink-800"
+              >
+                Upload quizzes
+              </Link>
               {(user.role === 'admin' || user.role === 'moderator') && (
                 <Link
                   href="/admin"
@@ -140,6 +146,9 @@ export function NavBar() {
               <>
                 <Link href="/dashboard" onClick={() => setMobileOpen(false)} className="text-sm font-medium text-ink-600">
                   Dashboard
+                </Link>
+                <Link href="/quizzes/bulk-upload" onClick={() => setMobileOpen(false)} className="text-sm font-medium text-ink-600">
+                  Upload quizzes
                 </Link>
                 {(user.role === 'admin' || user.role === 'moderator') && (
                   <Link href="/admin" onClick={() => setMobileOpen(false)} className="text-sm font-medium text-ink-600">

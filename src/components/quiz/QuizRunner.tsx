@@ -310,6 +310,7 @@ export function QuizRunner({ quiz, questions: rawQuestions, submitEndpoint }: Qu
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          questionIds: questions.map((q) => q.id),
           answers: Object.entries(answersRef.current).map(([questionId, submittedAnswer]) => ({
             questionId,
             submittedAnswer,

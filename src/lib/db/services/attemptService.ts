@@ -111,8 +111,19 @@ export async function submitAttempt(
   const quiz = await getQuizById(submission.quizId);
   if (!quiz) throw new Error('Quiz not found');
 
-  const questions = await getQuizQuestions(submission.quizId);
-  if (questions.length === 0) throw new Error('Quiz has no questions');
+  const allQuestions = await getQuizQuestions(submission.quizId);
+  if (allQuestions.length === 0) throw new Error('Quiz has no questions');
+
+  // Scope grading to exactly the questions this attempt actually
+  // presented (e.g. a "retake missed only" run). Without this, a
+  // narrowed retake would silently grade every question it didn't
+  // re-ask as wrong, since they'd have no entry in answerMap either way.
+  // Falls back to every question in the quiz when the client didn't send
+  // questionIds (older client, or a caller other than QuizRunner).
+  const questions = submission.questionIds
+    ? allQuestions.filter((q) => submission.questionIds!.includes(q.id))
+    : allQuestions;
+  if (questions.length === 0) throw new Error('No matching questions for this attempt');
 
   const answerMap = new Map(submission.answers.map((a) => [a.questionId, a.submittedAnswer]));
 

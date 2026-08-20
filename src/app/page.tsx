@@ -93,12 +93,12 @@ export default function HomePage() {
       <section className="bg-ink-800 py-20 text-center text-white">
         <div className="mx-auto max-w-3xl px-6">
           <h1 className="font-display text-4xl font-semibold leading-tight sm:text-5xl">
-            For All Your Clinical &amp; Nursing Needs
+            Study Smarter for Every Clinical &amp; Nursing Exam
           </h1>
           <p className="mt-4 text-lg text-ink-100">
-            Empowering your nursing journey with trusted resources. At Cliniolab, we provide
-            in-depth articles, study guides, quizzes, and CBT simulations, built and shared by
-            students like you, so you can excel in the classroom and at the bedside.
+            Cliniolab brings together student-built quizzes, CBT-style exams, and clinical study
+            notes in one place — so you can revise a topic, test yourself on it, and track how
+            you're improving, all before you ever get to the real exam.
           </p>
 
           <form onSubmit={handleSearchSubmit} className="mx-auto mt-8 flex max-w-xl overflow-hidden rounded-md bg-white">

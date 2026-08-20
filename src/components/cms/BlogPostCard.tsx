@@ -52,7 +52,7 @@ export function FeaturedBlogPostCard({ post }: { post: BlogPost }) {
 export function CompactBlogPostCard({ post }: { post: BlogPost }) {
   return (
     <Link href={`/blog/${post.slug}`}>
-      <div className="flex items-center gap-4 py-3">
+      <div className="flex items-start gap-4 py-3">
         {post.featuredImageUrl && (
           // eslint-disable-next-line @next/next/no-img-element
           <img
@@ -65,7 +65,7 @@ export function CompactBlogPostCard({ post }: { post: BlogPost }) {
           {post.category && (
             <span className="text-xs font-medium text-ink-400">{post.category}</span>
           )}
-          <h4 className="mt-0.5 font-display text-base font-semibold leading-snug text-ink-800 line-clamp-2">
+          <h4 className="mt-0.5 font-display text-base font-semibold leading-snug text-ink-800">
             {post.title}
           </h4>
           <p className="mt-1 text-xs text-ink-400">{new Date(post.createdAt).toLocaleDateString()}</p>

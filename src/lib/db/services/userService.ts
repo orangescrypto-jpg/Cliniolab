@@ -99,15 +99,15 @@ export async function adminListUsers(): Promise<AppUser[]> {
 }
 
 /**
- * Saves a creator's verified bank details for future payouts. Under
- * Model B there's no subaccount to register with the provider up front —
- * these details are only used later, at the moment admin actions a
- * payout request via the Flutterwave Transfers API.
+ * Saves a creator's bank details for future payouts, entered as free text
+ * with no provider verification. Since there's no verified bankCode, these
+ * creators are routed to the "Mark paid manually" admin action instead of
+ * Flutterwave auto-transfer (see admin payout-requests route, which
+ * requires payoutBankCode before attempting a transfer).
  */
 export async function savePayoutDetails(
   userId: string,
   details: {
-    bankCode: string;
     bankName: string;
     accountNumber: string;
     accountName: string;
@@ -117,13 +117,12 @@ export async function savePayoutDetails(
   await db
     .prepare(
       `UPDATE users SET
-        payout_bank_code = ?,
         payout_bank_name = ?,
         payout_account_number = ?,
         payout_account_name = ?
        WHERE id = ?`
     )
-    .bind(details.bankCode, details.bankName, details.accountNumber, details.accountName, userId)
+    .bind(details.bankName, details.accountNumber, details.accountName, userId)
     .run();
 }
 

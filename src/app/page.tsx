@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { LeaderboardList } from '@/components/quiz/LeaderboardList';
 import { ResourceCard } from '@/components/resources/ResourceCard';
 import { CategoryBlogSection } from '@/components/cms/CategoryBlogSection';
@@ -12,6 +12,7 @@ import { BannerSlot } from '@/components/layout/BannerSlot';
 import { ScholarOfTheDayCard } from '@/components/layout/ScholarOfTheDayCard';
 import { AbbreviationsTeaser } from '@/components/layout/AbbreviationsTeaser';
 import { Button } from '@/components/ui/Button';
+import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth/AuthProvider';
 import { JOB_CATEGORY_SLUG, SCHOLARSHIP_CATEGORY_SLUG } from '@/lib/constants/blogCategories';
 import type { BlogPost, Category, LeaderboardEntry, Resource } from '@/types';
@@ -24,6 +25,8 @@ const HOMEPAGE_EXCLUDED_SLUGS = new Set(['job', 'scholarship']);
 
 export default function HomePage() {
   const { user } = useAuth();
+  const router = useRouter();
+  const [searchQuery, setSearchQuery] = useState('');
   const [categories, setCategories] = useState<Category[]>([]);
   const [blogCategories, setBlogCategories] = useState<BlogCategoryOption[]>([]);
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
@@ -78,23 +81,42 @@ export default function HomePage() {
 
   const homepageBlogCategories = blogCategories.filter((c) => !HOMEPAGE_EXCLUDED_SLUGS.has(c.slug));
 
+  function handleSearchSubmit(e: FormEvent) {
+    e.preventDefault();
+    const trimmed = searchQuery.trim();
+    if (trimmed) router.push(`/search?q=${encodeURIComponent(trimmed)}`);
+  }
+
   return (
     <div>
       {/* Hero */}
-      <section className="border-b border-ink-100 bg-white">
-        <div className="mx-auto max-w-7xl px-6 py-20">
-          <p className="font-mono text-xs uppercase tracking-widest text-pulse-600">
-            Clinical &amp; Nursing Learning Hub
-          </p>
-          <h1 className="mt-4 max-w-2xl font-display text-4xl font-semibold leading-tight text-ink-800 sm:text-5xl">
-            Learn, revise, and test yourself for your clinical and nursing exams.
+      <section className="bg-ink-800 py-20 text-center text-white">
+        <div className="mx-auto max-w-3xl px-6">
+          <h1 className="font-display text-4xl font-semibold leading-tight sm:text-5xl">
+            For All Your Clinical &amp; Nursing Needs
           </h1>
-          <p className="mt-4 max-w-xl text-lg text-ink-500">
-            In-depth articles and study guides across core sciences, clinical specialties, and
-            nursing practice, paired with quizzes and computer-based test (CBT) simulations to
-            put that knowledge to the test built and shared by students like you.
+          <p className="mt-4 text-lg text-ink-100">
+            Empowering your nursing journey with trusted resources. At Cliniolab, we provide
+            in-depth articles, study guides, quizzes, and CBT simulations, built and shared by
+            students like you, so you can excel in the classroom and at the bedside.
           </p>
-          <div className="mt-8 flex gap-4">
+
+          <form onSubmit={handleSearchSubmit} className="mx-auto mt-8 flex max-w-xl overflow-hidden rounded-md bg-white">
+            <input
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search nursing resources, quizzes, articles…"
+              className="flex-1 px-4 py-3 text-sm text-ink-800 focus:outline-none"
+            />
+            <button
+              type="submit"
+              className="bg-pulse-600 px-6 text-sm font-semibold text-white hover:bg-pulse-700"
+            >
+              Search
+            </button>
+          </form>
+
+          <div className="mt-8 flex justify-center gap-4">
             <Link href="/categories"><Button size="lg">Browse categories</Button></Link>
             <Link href={user ? '/quizzes/new' : '/login?next=%2Fquizzes%2Fnew'}>
               <Button size="lg" variant="secondary">Create a quiz</Button>

@@ -2,19 +2,21 @@
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
-import { QuizCard } from '@/components/quiz/QuizCard';
+import { FeaturedQuizCard, CompactQuizCard } from '@/components/quiz/QuizCard';
 import type { Category, QuizWithStats } from '@/types';
 
 export function CategoryQuizSection({ category }: { category: Category }) {
   const [quizzes, setQuizzes] = useState<QuizWithStats[]>([]);
 
   useEffect(() => {
-    fetch(`/api/quizzes?categoryId=${category.id}&limit=4`)
+    fetch(`/api/quizzes?categoryId=${category.id}&limit=7`)
       .then((res) => res.json())
       .then((data) => setQuizzes(data.quizzes ?? []));
   }, [category.id]);
 
   if (quizzes.length === 0) return null; // don't show empty category sections
+
+  const [featured, ...rest] = quizzes;
 
   return (
     <section className="mx-auto max-w-7xl px-6 py-12">
@@ -27,10 +29,15 @@ export function CategoryQuizSection({ category }: { category: Category }) {
           See more →
         </Link>
       </div>
-      <div className="mt-6 grid grid-cols-1 gap-5 sm:grid-cols-2">
-        {quizzes.map((quiz) => (
-          <QuizCard key={quiz.id} quiz={quiz} />
-        ))}
+      <div className="mt-6 grid grid-cols-1 gap-8 lg:grid-cols-[3fr_2fr]">
+        <FeaturedQuizCard quiz={featured} />
+        {rest.length > 0 && (
+          <div className="divide-y divide-ink-100">
+            {rest.map((quiz) => (
+              <CompactQuizCard key={quiz.id} quiz={quiz} />
+            ))}
+          </div>
+        )}
       </div>
     </section>
   );

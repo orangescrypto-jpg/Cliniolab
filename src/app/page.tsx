@@ -97,7 +97,7 @@ export default function HomePage() {
           </h1>
           <p className="mt-4 text-lg text-ink-100">
             Cliniolab brings together student-built quizzes, CBT-style exams, and clinical study
-            notes in one place — so you can revise a topic, test yourself on it, and track how
+            notes in one place so you can revise a topic, test yourself on it, and track how
             you're improving, all before you ever get to the real exam.
           </p>
 

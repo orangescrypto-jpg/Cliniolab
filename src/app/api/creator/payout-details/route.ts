@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getCurrentUser } from '@/lib/auth/currentUser';
 import { userService } from '@/lib/db';
-import { resolveAccountNumber } from '@/lib/payments/flutterwaveClient';
 
 export async function GET() {
   const user = await getCurrentUser();
@@ -18,31 +17,32 @@ export async function POST(request: Request) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
 
-  let body: { bankCode: string; bankName: string; accountNumber: string };
+  let body: { bankName: string; accountNumber: string; accountName: string };
   try {
     body = await request.json();
   } catch {
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
   }
-  if (!body.bankCode || !body.accountNumber) {
-    return NextResponse.json({ error: 'bankCode and accountNumber are required' }, { status: 400 });
+  if (!body.bankName?.trim() || !body.accountNumber?.trim() || !body.accountName?.trim()) {
+    return NextResponse.json(
+      { error: 'bankName, accountNumber, and accountName are required' },
+      { status: 400 }
+    );
   }
 
   try {
-    // Verify the account resolves to a real name before saving it, so
-    // creators can't accidentally register a mistyped account number.
-    // Model B has no subaccount to create - these details are only used
-    // later, when admin actions a payout request via the Transfers API.
-    const { accountName } = await resolveAccountNumber(body.accountNumber, body.bankCode);
-
+    // No provider verification here by design - these are entered as free
+    // text and saved as-is. Since there's no bankCode, this creator's
+    // payout requests can't go through the Flutterwave auto-transfer path
+    // (see admin payout-requests route, which requires payoutBankCode) and
+    // must be actioned as "Mark paid manually" by admin instead.
     await userService.savePayoutDetails(user.id, {
-      bankCode: body.bankCode,
-      bankName: body.bankName,
-      accountNumber: body.accountNumber,
-      accountName,
+      bankName: body.bankName.trim(),
+      accountNumber: body.accountNumber.trim(),
+      accountName: body.accountName.trim(),
     });
 
-    return NextResponse.json({ accountName });
+    return NextResponse.json({ accountName: body.accountName.trim() });
   } catch (err) {
     return NextResponse.json(
       { error: err instanceof Error ? err.message : 'Failed to save payout details' },

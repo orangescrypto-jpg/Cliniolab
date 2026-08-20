@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react';
 import { LeaderboardList } from '@/components/quiz/LeaderboardList';
 import { ResourceCard } from '@/components/resources/ResourceCard';
 import { CategoryBlogSection } from '@/components/cms/CategoryBlogSection';
-import { BlogPostCard } from '@/components/cms/BlogPostCard';
+import { FeaturedBlogPostCard, CompactBlogPostCard } from '@/components/cms/BlogPostCard';
 import { CategoryQuizSection } from '@/components/quiz/CategoryQuizSection';
 import { DailyQuizBanner } from '@/components/layout/DailyQuizBanner';
 import { BannerSlot } from '@/components/layout/BannerSlot';
@@ -50,7 +50,7 @@ export default function HomePage() {
         setLeaderboard(data.entries ?? []);
       });
 
-    fetch('/api/resources?limit=5')
+    fetch('/api/resources?limit=7')
       .then((res) => res.json())
       .then((data) => {
         setResourcesEnabled(data.enabled);
@@ -67,12 +67,12 @@ export default function HomePage() {
 
     fetch(`/api/blog?categorySlug=${JOB_CATEGORY_SLUG}`)
       .then((res) => res.json())
-      .then((data) => setJobPosts((data.posts ?? []).slice(0, 2)))
+      .then((data) => setJobPosts((data.posts ?? []).slice(0, 7)))
       .catch(() => {});
 
     fetch(`/api/blog?categorySlug=${SCHOLARSHIP_CATEGORY_SLUG}`)
       .then((res) => res.json())
-      .then((data) => setScholarshipPosts((data.posts ?? []).slice(0, 2)))
+      .then((data) => setScholarshipPosts((data.posts ?? []).slice(0, 7)))
       .catch(() => {});
   }, []);
 
@@ -108,6 +108,17 @@ export default function HomePage() {
       <DailyQuizBanner />
 
       {/* Blog / education content, one section per fixed category (excluding Job/Scholarship) */}
+      {homepageBlogCategories.length > 0 && (
+        <div className="mx-auto max-w-7xl px-6 pt-12">
+          <div className="flex items-center gap-4">
+            <div className="h-px flex-1 bg-ink-100" />
+            <h2 className="font-display text-sm font-semibold uppercase tracking-widest text-ink-400">
+              Latest Post
+            </h2>
+            <div className="h-px flex-1 bg-ink-100" />
+          </div>
+        </div>
+      )}
       {homepageBlogCategories.map((category) => (
         <CategoryBlogSection
           key={category.id}
@@ -120,6 +131,17 @@ export default function HomePage() {
       <div className="chart-strip mx-auto max-w-7xl text-ink-200" aria-hidden />
 
       {/* Quizzes, one section per top-level quiz category */}
+      {categories.length > 0 && (
+        <div className="mx-auto max-w-7xl px-6 pt-12">
+          <div className="flex items-center gap-4">
+            <div className="h-px flex-1 bg-ink-100" />
+            <h2 className="font-display text-sm font-semibold uppercase tracking-widest text-ink-400">
+              Quiz / Exam / Study
+            </h2>
+            <div className="h-px flex-1 bg-ink-100" />
+          </div>
+        </div>
+      )}
       {categories.map((category) => (
         <CategoryQuizSection key={category.id} category={category} />
       ))}
@@ -149,25 +171,45 @@ export default function HomePage() {
 
       {/* Resources */}
       {resourcesEnabled && (
-        <section className="mx-auto max-w-7xl px-6 py-16">
-          <div className="flex items-center justify-between">
-            <h2 className="font-display text-2xl font-semibold text-ink-800">Books &amp; Past Questions</h2>
-            <Link href="/resources" className="text-sm font-medium text-pulse-600 hover:text-pulse-700">
-              See more →
-            </Link>
+        <>
+          <div className="mx-auto max-w-7xl px-6 pt-12">
+            <div className="flex items-center gap-4">
+              <div className="h-px flex-1 bg-ink-100" />
+              <h2 className="font-display text-sm font-semibold uppercase tracking-widest text-ink-400">
+                Books &amp; Past Questions
+              </h2>
+              <div className="h-px flex-1 bg-ink-100" />
+            </div>
           </div>
-          <div className="mt-6 grid grid-cols-1 gap-5 sm:grid-cols-2">
-            {resources.map((resource) => (
-              <ResourceCard key={resource.id} resource={resource} />
-            ))}
-            {resources.length === 0 && (
-              <p className="col-span-full text-sm text-ink-400">No resources yet.</p>
-            )}
-          </div>
-        </section>
+          <section className="mx-auto max-w-7xl px-6 py-16">
+            <div className="flex items-center justify-between">
+              <h2 className="font-display text-2xl font-semibold text-ink-800">Books &amp; Past Questions</h2>
+              <Link href="/resources" className="text-sm font-medium text-pulse-600 hover:text-pulse-700">
+                See more →
+              </Link>
+            </div>
+            <div className="mt-6 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
+              {resources.map((resource) => (
+                <ResourceCard key={resource.id} resource={resource} />
+              ))}
+              {resources.length === 0 && (
+                <p className="col-span-full text-sm text-ink-400">No resources yet.</p>
+              )}
+            </div>
+          </section>
+        </>
       )}
 
       {/* Jobs teaser */}
+      <div className="mx-auto max-w-7xl px-6 pt-12">
+        <div className="flex items-center gap-4">
+          <div className="h-px flex-1 bg-ink-100" />
+          <h2 className="font-display text-sm font-semibold uppercase tracking-widest text-ink-400">
+            Jobs
+          </h2>
+          <div className="h-px flex-1 bg-ink-100" />
+        </div>
+      </div>
       <section className="mx-auto max-w-7xl px-6 py-16">
         <div className="flex items-center justify-between">
           <h2 className="font-display text-2xl font-semibold text-ink-800">Jobs</h2>
@@ -178,17 +220,32 @@ export default function HomePage() {
         <p className="mt-2 text-sm text-ink-500">
           Clinical and nursing job openings curated for students and professionals.
         </p>
-        <div className="mt-6 grid grid-cols-1 gap-5 sm:grid-cols-2">
-          {jobPosts.map((post) => (
-            <BlogPostCard key={post.id} post={post} />
-          ))}
-          {jobPosts.length === 0 && (
-            <p className="col-span-full text-sm text-ink-400">No job listings yet — check back soon.</p>
-          )}
-        </div>
+        {jobPosts.length > 0 ? (
+          <div className="mt-6 grid grid-cols-1 gap-8 lg:grid-cols-[3fr_2fr]">
+            <FeaturedBlogPostCard post={jobPosts[0]} />
+            {jobPosts.length > 1 && (
+              <div className="divide-y divide-ink-100">
+                {jobPosts.slice(1).map((post) => (
+                  <CompactBlogPostCard key={post.id} post={post} />
+                ))}
+              </div>
+            )}
+          </div>
+        ) : (
+          <p className="mt-6 text-sm text-ink-400">No job listings yet — check back soon.</p>
+        )}
       </section>
 
       {/* Scholarships teaser */}
+      <div className="mx-auto max-w-7xl px-6 pt-12">
+        <div className="flex items-center gap-4">
+          <div className="h-px flex-1 bg-ink-100" />
+          <h2 className="font-display text-sm font-semibold uppercase tracking-widest text-ink-400">
+            Scholarships
+          </h2>
+          <div className="h-px flex-1 bg-ink-100" />
+        </div>
+      </div>
       <section className="mx-auto max-w-7xl px-6 py-16">
         <div className="flex items-center justify-between">
           <h2 className="font-display text-2xl font-semibold text-ink-800">Scholarships</h2>
@@ -199,14 +256,20 @@ export default function HomePage() {
         <p className="mt-2 text-sm text-ink-500">
           Scholarship opportunities for nursing and clinical students.
         </p>
-        <div className="mt-6 grid grid-cols-1 gap-5 sm:grid-cols-2">
-          {scholarshipPosts.map((post) => (
-            <BlogPostCard key={post.id} post={post} />
-          ))}
-          {scholarshipPosts.length === 0 && (
-            <p className="col-span-full text-sm text-ink-400">No scholarships yet — check back soon.</p>
-          )}
-        </div>
+        {scholarshipPosts.length > 0 ? (
+          <div className="mt-6 grid grid-cols-1 gap-8 lg:grid-cols-[3fr_2fr]">
+            <FeaturedBlogPostCard post={scholarshipPosts[0]} />
+            {scholarshipPosts.length > 1 && (
+              <div className="divide-y divide-ink-100">
+                {scholarshipPosts.slice(1).map((post) => (
+                  <CompactBlogPostCard key={post.id} post={post} />
+                ))}
+              </div>
+            )}
+          </div>
+        ) : (
+          <p className="mt-6 text-sm text-ink-400">No scholarships yet — check back soon.</p>
+        )}
       </section>
 
       <AbbreviationsTeaser />

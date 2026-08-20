@@ -5,16 +5,11 @@ import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { useAuth } from '@/lib/auth/AuthProvider';
 
-interface Bank {
-  name: string;
-  code: string;
-}
-
 export default function PayoutSetupPage() {
   const { user, loading } = useAuth();
-  const [banks, setBanks] = useState<Bank[]>([]);
-  const [bankCode, setBankCode] = useState('');
+  const [bankName, setBankName] = useState('');
   const [accountNumber, setAccountNumber] = useState('');
+  const [accountName, setAccountName] = useState('');
   const [existing, setExisting] = useState<{
     hasPayoutDetails: boolean;
     bankName: string | null;
@@ -26,10 +21,6 @@ export default function PayoutSetupPage() {
   const [success, setSuccess] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch('/api/creator/banks')
-      .then((res) => res.json())
-      .then((data) => setBanks(data.banks ?? []))
-      .catch(() => setBanks([]));
     fetch('/api/creator/payout-details')
       .then((res) => res.json())
       .then(setExisting);
@@ -38,29 +29,32 @@ export default function PayoutSetupPage() {
   async function submit() {
     setError(null);
     setSuccess(null);
-    if (!bankCode || !accountNumber) {
-      setError('Select a bank and enter your account number.');
+    if (!bankName.trim() || !accountNumber.trim() || !accountName.trim()) {
+      setError('Enter your bank name, account number, and account name.');
       return;
     }
     setSubmitting(true);
     try {
-      const bankName = banks.find((b) => b.code === bankCode)?.name ?? '';
       const res = await fetch('/api/creator/payout-details', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ bankCode, bankName, accountNumber }),
+        body: JSON.stringify({
+          bankName: bankName.trim(),
+          accountNumber: accountNumber.trim(),
+          accountName: accountName.trim(),
+        }),
       });
       const data = await res.json();
       if (!res.ok) {
         setError(data.error ?? 'Failed to save payout details');
         return;
       }
-      setSuccess(`Payout account confirmed: ${data.accountName}`);
+      setSuccess('Payout details saved.');
       setExisting({
         hasPayoutDetails: true,
-        bankName,
-        accountNumber,
-        accountName: data.accountName,
+        bankName: bankName.trim(),
+        accountNumber: accountNumber.trim(),
+        accountName: accountName.trim(),
       });
     } finally {
       setSubmitting(false);
@@ -96,26 +90,32 @@ export default function PayoutSetupPage() {
       )}
 
       <Card className="mt-6 space-y-3 p-5">
-        <select
-          value={bankCode}
-          onChange={(e) => setBankCode(e.target.value)}
+        <input
+          value={bankName}
+          onChange={(e) => setBankName(e.target.value)}
+          placeholder="Bank name"
           className="w-full rounded-md border border-ink-100 px-4 py-2 text-sm focus:border-pulse-400 focus:outline-none"
-        >
-          <option value="">Select your bank</option>
-          {banks.map((b) => (
-            <option key={b.code} value={b.code}>{b.name}</option>
-          ))}
-        </select>
+        />
         <input
           value={accountNumber}
           onChange={(e) => setAccountNumber(e.target.value)}
           placeholder="10-digit account number"
           className="w-full rounded-md border border-ink-100 px-4 py-2 text-sm focus:border-pulse-400 focus:outline-none"
         />
+        <input
+          value={accountName}
+          onChange={(e) => setAccountName(e.target.value)}
+          placeholder="Account name"
+          className="w-full rounded-md border border-ink-100 px-4 py-2 text-sm focus:border-pulse-400 focus:outline-none"
+        />
+        <p className="text-xs text-ink-400">
+          Double-check these details — they aren&apos;t automatically verified, and payouts are sent
+          to exactly what you enter here.
+        </p>
         {error && <p className="text-sm text-critical-500">{error}</p>}
         {success && <p className="text-sm text-pulse-600">{success}</p>}
         <Button onClick={submit} disabled={submitting}>
-          {submitting ? 'Verifying…' : 'Save payout details'}
+          {submitting ? 'Saving…' : 'Save payout details'}
         </Button>
       </Card>
     </div>

@@ -15,7 +15,7 @@ export function CategoryBlogSection({ categoryId, categorySlug, categoryName }: 
   const [posts, setPosts] = useState<BlogPost[]>([]);
 
   useEffect(() => {
-    fetch(`/api/blog?categoryId=${encodeURIComponent(categoryId)}&limit=6`)
+    fetch(`/api/blog?categoryId=${encodeURIComponent(categoryId)}&limit=7`)
       .then((res) => res.json())
       .then((data) => setPosts(data.posts ?? []));
   }, [categoryId]);

@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
-import { BlogPostCard } from '@/components/cms/BlogPostCard';
+import { FeaturedBlogPostCard, CompactBlogPostCard } from '@/components/cms/BlogPostCard';
 import type { BlogPost } from '@/types';
 
 interface CategoryBlogSectionProps {
@@ -22,6 +22,8 @@ export function CategoryBlogSection({ categoryId, categorySlug, categoryName }: 
 
   if (posts.length === 0) return null; // don't show empty category sections
 
+  const [featured, ...rest] = posts;
+
   return (
     <section className="mx-auto max-w-7xl px-6 py-12">
       <div className="flex items-center justify-between">
@@ -37,10 +39,15 @@ export function CategoryBlogSection({ categoryId, categorySlug, categoryName }: 
           See more →
         </Link>
       </div>
-      <div className="mt-6 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
-        {posts.map((post) => (
-          <BlogPostCard key={post.id} post={post} />
-        ))}
+      <div className="mt-6 grid grid-cols-1 gap-8 lg:grid-cols-[3fr_2fr]">
+        <FeaturedBlogPostCard post={featured} />
+        {rest.length > 0 && (
+          <div className="divide-y divide-ink-100">
+            {rest.map((post) => (
+              <CompactBlogPostCard key={post.id} post={post} />
+            ))}
+          </div>
+        )}
       </div>
     </section>
   );

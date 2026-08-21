@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getCurrentUser } from '@/lib/auth/currentUser';
 import { permissions } from '@/lib/auth/permissions';
 import { abbreviationService, featureFlagService } from '@/lib/db';
+import { normalizeForDedup } from '@/lib/utils/normalizeText';
 
 export async function POST(request: Request) {
   const user = await getCurrentUser();
@@ -58,20 +59,28 @@ export async function POST(request: Request) {
       abbreviationService.findExistingAbbreviationTerms(glossaryTerms, 'glossary'),
     ]);
 
+    // Normalized (case/punctuation/whitespace-insensitive) keys so that
+    // "ACE Inhibitor" and "ace-inhibitor" in the same file are recognized
+    // as the same entry, not just an exact lowercase match.
     const seenAbbrev = new Set<string>();
     const seenGlossary = new Set<string>();
     const toCreate: typeof cleaned = [];
-    const skipped: string[] = [];
+    const skipped: { term: string; reason: 'already_in_database' | 'duplicate_in_file' }[] = [];
 
     for (const entry of cleaned) {
-      const key = entry.abbreviation.toLowerCase();
+      const normKey = normalizeForDedup(entry.abbreviation);
+      const lowerKey = entry.abbreviation.toLowerCase();
       const existing = entry.isGlossary ? existingGlossary : existingAbbrev;
       const seen = entry.isGlossary ? seenGlossary : seenAbbrev;
-      if (existing.has(key) || seen.has(key)) {
-        skipped.push(entry.abbreviation);
+      if (existing.has(lowerKey)) {
+        skipped.push({ term: entry.abbreviation, reason: 'already_in_database' });
         continue;
       }
-      seen.add(key);
+      if (seen.has(normKey)) {
+        skipped.push({ term: entry.abbreviation, reason: 'duplicate_in_file' });
+        continue;
+      }
+      seen.add(normKey);
       toCreate.push(entry);
     }
 

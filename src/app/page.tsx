@@ -32,6 +32,7 @@ export default function HomePage() {
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
   const [leaderboardEnabled, setLeaderboardEnabled] = useState(true);
   const [leaderboardLabel, setLeaderboardLabel] = useState('Top Quiz Takers');
+  const [leaderboardCurrentUserRank, setLeaderboardCurrentUserRank] = useState<number | null>(null);
   const [resources, setResources] = useState<Resource[]>([]);
   const [resourcesEnabled, setResourcesEnabled] = useState(true);
   const [jobPosts, setJobPosts] = useState<BlogPost[]>([]);
@@ -42,16 +43,19 @@ export default function HomePage() {
       .then((res) => res.json())
       .then((data) => setCategories(data.categories ?? []));
 
-    fetch('/api/blog-categories')
-      .then((res) => res.json())
-      .then((data) => setBlogCategories(data.categories ?? []));
-
     fetch('/api/leaderboard/general')
       .then((res) => res.json())
       .then((data) => {
         setLeaderboardEnabled(data.enabled);
         setLeaderboard(data.entries ?? []);
+        setLeaderboardCurrentUserRank(data.currentUserRank ?? null);
       });
+
+    fetch('/api/blog-categories')
+      .then((res) => res.json())
+      .then((data) => setBlogCategories(data.categories ?? []));
+
+
 
     fetch('/api/resources?limit=7')
       .then((res) => res.json())
@@ -183,7 +187,12 @@ export default function HomePage() {
             <h2 className="font-display text-2xl font-semibold text-ink-800">{leaderboardLabel}</h2>
             <p className="mt-1 text-sm text-ink-500">Top performers across every category.</p>
             <div className="mt-6">
-              <LeaderboardList entries={leaderboard} title={leaderboardLabel} />
+              <LeaderboardList
+                entries={leaderboard}
+                title={leaderboardLabel}
+                currentUserId={user?.id ?? null}
+                currentUserRank={leaderboardCurrentUserRank}
+              />
             </div>
           </div>
         </section>

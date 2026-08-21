@@ -2,14 +2,15 @@ import { NextResponse } from 'next/server';
 import { getCurrentUser } from '@/lib/auth/currentUser';
 import { permissions } from '@/lib/auth/permissions';
 import { siteSettingsService } from '@/lib/db';
-import type { RelatedQuizzesSetting } from '@/types';
+import type { RelatedQuizzesSetting, RelatedPostsSetting } from '@/types';
 
 export async function GET() {
-  const [quizPage, blogPage] = await Promise.all([
+  const [quizPage, blogPage, relatedPosts] = await Promise.all([
     siteSettingsService.getRelatedQuizzesQuizPageSetting(),
     siteSettingsService.getRelatedQuizzesBlogPageSetting(),
+    siteSettingsService.getRelatedPostsSetting(),
   ]);
-  return NextResponse.json({ quizPage, blogPage });
+  return NextResponse.json({ quizPage, blogPage, relatedPosts });
 }
 
 export async function PUT(request: Request) {
@@ -19,7 +20,11 @@ export async function PUT(request: Request) {
     return NextResponse.json({ error: 'Admin access required' }, { status: 403 });
   }
 
-  let body: { quizPage?: RelatedQuizzesSetting; blogPage?: RelatedQuizzesSetting };
+  let body: {
+    quizPage?: RelatedQuizzesSetting;
+    blogPage?: RelatedQuizzesSetting;
+    relatedPosts?: RelatedPostsSetting;
+  };
   try {
     body = await request.json();
   } catch {
@@ -32,10 +37,14 @@ export async function PUT(request: Request) {
   if (body.blogPage) {
     await siteSettingsService.setRelatedQuizzesBlogPageSetting(body.blogPage);
   }
+  if (body.relatedPosts) {
+    await siteSettingsService.setRelatedPostsSetting(body.relatedPosts);
+  }
 
-  const [quizPage, blogPage] = await Promise.all([
+  const [quizPage, blogPage, relatedPosts] = await Promise.all([
     siteSettingsService.getRelatedQuizzesQuizPageSetting(),
     siteSettingsService.getRelatedQuizzesBlogPageSetting(),
+    siteSettingsService.getRelatedPostsSetting(),
   ]);
-  return NextResponse.json({ quizPage, blogPage });
+  return NextResponse.json({ quizPage, blogPage, relatedPosts });
 }

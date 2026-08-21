@@ -6,6 +6,7 @@ import * as XLSX from 'xlsx';
 import { useAuth } from '@/lib/auth/AuthProvider';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
+import { normalizeForDedup } from '@/lib/utils/normalizeText';
 
 // ---------------------------------------------------------------------------
 // Sheet/CSV shape: one row per entry — either a short abbreviation
@@ -192,7 +193,9 @@ function rowsToEntries(rows: string[][], defaultIsGlossary: boolean): RowResult 
       return;
     }
 
-    const key = `${isGlossary ? 'g' : 'a'}:${term.toLowerCase()}`;
+    // Normalized key catches punctuation/whitespace-only variants too
+    // (e.g. "ACE Inhibitor" vs "ACE-Inhibitor"), not just exact matches.
+    const key = `${isGlossary ? 'g' : 'a'}:${normalizeForDedup(term)}`;
     if (seenInFile.has(key)) {
       warnings.push(`Row ${i + 2}: "${term}" is a duplicate within this file, skipped.`);
       return;
@@ -215,7 +218,10 @@ export default function AbbreviationsBulkUploadPage() {
   const [warnings, setWarnings] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
-  const [result, setResult] = useState<{ createdCount: number; skipped: string[] } | null>(null);
+  const [result, setResult] = useState<{
+    createdCount: number;
+    skipped: { term: string; reason: 'already_in_database' | 'duplicate_in_file' }[];
+  } | null>(null);
   const [templateFormat, setTemplateFormat] = useState<TemplateFormat>('xlsx');
   const [defaultIsGlossary, setDefaultIsGlossary] = useState(false);
 
@@ -246,7 +252,7 @@ export default function AbbreviationsBulkUploadPage() {
             w.push(`Entry ${i + 1}: missing term or meaning, skipped.`);
             return;
           }
-          const key = `${isGlossary ? 'g' : 'a'}:${term.toLowerCase()}`;
+          const key = `${isGlossary ? 'g' : 'a'}:${normalizeForDedup(term)}`;
           if (seen.has(key)) {
             w.push(`Entry ${i + 1}: "${term}" is a duplicate within this file, skipped.`);
             return;
@@ -319,7 +325,11 @@ export default function AbbreviationsBulkUploadPage() {
     // JSON (e.g. an unhandled exception can produce a plain-text or HTML
     // error page), and that shouldn't be reported to the person as "network
     // error" since the request did reach the server.
-    let data: { createdCount?: number; skipped?: string[]; error?: string } = {};
+    let data: {
+      createdCount?: number;
+      skipped?: { term: string; reason: 'already_in_database' | 'duplicate_in_file' }[];
+      error?: string;
+    } = {};
     try {
       data = await res.json();
     } catch {
@@ -519,11 +529,30 @@ export default function AbbreviationsBulkUploadPage() {
             {result.createdCount} entr{result.createdCount === 1 ? 'y' : 'ies'} added successfully.
           </p>
           {result.skipped.length > 0 && (
-            <div className="mt-2">
+            <div className="mt-2 space-y-2">
               <p className="text-xs font-medium text-ink-600">
                 {result.skipped.length} skipped as duplicate{result.skipped.length === 1 ? '' : 's'}:
               </p>
-              <p className="mt-1 text-xs text-ink-500">{result.skipped.join(', ')}</p>
+              {(() => {
+                const alreadyInDb = result.skipped.filter((s) => s.reason === 'already_in_database');
+                const inFile = result.skipped.filter((s) => s.reason === 'duplicate_in_file');
+                return (
+                  <>
+                    {alreadyInDb.length > 0 && (
+                      <p className="text-xs text-ink-500">
+                        <span className="font-medium text-ink-600">Already in the database</span> (
+                        {alreadyInDb.length}): {alreadyInDb.map((s) => s.term).join(', ')}
+                      </p>
+                    )}
+                    {inFile.length > 0 && (
+                      <p className="text-xs text-ink-500">
+                        <span className="font-medium text-ink-600">Repeated within this file</span> (
+                        {inFile.length}): {inFile.map((s) => s.term).join(', ')}
+                      </p>
+                    )}
+                  </>
+                );
+              })()}
             </div>
           )}
           <Button className="mt-3" size="sm" onClick={() => router.push('/admin/abbreviations')}>

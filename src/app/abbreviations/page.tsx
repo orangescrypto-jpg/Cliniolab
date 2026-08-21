@@ -111,23 +111,25 @@ export default function AbbreviationsPage() {
 
       <div className="mt-3 space-y-2">
         {abbreviations.map((a) => (
-          <Card key={a.id} className="flex items-start gap-4 p-4">
-            <span
-              className={`shrink-0 rounded font-mono text-sm font-semibold ${
-                a.isGlossary ? 'px-2 py-0.5 text-ink-700' : 'w-20 text-pulse-600'
-              }`}
-            >
-              {a.abbreviation}
-            </span>
-            <div>
-              <p className="text-sm text-ink-700">{a.meaning}</p>
-              <div className="mt-0.5 flex items-center gap-2">
-                {a.isGlossary && (
-                  <span className="rounded bg-ink-50 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-ink-400">
-                    Glossary
-                  </span>
-                )}
-                {a.category && <p className="text-xs text-ink-400">{a.category}</p>}
+          <Card key={a.id} className="p-4">
+            <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:gap-4">
+              <span
+                className={`shrink-0 rounded font-mono text-sm font-semibold break-words ${
+                  a.isGlossary ? 'text-ink-700' : 'text-pulse-600 sm:w-20'
+                }`}
+              >
+                {a.abbreviation}
+              </span>
+              <div className="min-w-0">
+                <p className="text-sm text-ink-700 break-words">{a.meaning}</p>
+                <div className="mt-0.5 flex flex-wrap items-center gap-2">
+                  {a.isGlossary && (
+                    <span className="rounded bg-ink-50 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-ink-400">
+                      Glossary
+                    </span>
+                  )}
+                  {a.category && <p className="text-xs text-ink-400">{a.category}</p>}
+                </div>
               </div>
             </div>
           </Card>

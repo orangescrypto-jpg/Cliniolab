@@ -373,8 +373,20 @@ export interface HomepageVideoSetting {
 }
 
 /** How many related quizzes to show, and whether the section is shown at
- *  all, on the quiz detail page and blog post page respectively. */
+ *  all, on the quiz detail page and blog post page respectively.
+ *  `disabledCategoryIds` (blog page only) lets an admin turn off the
+ *  related-quizzes widget for specific blog categories — e.g. Job,
+ *  Scholarship, or Clinical Pearls — where a "related quiz" doesn't
+ *  make sense, without turning it off site-wide. */
 export interface RelatedQuizzesSetting {
+  enabled: boolean;
+  count: number;
+  disabledCategoryIds?: string[];
+}
+
+/** How many related posts to show below a blog post, and whether the
+ *  section is shown at all. Admin-controlled from the Related Content page. */
+export interface RelatedPostsSetting {
   enabled: boolean;
   count: number;
 }
@@ -543,6 +555,7 @@ export interface MedicalAbbreviation {
   abbreviation: string;
   meaning: string;
   category: string | null;
+  isGlossary: boolean;
   createdBy: string;
   createdAt: string;
   updatedAt: string;

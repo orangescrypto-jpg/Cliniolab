@@ -1,4 +1,5 @@
 import { getDb, generateId, nowIso } from '@/lib/db/client';
+import { normalizeForDedup } from '@/lib/utils/normalizeText';
 import type {
   Quiz,
   QuizWithStats,
@@ -355,6 +356,94 @@ export async function bulkCreateQuizzes(creatorId: string, inputs: QuizInput[]):
     created.push(await createQuiz(creatorId, input));
   }
   return created;
+}
+
+export interface BulkQuizDuplicateReport {
+  /** Index into the submitted `quizzes` array whose title collides with an existing quiz in the same subcategory. */
+  duplicateTitleIndexes: number[];
+  /**
+   * For each submitted quiz index, the prompts (normalized-matched) that
+   * collide with an existing question in the same subcategory, or with
+   * another question earlier in the same submitted quiz.
+   */
+  duplicateQuestionsByQuizIndex: Record<number, { prompt: string; reason: 'already_in_subcategory' | 'duplicate_in_quiz' }[]>;
+}
+
+/**
+ * Scans a batch of quizzes-to-be-created for likely duplicates *before* any
+ * insert happens, so bulk uploads (e.g. from the PDF→CSV pipeline) can flag
+ * them for review instead of silently creating repeat content.
+ *
+ * Two checks, both scoped per-subcategory (a term or question can
+ * legitimately repeat across unrelated subjects):
+ *  - Quiz title already exists in that subcategory (normalized compare).
+ *  - Question prompt already exists in that subcategory, either from an
+ *    existing quiz or from an earlier quiz in this same submitted batch.
+ *
+ * This is advisory only — it does not block bulkCreateQuizzes, callers
+ * decide whether to surface it for confirmation or upload anyway.
+ */
+export async function findBulkQuizDuplicates(inputs: QuizInput[]): Promise<BulkQuizDuplicateReport> {
+  const db = getDb();
+  const subcategoryIds = [...new Set(inputs.map((q) => q.subcategoryId))];
+
+  const existingTitlesBySubcat = new Map<string, Set<string>>();
+  const existingPromptsBySubcat = new Map<string, Set<string>>();
+
+  for (const subcategoryId of subcategoryIds) {
+    const [{ results: titleRows }, { results: promptRows }] = await Promise.all([
+      db.prepare('SELECT title FROM quizzes WHERE subcategory_id = ?').bind(subcategoryId).all<{ title: string }>(),
+      db
+        .prepare(
+          `SELECT q.prompt AS prompt FROM questions q
+           JOIN quizzes qz ON qz.id = q.quiz_id
+           WHERE qz.subcategory_id = ?`
+        )
+        .bind(subcategoryId)
+        .all<{ prompt: string }>(),
+    ]);
+    existingTitlesBySubcat.set(subcategoryId, new Set(titleRows.map((r) => normalizeForDedup(r.title))));
+    existingPromptsBySubcat.set(subcategoryId, new Set(promptRows.map((r) => normalizeForDedup(r.prompt))));
+  }
+
+  const duplicateTitleIndexes: number[] = [];
+  const duplicateQuestionsByQuizIndex: BulkQuizDuplicateReport['duplicateQuestionsByQuizIndex'] = {};
+
+  // Tracks prompts already claimed within this submitted batch, per
+  // subcategory, so two quizzes in the same upload can't both silently
+  // introduce the same question.
+  const seenInBatchBySubcat = new Map<string, Set<string>>();
+
+  inputs.forEach((input, quizIndex) => {
+    const existingTitles = existingTitlesBySubcat.get(input.subcategoryId) ?? new Set();
+    if (existingTitles.has(normalizeForDedup(input.title))) {
+      duplicateTitleIndexes.push(quizIndex);
+    }
+
+    const existingPrompts = existingPromptsBySubcat.get(input.subcategoryId) ?? new Set();
+    if (!seenInBatchBySubcat.has(input.subcategoryId)) {
+      seenInBatchBySubcat.set(input.subcategoryId, new Set());
+    }
+    const seenInBatch = seenInBatchBySubcat.get(input.subcategoryId)!;
+
+    for (const q of input.questions) {
+      const key = normalizeForDedup(q.prompt);
+      if (existingPrompts.has(key)) {
+        (duplicateQuestionsByQuizIndex[quizIndex] ??= []).push({
+          prompt: q.prompt,
+          reason: 'already_in_subcategory',
+        });
+      } else if (seenInBatch.has(key)) {
+        (duplicateQuestionsByQuizIndex[quizIndex] ??= []).push({
+          prompt: q.prompt,
+          reason: 'duplicate_in_quiz',
+        });
+      }
+      seenInBatch.add(key);
+    }
+  });
+
+  return { duplicateTitleIndexes, duplicateQuestionsByQuizIndex };
 }
 
 export async function getQuizById(id: string): Promise<Quiz | null> {

@@ -109,6 +109,19 @@ export async function getPostsByCategorySlug(categorySlug: string, limit?: numbe
   return getPostsByCategoryId(category.id, limit);
 }
 
+/** Filters by blog_subcategory_id — used by the category page's
+ * subcategory nav so tapping a subcategory chip narrows the same list
+ * without a full category switch. */
+export async function getPostsBySubcategoryId(blogSubcategoryId: string, limit?: number): Promise<BlogPost[]> {
+  const db = getDb();
+  const query = `SELECT * FROM blog_posts WHERE status = 'published' AND blog_subcategory_id = ? ORDER BY is_pinned DESC, created_at DESC${
+    limit ? ' LIMIT ?' : ''
+  }`;
+  const stmt = limit ? db.prepare(query).bind(blogSubcategoryId, limit) : db.prepare(query).bind(blogSubcategoryId);
+  const { results } = await stmt.all<BlogRow>();
+  return results.map(mapBlog);
+}
+
 export async function adminListAllPosts(): Promise<BlogPost[]> {
   const db = getDb();
   const { results } = await db

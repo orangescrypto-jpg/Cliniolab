@@ -1,4 +1,5 @@
 import { getDb, generateId, nowIso } from '@/lib/db/client';
+import { normalizeForDedup } from '@/lib/utils/normalizeText';
 import type { MedicalAbbreviation } from '@/types';
 
 interface AbbreviationRow {
@@ -178,7 +179,23 @@ export async function deleteAbbreviation(id: string): Promise<void> {
   await db.prepare('DELETE FROM medical_abbreviations WHERE id = ?').bind(id).run();
 }
 
-/** Case-insensitive existence check used by bulk upload to report/skip duplicates before import. Scoped by kind so an abbreviation and a glossary term can share the same text without colliding. */
+/**
+ * Existence check used by bulk upload to report/skip duplicates before
+ * import. Scoped by kind so an abbreviation and a glossary term can share
+ * the same text without colliding.
+ *
+ * Matching is done on the *normalized* form (see normalizeForDedup) rather
+ * than a plain lowercase compare, so "ACE Inhibitor", "ace-inhibitor", and
+ * "ACE  Inhibitor." are all recognized as the same entry — this is what
+ * let visible duplicates like the doubled "ACE Inhibitor" / "Contamination"
+ * rows slip through before.
+ *
+ * D1 caps bound parameters at 100 per statement, so instead of a targeted
+ * IN (...) query per term (which breaks past ~99 terms), this pulls all
+ * existing terms of the given kind once and compares in memory. Abbreviation
+ * tables are small enough (low thousands of rows) that this is cheap and
+ * avoids the parameter-limit problem entirely.
+ */
 export async function findExistingAbbreviationTerms(
   terms: string[],
   kind: 'abbreviation' | 'glossary' = 'abbreviation'
@@ -186,26 +203,17 @@ export async function findExistingAbbreviationTerms(
   if (terms.length === 0) return new Set();
   const db = getDb();
 
-  // D1 caps bound parameters at 100 per statement, so a single IN (...) query
-  // with one placeholder per term breaks once there are more than ~99 terms
-  // (the extra +1 param is the is_glossary flag). Chunk the terms and union
-  // the results instead of sending them all in one query.
-  const CHUNK_SIZE = 90;
-  const lowerTerms = terms.map((t) => t.toLowerCase());
+  const { results } = await db
+    .prepare('SELECT abbreviation FROM medical_abbreviations WHERE is_glossary = ?')
+    .bind(kind === 'glossary' ? 1 : 0)
+    .all<{ abbreviation: string }>();
+
+  const existingNormalized = new Set(results.map((r) => normalizeForDedup(r.abbreviation)));
   const found = new Set<string>();
-
-  for (let i = 0; i < lowerTerms.length; i += CHUNK_SIZE) {
-    const chunk = lowerTerms.slice(i, i + CHUNK_SIZE);
-    const placeholders = chunk.map(() => '?').join(',');
-    const { results } = await db
-      .prepare(
-        `SELECT abbreviation FROM medical_abbreviations WHERE is_glossary = ? AND LOWER(abbreviation) IN (${placeholders})`
-      )
-      .bind(kind === 'glossary' ? 1 : 0, ...chunk)
-      .all<{ abbreviation: string }>();
-    for (const r of results) found.add(r.abbreviation.toLowerCase());
+  for (const term of terms) {
+    const key = normalizeForDedup(term);
+    if (existingNormalized.has(key)) found.add(term.toLowerCase());
   }
-
   return found;
 }
 

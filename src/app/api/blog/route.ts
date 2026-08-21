@@ -12,9 +12,12 @@ export async function GET(request: Request) {
   const categoryId = searchParams.get('categoryId');
   const categorySlug = searchParams.get('categorySlug');
   const category = searchParams.get('category'); // legacy free-text name, old links
+  const subcategoryId = searchParams.get('subcategoryId');
 
   let posts;
-  if (categoryId) {
+  if (subcategoryId) {
+    posts = await cmsService.getPostsBySubcategoryId(subcategoryId, limit);
+  } else if (categoryId) {
     posts = await cmsService.getPostsByCategoryId(categoryId, limit);
   } else if (categorySlug) {
     posts = await cmsService.getPostsByCategorySlug(categorySlug, limit);

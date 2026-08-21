@@ -1,6 +1,7 @@
 'use client';
 
 import { useRef, useState } from 'react';
+import { ImageLibraryModal } from './ImageLibraryModal';
 
 interface InlineImageManagerProps {
   purpose: 'blog' | 'resources' | 'banners' | 'scholars';
@@ -47,6 +48,7 @@ export function InlineImageManager({ purpose, content, onInsertMarker, onReplace
   const [activeMarker, setActiveMarker] = useState<string | null>(null);
   const [lastPath, setLastPath] = useState<string | null>(null);
   const [caption, setCaption] = useState('');
+  const [libraryOpen, setLibraryOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   function markSpot() {
@@ -142,13 +144,22 @@ export function InlineImageManager({ purpose, content, onInsertMarker, onReplace
               : <>Couldn&apos;t find the placeholder in the content anymore — it may have been edited or deleted. Mark a spot again below.</>}
           </p>
           {markerStillPresent ? (
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/jpeg,image/png,image/webp,image/gif"
-              onChange={handleFileSelected}
-              className="text-sm text-ink-600"
-            />
+            <div className="flex flex-wrap items-center gap-2">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp,image/gif"
+                onChange={handleFileSelected}
+                className="text-sm text-ink-600"
+              />
+              <button
+                type="button"
+                onClick={() => setLibraryOpen(true)}
+                className="rounded-md border border-ink-100 px-2.5 py-1 text-xs font-medium text-ink-600 hover:bg-ink-50"
+              >
+                Choose existing
+              </button>
+            </div>
           ) : (
             <button
               type="button"
@@ -168,6 +179,16 @@ export function InlineImageManager({ purpose, content, onInsertMarker, onReplace
             Cancel — leave placeholder text as-is
           </button>
         </>
+      )}
+
+      {libraryOpen && (
+        <ImageLibraryModal
+          onSelect={(path) => {
+            setLastPath(path);
+            setLibraryOpen(false);
+          }}
+          onClose={() => setLibraryOpen(false)}
+        />
       )}
 
       {activeMarker && lastPath && (

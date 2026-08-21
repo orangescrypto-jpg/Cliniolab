@@ -6,6 +6,7 @@ import { sanitizeHtml, wrapWithScopeClass } from '@/lib/utils/sanitizeHtml';
 import { RawHtmlFrame, isFullRawDocument } from '@/components/ui/RawHtmlFrame';
 import { ShareButton } from '@/components/quiz/ShareButton';
 import { RelatedQuizzes } from '@/components/quiz/RelatedQuizzes';
+import { RelatedPosts } from '@/components/cms/RelatedPosts';
 import { CommentThread } from '@/components/quiz/CommentThread';
 import { useBlogSubcategoryName } from '@/lib/hooks/useBlogSubcategoryName';
 import { useBlogCategorySlug } from '@/lib/hooks/useBlogCategorySlug';
@@ -273,6 +274,7 @@ function BlogPostBody({ post }: { post: BlogPost }) {
           endpoint={`/api/blog/${post.id}/comments`}
           placeholder="Share your thoughts on this post…"
         />
+        <RelatedPosts endpoint={`/api/blog/${post.slug}/related-posts`} title="Related posts" />
         <RelatedQuizzes endpoint={`/api/blog/${post.slug}/related`} title="Practice quizzes for this topic" />
       </div>
     </div>

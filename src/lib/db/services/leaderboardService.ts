@@ -35,7 +35,7 @@ export async function getGeneralLeaderboard(limit = 16): Promise<LeaderboardEntr
       JOIN users u ON u.id = a.user_id
       WHERE a.counts_for_leaderboard = 1
       GROUP BY a.user_id
-      ORDER BY avg_percentage DESC
+      ORDER BY total_score DESC
       LIMIT ?`
     )
     .bind(limit)
@@ -58,7 +58,7 @@ export async function getUserGeneralRank(userId: string): Promise<number | null>
       FROM quiz_attempts a
       WHERE a.counts_for_leaderboard = 1
       GROUP BY a.user_id
-      ORDER BY AVG(CAST(a.score AS REAL) / a.total_questions * 100) DESC`
+      ORDER BY SUM(a.score) DESC`
     )
     .all<{ user_id: string }>();
   const index = results.findIndex((row) => row.user_id === userId);
@@ -85,12 +85,36 @@ export async function getCategoryLeaderboard(
       JOIN subcategories s ON s.id = q.subcategory_id
       WHERE a.counts_for_leaderboard = 1 AND s.category_id = ?
       GROUP BY a.user_id
-      ORDER BY avg_percentage DESC
+      ORDER BY total_score DESC
       LIMIT ?`
     )
     .bind(categoryId, limit)
     .all<LeaderboardRow>();
   return mapEntries(results);
+}
+
+/**
+ * A user's real rank on a category's leaderboard, computed the same way
+ * as getCategoryLeaderboard, regardless of whether they fall inside the
+ * displayed top-N. Returns null if they have no leaderboard-eligible
+ * attempt in this category.
+ */
+export async function getUserCategoryRank(categoryId: string, userId: string): Promise<number | null> {
+  const db = getDb();
+  const { results } = await db
+    .prepare(
+      `SELECT a.user_id as user_id
+      FROM quiz_attempts a
+      JOIN quizzes q ON q.id = a.quiz_id
+      JOIN subcategories s ON s.id = q.subcategory_id
+      WHERE a.counts_for_leaderboard = 1 AND s.category_id = ?
+      GROUP BY a.user_id
+      ORDER BY SUM(a.score) DESC`
+    )
+    .bind(categoryId)
+    .all<{ user_id: string }>();
+  const index = results.findIndex((row) => row.user_id === userId);
+  return index === -1 ? null : index + 1;
 }
 
 /**
@@ -118,4 +142,26 @@ export async function getQuizLeaderboard(quizId: string, limit = 16): Promise<Le
     .bind(quizId, limit)
     .all<LeaderboardRow>();
   return mapEntries(results);
+}
+
+/**
+ * A user's real rank on a single quiz's leaderboard, computed the same
+ * way as getQuizLeaderboard (best % on that quiz), regardless of whether
+ * they fall inside the displayed top-N. Returns null if they have no
+ * leaderboard-eligible attempt on this quiz.
+ */
+export async function getUserQuizRank(quizId: string, userId: string): Promise<number | null> {
+  const db = getDb();
+  const { results } = await db
+    .prepare(
+      `SELECT a.user_id as user_id
+      FROM quiz_attempts a
+      WHERE a.quiz_id = ? AND a.counts_for_leaderboard = 1
+      GROUP BY a.user_id
+      ORDER BY MAX(CAST(a.score AS REAL) / a.total_questions * 100) DESC`
+    )
+    .bind(quizId)
+    .all<{ user_id: string }>();
+  const index = results.findIndex((row) => row.user_id === userId);
+  return index === -1 ? null : index + 1;
 }

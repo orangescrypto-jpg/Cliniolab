@@ -185,14 +185,28 @@ export async function findExistingAbbreviationTerms(
 ): Promise<Set<string>> {
   if (terms.length === 0) return new Set();
   const db = getDb();
-  const placeholders = terms.map(() => '?').join(',');
-  const { results } = await db
-    .prepare(
-      `SELECT abbreviation FROM medical_abbreviations WHERE is_glossary = ? AND LOWER(abbreviation) IN (${placeholders})`
-    )
-    .bind(kind === 'glossary' ? 1 : 0, ...terms.map((t) => t.toLowerCase()))
-    .all<{ abbreviation: string }>();
-  return new Set(results.map((r) => r.abbreviation.toLowerCase()));
+
+  // D1 caps bound parameters at 100 per statement, so a single IN (...) query
+  // with one placeholder per term breaks once there are more than ~99 terms
+  // (the extra +1 param is the is_glossary flag). Chunk the terms and union
+  // the results instead of sending them all in one query.
+  const CHUNK_SIZE = 90;
+  const lowerTerms = terms.map((t) => t.toLowerCase());
+  const found = new Set<string>();
+
+  for (let i = 0; i < lowerTerms.length; i += CHUNK_SIZE) {
+    const chunk = lowerTerms.slice(i, i + CHUNK_SIZE);
+    const placeholders = chunk.map(() => '?').join(',');
+    const { results } = await db
+      .prepare(
+        `SELECT abbreviation FROM medical_abbreviations WHERE is_glossary = ? AND LOWER(abbreviation) IN (${placeholders})`
+      )
+      .bind(kind === 'glossary' ? 1 : 0, ...chunk)
+      .all<{ abbreviation: string }>();
+    for (const r of results) found.add(r.abbreviation.toLowerCase());
+  }
+
+  return found;
 }
 
 /**

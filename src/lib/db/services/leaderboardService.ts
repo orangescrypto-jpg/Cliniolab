@@ -43,6 +43,28 @@ export async function getGeneralLeaderboard(limit = 16): Promise<LeaderboardEntr
   return mapEntries(results);
 }
 
+/**
+ * A user's real site-wide rank, computed the same way as
+ * getGeneralLeaderboard (same WHERE/GROUP BY/ORDER BY), regardless of
+ * whether they fall inside the displayed top-N. Returns null if the user
+ * has no leaderboard-eligible attempts yet, so callers never have to
+ * guess or fabricate a rank for someone who isn't actually ranked.
+ */
+export async function getUserGeneralRank(userId: string): Promise<number | null> {
+  const db = getDb();
+  const { results } = await db
+    .prepare(
+      `SELECT a.user_id as user_id
+      FROM quiz_attempts a
+      WHERE a.counts_for_leaderboard = 1
+      GROUP BY a.user_id
+      ORDER BY AVG(CAST(a.score AS REAL) / a.total_questions * 100) DESC`
+    )
+    .all<{ user_id: string }>();
+  const index = results.findIndex((row) => row.user_id === userId);
+  return index === -1 ? null : index + 1;
+}
+
 /** Top 10 for a specific category (joins through subcategory -> quiz). */
 export async function getCategoryLeaderboard(
   categoryId: string,

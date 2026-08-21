@@ -130,6 +130,30 @@ export async function adminListAllPosts(): Promise<BlogPost[]> {
   return results.map(mapBlog);
 }
 
+/**
+ * Other published posts in the same blog category as the given post,
+ * newest first, excluding the post itself. Powers the "related posts"
+ * widget below a blog post.
+ */
+export async function getRelatedPosts(
+  postId: string,
+  blogCategoryId: string | null,
+  limit = 4
+): Promise<BlogPost[]> {
+  if (!blogCategoryId) return [];
+  const db = getDb();
+  const { results } = await db
+    .prepare(
+      `SELECT * FROM blog_posts
+       WHERE status = 'published' AND blog_category_id = ? AND id != ?
+       ORDER BY is_pinned DESC, created_at DESC
+       LIMIT ?`
+    )
+    .bind(blogCategoryId, postId, limit)
+    .all<BlogRow>();
+  return results.map(mapBlog);
+}
+
 export async function getPostBySlug(slug: string): Promise<BlogPost | null> {
   const db = getDb();
   const row = await db

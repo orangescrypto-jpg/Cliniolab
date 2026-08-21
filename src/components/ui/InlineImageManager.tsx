@@ -43,6 +43,14 @@ export function InlineImageManager({ purpose, onInsert }: InlineImageManagerProp
     const file = e.target.files?.[0];
     if (!file) return;
     setError(null);
+
+    const MAX_BYTES = 5 * 1024 * 1024;
+    if (file.size > MAX_BYTES) {
+      setError(`That image is ${(file.size / (1024 * 1024)).toFixed(1)}MB — the limit is 5MB. Resize or compress it first.`);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
+    }
+
     setUploading(true);
     try {
       const formData = new FormData();
@@ -53,16 +61,17 @@ export function InlineImageManager({ purpose, onInsert }: InlineImageManagerProp
       try {
         data = await res.json();
       } catch {
-        setError('Upload failed — the server returned an unexpected response.');
+        setError(`Upload failed — server returned status ${res.status} with a non-JSON response.`);
         return;
       }
       if (!res.ok || !data.path) {
-        setError(data.error ?? 'Upload failed');
+        setError(`Upload failed (status ${res.status}): ${data.error ?? 'no error detail returned'}`);
         return;
       }
       setLastPath(data.path);
-    } catch {
-      setError('Upload failed — check your connection and try again.');
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : String(err);
+      setError(`Upload failed — network/connection error: ${detail}`);
     } finally {
       setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = '';

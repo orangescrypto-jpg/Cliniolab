@@ -12,7 +12,7 @@
  * Docs: https://developers.cloudflare.com/r2/api/s3/api/
  */
 
-import { S3Client, PutObjectCommand, DeleteObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, PutObjectCommand, DeleteObjectCommand, GetObjectCommand, ListObjectsV2Command } from '@aws-sdk/client-s3';
 import type { R2Bucket } from '@/lib/storage/r2Client';
 
 function getConfig() {
@@ -98,6 +98,27 @@ export function createR2S3Adapter(): R2Bucket {
       } catch {
         return null;
       }
+    },
+
+    async list(options?: { prefix?: string; cursor?: string; limit?: number }) {
+      const client = getClient();
+      const res = await client.send(
+        new ListObjectsV2Command({
+          Bucket: bucket,
+          Prefix: options?.prefix,
+          ContinuationToken: options?.cursor,
+          MaxKeys: options?.limit ?? 1000,
+        })
+      );
+      return {
+        objects: (res.Contents ?? []).map((obj) => ({
+          key: obj.Key ?? '',
+          size: obj.Size ?? 0,
+          uploaded: obj.LastModified ?? new Date(0),
+        })),
+        cursor: res.NextContinuationToken,
+        truncated: res.IsTruncated ?? false,
+      };
     },
   };
 }

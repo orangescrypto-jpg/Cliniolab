@@ -4,9 +4,19 @@ import { useEffect, useState } from 'react';
 import { LeaderboardList } from '@/components/quiz/LeaderboardList';
 import type { LeaderboardEntry } from '@/types';
 
-export function QuizLeaderboardSection({ quizId }: { quizId: string }) {
+export function QuizLeaderboardSection({
+  quizId,
+  currentUserId,
+}: {
+  quizId: string;
+  /** Signed-in visitor's id, if any - passed down so the leaderboard can
+   *  highlight their row and never mistakenly shows the "sign up" prompt
+   *  to someone who's already logged in. */
+  currentUserId?: string | null;
+}) {
   const [entries, setEntries] = useState<LeaderboardEntry[]>([]);
   const [enabled, setEnabled] = useState(true);
+  const [currentUserRank, setCurrentUserRank] = useState<number | null>(null);
 
   useEffect(() => {
     fetch(`/api/leaderboard/quiz/${quizId}`)
@@ -14,6 +24,7 @@ export function QuizLeaderboardSection({ quizId }: { quizId: string }) {
       .then((data) => {
         setEnabled(data.enabled);
         setEntries(data.entries ?? []);
+        setCurrentUserRank(data.currentUserRank ?? null);
       });
   }, [quizId]);
 
@@ -21,7 +32,13 @@ export function QuizLeaderboardSection({ quizId }: { quizId: string }) {
 
   return (
     <div className="mt-12">
-      <LeaderboardList entries={entries} title="This Quiz's Leaderboard" />
+      <LeaderboardList
+        entries={entries}
+        title="This Quiz's Leaderboard"
+        currentUserId={currentUserId}
+        currentUserRank={currentUserRank}
+        primaryMetric="average"
+      />
     </div>
   );
 }

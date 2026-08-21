@@ -72,17 +72,27 @@ export function LeaderboardList({
   title,
   currentUserId,
   currentUserRank,
+  primaryMetric = 'points',
 }: {
   entries: LeaderboardEntry[];
   title: string;
   /** Signed-in visitor's id, if any - used to highlight their row inline. */
   currentUserId?: string | null;
   /**
-   * Signed-in visitor's site-wide rank, if known and outside the visible
-   * `entries` list. Only render the "you're #N" nudge when this is a real,
-   * fetched value - never estimate or invent a rank.
+   * Signed-in visitor's rank on this specific board, if known and outside
+   * the visible `entries` list. Only render the "you're #N" nudge when
+   * this is a real, fetched value - never estimate or invent a rank.
    */
   currentUserRank?: number | null;
+  /**
+   * Which number leads visually (larger/bolder) in each row.
+   * 'points' (default) suits multi-quiz boards (general, category) where
+   * total score reflects volume + consistency across many attempts.
+   * 'average' suits a single-quiz board, where points and % are really
+   * the same score twice - leading with accuracy reads more naturally
+   * than leading with a raw point total for just one quiz.
+   */
+  primaryMetric?: 'points' | 'average';
 }) {
   if (entries.length === 0) {
     return (
@@ -133,10 +143,23 @@ export function LeaderboardList({
                 </span>
               </div>
               <div className="flex flex-none items-center gap-4 font-mono text-xs text-ink-400">
-                <span className="hidden sm:inline">{entry.quizzesTaken} quizzes</span>
+                <span className="hidden sm:inline">
+                  {primaryMetric === 'points' ? `${entry.quizzesTaken} quizzes` : 'best attempt'}
+                </span>
                 <div className="text-right">
-                  <div className="text-sm font-semibold text-pulse-600">{entry.totalScore} pts</div>
-                  <div className="text-[11px] text-ink-400">{Math.round(entry.averagePercentage)}% avg</div>
+                  {primaryMetric === 'points' ? (
+                    <>
+                      <div className="text-sm font-semibold text-pulse-600">{entry.totalScore} pts</div>
+                      <div className="text-[11px] text-ink-400">{Math.round(entry.averagePercentage)}% avg</div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="text-sm font-semibold text-pulse-600">
+                        {Math.round(entry.averagePercentage)}% avg
+                      </div>
+                      <div className="text-[11px] text-ink-400">{entry.totalScore} pts</div>
+                    </>
+                  )}
                 </div>
               </div>
             </li>

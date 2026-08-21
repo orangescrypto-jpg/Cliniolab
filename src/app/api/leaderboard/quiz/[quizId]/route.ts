@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { featureFlagService, leaderboardService, siteSettingsService } from '@/lib/db';
+import { getCurrentUser } from '@/lib/auth/currentUser';
 
 interface RouteParams {
   params: Promise<{ quizId: string }>;
@@ -12,5 +13,17 @@ export async function GET(_request: Request, { params }: RouteParams) {
 
   const limit = await siteSettingsService.getLeaderboardSize();
   const entries = await leaderboardService.getQuizLeaderboard(quizId, limit);
-  return NextResponse.json({ enabled: true, entries });
+
+  let currentUserRank: number | null = null;
+  const user = await getCurrentUser();
+  if (user && !entries.some((e) => e.userId === user.id)) {
+    currentUserRank = await leaderboardService.getUserQuizRank(quizId, user.id);
+  }
+
+  return NextResponse.json({
+    enabled: true,
+    entries,
+    currentUserId: user?.id ?? null,
+    currentUserRank,
+  });
 }

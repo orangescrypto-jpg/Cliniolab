@@ -99,12 +99,12 @@ export function ResourceCard({ resource }: { resource: Resource }) {
             <BookmarkButton kind="resource" targetId={resource.id} />
           </span>
         </div>
-        <h3 className="mt-2 line-clamp-2 font-display text-sm font-semibold text-ink-800 sm:text-base">{resource.title}</h3>
+        <h3 className="mt-2 line-clamp-3 font-display text-sm font-semibold text-ink-800 sm:text-base">{resource.title}</h3>
         {resource.institutionName && (
           <p className="mt-0.5 text-xs text-ink-400">{resource.institutionName}</p>
         )}
         {resource.description && (
-          <p className="mt-1 line-clamp-2 text-xs leading-snug text-ink-500">{resource.description}</p>
+          <p className="mt-1 line-clamp-3 text-xs leading-snug text-ink-500">{resource.description}</p>
         )}
 
         {!isFree && revealedPrice && resource.priceKobo && (

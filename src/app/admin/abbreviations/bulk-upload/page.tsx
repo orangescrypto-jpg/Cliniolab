@@ -299,25 +299,45 @@ export default function AbbreviationsBulkUploadPage() {
     if (entries.length === 0) return;
     setSubmitting(true);
     setSubmitError(null);
+    let res: Response;
     try {
-      const res = await fetch('/api/abbreviations/bulk', {
+      res = await fetch('/api/abbreviations/bulk', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ entries }),
       });
-      const data = await res.json();
-      if (!res.ok) {
-        setSubmitError(data.error ?? 'Upload failed');
-        return;
-      }
-      setResult({ createdCount: data.createdCount ?? 0, skipped: data.skipped ?? [] });
-      setEntries([]);
-      setFileName(null);
     } catch {
+      // fetch itself threw: this is a genuine connectivity failure (no
+      // response at all), so the generic network message is accurate here.
       setSubmitError('Network error while uploading. Please try again.');
-    } finally {
       setSubmitting(false);
+      return;
     }
+
+    // A response came back, so this is a server-side problem, not a
+    // network problem. Parse defensively: the server may not always return
+    // JSON (e.g. an unhandled exception can produce a plain-text or HTML
+    // error page), and that shouldn't be reported to the person as "network
+    // error" since the request did reach the server.
+    let data: { createdCount?: number; skipped?: string[]; error?: string } = {};
+    try {
+      data = await res.json();
+    } catch {
+      setSubmitError(`Upload failed (status ${res.status}). Please try again or contact support.`);
+      setSubmitting(false);
+      return;
+    }
+
+    if (!res.ok) {
+      setSubmitError(data.error ?? `Upload failed (status ${res.status}).`);
+      setSubmitting(false);
+      return;
+    }
+
+    setResult({ createdCount: data.createdCount ?? 0, skipped: data.skipped ?? [] });
+    setEntries([]);
+    setFileName(null);
+    setSubmitting(false);
   }
 
   if (loading) return null;

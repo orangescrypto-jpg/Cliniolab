@@ -5,6 +5,7 @@ import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Toggle } from '@/components/ui/Toggle';
 import { ImagePicker } from '@/components/ui/ImagePicker';
+import { InlineImageManager } from '@/components/ui/InlineImageManager';
 import { TiptapEditor } from '@/components/ui/TiptapEditor';
 import { RawHtmlFrame } from '@/components/ui/RawHtmlFrame';
 import type { BlogContentFormat, BlogPost, BlogStatus } from '@/types';
@@ -439,6 +440,14 @@ export default function AdminBlogPage() {
               />
             )}
           </div>
+          {!isRawHtmlMode && (
+            <div className="mt-2">
+              <InlineImageManager
+                purpose="blog"
+                onInsert={(html) => setContent((current) => `${current}\n${html}\n`)}
+              />
+            </div>
+          )}
           {isRawHtmlMode && (
             <p className="mt-1 text-xs text-ink-400">
               Raw HTML mode bypasses the rich-text editor entirely — pasted content, including &lt;style&gt; blocks

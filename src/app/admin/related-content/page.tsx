@@ -106,3 +106,72 @@ export default function AdminRelatedContentPage() {
             type="number"
             min={1}
             max={12}
+            value={blogPage.count}
+            onChange={(e) =>
+              setBlogPage((prev) => ({ ...prev, count: Math.min(12, Math.max(1, Number(e.target.value) || 1)) }))
+            }
+            className="mt-1 w-32 rounded-md border border-ink-100 px-4 py-2 text-sm focus:border-pulse-400 focus:outline-none"
+          />
+        </div>
+
+        {blogPage.enabled && blogCategories.length > 0 && (
+          <div>
+            <label className="text-sm font-medium text-ink-700">
+              Turn off related quizzes for specific categories
+            </label>
+            <p className="mt-0.5 text-xs text-ink-400">
+              Useful for categories like Job, Scholarship, or Clinical Pearls, where a
+              &ldquo;practice quiz&rdquo; suggestion doesn&apos;t really fit.
+            </p>
+            <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
+              {blogCategories.map((cat) => (
+                <label key={cat.id} className="flex items-center gap-2 text-sm text-ink-700">
+                  <input
+                    type="checkbox"
+                    checked={disabledSet.has(cat.id)}
+                    onChange={(e) => toggleDisabledCategory(cat.id, e.target.checked)}
+                    className="accent-pulse-500"
+                  />
+                  {cat.name}
+                </label>
+              ))}
+            </div>
+          </div>
+        )}
+      </Card>
+
+      <Card className="mt-4 space-y-4 p-5">
+        <h2 className="font-display text-lg font-semibold text-ink-800">Related posts (on blog posts)</h2>
+        <p className="text-xs text-ink-400">
+          Shows other published posts from the same category below a blog post.
+        </p>
+        <Toggle
+          checked={relatedPosts.enabled}
+          onChange={(enabled) => setRelatedPosts((prev) => ({ ...prev, enabled }))}
+          label="Show related posts below a blog post"
+        />
+        <div>
+          <label className="text-sm font-medium text-ink-700">Number of posts to show</label>
+          <input
+            type="number"
+            min={1}
+            max={12}
+            value={relatedPosts.count}
+            onChange={(e) =>
+              setRelatedPosts((prev) => ({
+                ...prev,
+                count: Math.min(12, Math.max(1, Number(e.target.value) || 1)),
+              }))
+            }
+            className="mt-1 w-32 rounded-md border border-ink-100 px-4 py-2 text-sm focus:border-pulse-400 focus:outline-none"
+          />
+        </div>
+      </Card>
+
+      <Button className="mt-6" size="sm" onClick={save} disabled={saving}>
+        {saving ? 'Saving…' : 'Save'}
+      </Button>
+      {saved && <span className="ml-3 text-xs text-pulse-600">Saved</span>}
+    </div>
+  );
+}

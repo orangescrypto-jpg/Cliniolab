@@ -5,6 +5,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { LeaderboardList } from '@/components/quiz/LeaderboardList';
 import { ResourceCard } from '@/components/resources/ResourceCard';
 import { CategoryBlogSection } from '@/components/cms/CategoryBlogSection';
+import { CompactTeaserBlogSection } from '@/components/cms/CompactTeaserBlogSection';
 import { FeaturedBlogPostCard, CompactBlogPostCard } from '@/components/cms/BlogPostCard';
 import { CategoryQuizSection } from '@/components/quiz/CategoryQuizSection';
 import { DailyQuizBanner } from '@/components/layout/DailyQuizBanner';
@@ -14,14 +15,27 @@ import { AbbreviationsTeaser } from '@/components/layout/AbbreviationsTeaser';
 import { Button } from '@/components/ui/Button';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth/AuthProvider';
-import { JOB_CATEGORY_SLUG, SCHOLARSHIP_CATEGORY_SLUG } from '@/lib/constants/blogCategories';
+import {
+  JOB_CATEGORY_SLUG,
+  SCHOLARSHIP_CATEGORY_SLUG,
+  CLINICAL_PEARLS_CATEGORY_SLUG,
+  EXAM_PREP_GUIDES_CATEGORY_SLUG,
+} from '@/lib/constants/blogCategories';
 import type { BlogPost, Category, LeaderboardEntry, Resource } from '@/types';
 
 interface BlogCategoryOption { id: string; name: string; slug: string; sortOrder: number }
 
 // Job/Scholarship get their own dedicated pages (/jobs, /scholarships)
-// instead of a homepage section, so they're filtered out here.
-const HOMEPAGE_EXCLUDED_SLUGS = new Set(['job', 'scholarship']);
+// instead of a homepage section, and Clinical Pearls/Exam Prep Guides get
+// their own distinct compact-card teaser section below instead of the
+// generic big-image CategoryBlogSection — so all four are filtered out
+// of the generic per-category loop.
+const HOMEPAGE_EXCLUDED_SLUGS = new Set([
+  JOB_CATEGORY_SLUG,
+  SCHOLARSHIP_CATEGORY_SLUG,
+  CLINICAL_PEARLS_CATEGORY_SLUG,
+  EXAM_PREP_GUIDES_CATEGORY_SLUG,
+]);
 
 export default function HomePage() {
   const { user } = useAuth();
@@ -84,6 +98,8 @@ export default function HomePage() {
   }, []);
 
   const homepageBlogCategories = blogCategories.filter((c) => !HOMEPAGE_EXCLUDED_SLUGS.has(c.slug));
+  const clinicalPearlsCategory = blogCategories.find((c) => c.slug === CLINICAL_PEARLS_CATEGORY_SLUG);
+  const examPrepCategory = blogCategories.find((c) => c.slug === EXAM_PREP_GUIDES_CATEGORY_SLUG);
 
   function handleSearchSubmit(e: FormEvent) {
     e.preventDefault();
@@ -153,6 +169,29 @@ export default function HomePage() {
           categoryName={category.name}
         />
       ))}
+
+      {/* Clinical Pearls / Exam Prep Guides — compact badge-style cards,
+          visually distinct from the generic per-category blog sections
+          above, since these are meant to read as quick-hit reference
+          content rather than full articles. */}
+      {clinicalPearlsCategory && (
+        <CompactTeaserBlogSection
+          categoryId={clinicalPearlsCategory.id}
+          categorySlug={clinicalPearlsCategory.slug}
+          categoryName={clinicalPearlsCategory.name}
+          icon="💡"
+          tagline="Quick clinical insights worth remembering"
+        />
+      )}
+      {examPrepCategory && (
+        <CompactTeaserBlogSection
+          categoryId={examPrepCategory.id}
+          categorySlug={examPrepCategory.slug}
+          categoryName={examPrepCategory.name}
+          icon="📝"
+          tagline="Focused guides to help you prep for exams"
+        />
+      )}
 
       <div className="chart-strip mx-auto max-w-7xl text-ink-200" aria-hidden />
 

@@ -343,6 +343,10 @@ export default function BulkUploadPage() {
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submittedCount, setSubmittedCount] = useState<number | null>(null);
+  const [duplicateReport, setDuplicateReport] = useState<{
+    duplicateTitleIndexes: number[];
+    duplicateQuestionsByQuizIndex: Record<number, { prompt: string; reason: 'already_in_subcategory' | 'duplicate_in_quiz' }[]>;
+  } | null>(null);
   const [templateFormat, setTemplateFormat] = useState<TemplateFormat>('xlsx');
 
   // Held between "we found unrecognized subcategories" and the user
@@ -626,7 +630,7 @@ export default function BulkUploadPage() {
     return result;
   }
 
-  async function handleSubmit() {
+  async function handleSubmit(confirm = false) {
     if (parsedQuizzes.length === 0) return;
     setSubmitting(true);
     setSubmitError(null);
@@ -634,13 +638,20 @@ export default function BulkUploadPage() {
       const res = await fetch('/api/quizzes/bulk', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ quizzes: parsedQuizzes }),
+        body: JSON.stringify({ quizzes: parsedQuizzes, confirm }),
       });
       const data = await res.json();
       if (!res.ok) {
         setSubmitError(data.error ?? 'Upload failed');
         return;
       }
+      if (data.needsConfirmation) {
+        // Duplicates were found and nothing was inserted yet — show the
+        // report and let the admin decide whether to proceed anyway.
+        setDuplicateReport(data.duplicates);
+        return;
+      }
+      setDuplicateReport(null);
       setSubmittedCount(data.quizzes?.length ?? parsedQuizzes.length);
       setParsedQuizzes([]);
       setFileName(null);
@@ -820,30 +831,91 @@ export default function BulkUploadPage() {
             upload
           </h2>
           <div className="mt-4 space-y-3">
-            {parsedQuizzes.map((q, i) => (
-              <div key={i} className="rounded-md border border-ink-100 p-4">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <p className="font-medium text-ink-800">{q.title}</p>
-                  <span className="rounded-full bg-ink-50 px-2 py-0.5 text-xs text-ink-500">
-                    {q.mode}
-                  </span>
+            {parsedQuizzes.map((q, i) => {
+              const isDuplicateTitle = duplicateReport?.duplicateTitleIndexes.includes(i);
+              const duplicateQuestions = duplicateReport?.duplicateQuestionsByQuizIndex[i] ?? [];
+              const flagged = isDuplicateTitle || duplicateQuestions.length > 0;
+              return (
+                <div
+                  key={i}
+                  className={`rounded-md border p-4 ${
+                    flagged ? 'border-flag-300 bg-flag-50' : 'border-ink-100'
+                  }`}
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="font-medium text-ink-800">
+                      {q.title}
+                      {isDuplicateTitle && (
+                        <span className="ml-2 rounded-full bg-flag-100 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-flag-700">
+                          Duplicate title
+                        </span>
+                      )}
+                    </p>
+                    <span className="rounded-full bg-ink-50 px-2 py-0.5 text-xs text-ink-500">
+                      {q.mode}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-xs text-ink-400">
+                    {q.questions.length} question{q.questions.length === 1 ? '' : 's'}
+                    {q.timeLimitSeconds ? ` · ${Math.round(q.timeLimitSeconds / 60)} min timer` : ' · no timer'}
+                  </p>
+                  {duplicateQuestions.length > 0 && (
+                    <div className="mt-2 space-y-1">
+                      <p className="text-xs font-medium text-flag-700">
+                        {duplicateQuestions.length} likely duplicate question
+                        {duplicateQuestions.length === 1 ? '' : 's'}:
+                      </p>
+                      <ul className="ml-4 list-disc space-y-0.5 text-xs text-ink-500">
+                        {duplicateQuestions.slice(0, 5).map((dq, di) => (
+                          <li key={di}>
+                            &ldquo;{dq.prompt.slice(0, 80)}
+                            {dq.prompt.length > 80 ? '…' : ''}&rdquo;{' '}
+                            <span className="text-ink-400">
+                              (
+                              {dq.reason === 'already_in_subcategory'
+                                ? 'already exists in this subcategory'
+                                : 'repeated within this upload'}
+                              )
+                            </span>
+                          </li>
+                        ))}
+                        {duplicateQuestions.length > 5 && (
+                          <li className="text-ink-400">…and {duplicateQuestions.length - 5} more</li>
+                        )}
+                      </ul>
+                    </div>
+                  )}
                 </div>
-                <p className="mt-1 text-xs text-ink-400">
-                  {q.questions.length} question{q.questions.length === 1 ? '' : 's'}
-                  {q.timeLimitSeconds ? ` · ${Math.round(q.timeLimitSeconds / 60)} min timer` : ' · no timer'}
-                </p>
-              </div>
-            ))}
+              );
+            })}
           </div>
+
+          {duplicateReport && (
+            <div className="mt-4 rounded-md border border-flag-300 bg-flag-50 p-4">
+              <p className="text-sm font-medium text-flag-700">
+                Some quizzes/questions above look like duplicates of content already in these
+                subcategories (or repeated within this file). Nothing has been uploaded yet.
+                Fix the file and re-upload, or publish anyway if these are intentional.
+              </p>
+            </div>
+          )}
+
           <div className="mt-6 flex items-center gap-3">
-            <Button onClick={handleSubmit} disabled={submitting}>
-              {submitting ? 'Publishing…' : `Publish ${parsedQuizzes.length} quizzes`}
-            </Button>
+            {duplicateReport ? (
+              <Button onClick={() => handleSubmit(true)} disabled={submitting} variant="secondary">
+                {submitting ? 'Publishing…' : 'Publish anyway'}
+              </Button>
+            ) : (
+              <Button onClick={() => handleSubmit(false)} disabled={submitting}>
+                {submitting ? 'Publishing…' : `Publish ${parsedQuizzes.length} quizzes`}
+              </Button>
+            )}
             <Button
               variant="secondary"
               onClick={() => {
                 setParsedQuizzes([]);
                 setFileName(null);
+                setDuplicateReport(null);
                 clearPreviewDraft();
               }}
             >

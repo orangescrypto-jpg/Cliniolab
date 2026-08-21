@@ -22,6 +22,8 @@ export const BLOG_CATEGORIES = [
   'Others',
   'Job',
   'Scholarship',
+  'Clinical Pearls',
+  'Exam Prep Guides',
 ] as const;
 
 export type BlogCategoryName = (typeof BLOG_CATEGORIES)[number];
@@ -29,6 +31,14 @@ export type BlogCategoryName = (typeof BLOG_CATEGORIES)[number];
 // Slugs for the two categories that get dedicated pages outside /blog.
 export const JOB_CATEGORY_SLUG = 'job';
 export const SCHOLARSHIP_CATEGORY_SLUG = 'scholarship';
+
+// Slugs for Clinical Pearls / Exam Prep Guides — these get their own
+// compact-card homepage teaser sections (visually distinct from the
+// generic per-category blog section) instead of the default one, so
+// they're excluded from the generic homepage loop the same way Job and
+// Scholarship are.
+export const CLINICAL_PEARLS_CATEGORY_SLUG = 'clinical-pearls';
+export const EXAM_PREP_GUIDES_CATEGORY_SLUG = 'exam-prep-guides';
 
 export function slugifyCategory(category: string): string {
   return category.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');

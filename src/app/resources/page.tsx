@@ -49,7 +49,7 @@ export default function ResourcesPage() {
         ))}
       </div>
 
-      <div className="mt-8 grid grid-cols-1 gap-5 sm:grid-cols-2">
+      <div className="mt-8 grid grid-cols-2 gap-3 sm:gap-5">
         {filtered.map((resource) => (
           <ResourceCard key={resource.id} resource={resource} />
         ))}

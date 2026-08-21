@@ -81,12 +81,12 @@ export function ResourceCard({ resource }: { resource: Resource }) {
   const isFree = resource.pricing === 'free';
 
   return (
-    <Card className="flex flex-col p-4">
+    <Card className="flex flex-col p-3 sm:p-4">
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         src={resource.coverImageUrl || FALLBACK_COVERS[resource.kind]}
         alt=""
-        className="mb-3 h-40 w-full rounded-md object-cover"
+        className="mb-3 h-28 w-full rounded-md object-cover sm:h-40"
       />
 
       <div className="flex-1">
@@ -99,12 +99,12 @@ export function ResourceCard({ resource }: { resource: Resource }) {
             <BookmarkButton kind="resource" targetId={resource.id} />
           </span>
         </div>
-        <h3 className="mt-2 font-display text-base font-semibold text-ink-800">{resource.title}</h3>
+        <h3 className="mt-2 line-clamp-2 font-display text-sm font-semibold text-ink-800 sm:text-base">{resource.title}</h3>
         {resource.institutionName && (
           <p className="mt-0.5 text-xs text-ink-400">{resource.institutionName}</p>
         )}
         {resource.description && (
-          <p className="mt-1 line-clamp-2 text-sm text-ink-500">{resource.description}</p>
+          <p className="mt-1 line-clamp-2 text-xs leading-snug text-ink-500">{resource.description}</p>
         )}
 
         {!isFree && revealedPrice && resource.priceKobo && (

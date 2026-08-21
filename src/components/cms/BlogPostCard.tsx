@@ -3,7 +3,21 @@
 import Link from 'next/link';
 import { Card } from '@/components/ui/Card';
 import { useBlogSubcategoryName } from '@/lib/hooks/useBlogSubcategoryName';
+import { useBlogCategorySlug } from '@/lib/hooks/useBlogCategorySlug';
 import type { BlogPost } from '@/types';
+
+const FALLBACK_COVERS: Record<'job' | 'scholarship' | 'default', string> = {
+  job: '/job-fallback.svg',
+  scholarship: '/scholarship-fallback.svg',
+  default: '/blog-fallback.svg',
+};
+
+function resolveCoverImage(post: BlogPost, categorySlug: string | null): string {
+  if (post.featuredImageUrl) return post.featuredImageUrl;
+  if (categorySlug === 'job') return FALLBACK_COVERS.job;
+  if (categorySlug === 'scholarship') return FALLBACK_COVERS.scholarship;
+  return FALLBACK_COVERS.default;
+}
 
 /** Strips HTML/markdown-ish characters and truncates for a listing-card preview. */
 function fallbackExcerpt(content: string, length = 140): string {
@@ -15,13 +29,16 @@ function fallbackExcerpt(content: string, length = 140): string {
 export function FeaturedBlogPostCard({ post }: { post: BlogPost }) {
   const excerpt = post.excerpt || fallbackExcerpt(post.content, 200);
   const subcategoryName = useBlogSubcategoryName(post.blogCategoryId, post.blogSubcategoryId);
+  const categorySlug = useBlogCategorySlug(post.blogCategoryId);
   return (
     <Link href={`/blog/${post.slug}`}>
       <Card className="overflow-hidden transition-shadow hover:shadow-md">
-        {post.featuredImageUrl && (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={post.featuredImageUrl} alt="" className="h-56 w-full object-cover sm:h-72" />
-        )}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={resolveCoverImage(post, categorySlug)}
+          alt=""
+          className="h-56 w-full object-cover sm:h-72"
+        />
         <div className="p-6">
           <div className="flex flex-wrap items-center gap-2">
             {post.isPinned && (
@@ -50,17 +67,16 @@ export function FeaturedBlogPostCard({ post }: { post: BlogPost }) {
 
 /** Small side-list card for non-featured posts — thumbnail + title only, no excerpt. */
 export function CompactBlogPostCard({ post }: { post: BlogPost }) {
+  const categorySlug = useBlogCategorySlug(post.blogCategoryId);
   return (
     <Link href={`/blog/${post.slug}`}>
       <div className="flex items-start gap-4 py-3">
-        {post.featuredImageUrl && (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={post.featuredImageUrl}
-            alt=""
-            className="h-20 w-28 shrink-0 rounded-md object-cover"
-          />
-        )}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={resolveCoverImage(post, categorySlug)}
+          alt=""
+          className="h-20 w-28 shrink-0 rounded-md object-cover"
+        />
         <div className="min-w-0">
           {post.category && (
             <span className="text-xs font-medium text-ink-400">{post.category}</span>
@@ -78,13 +94,16 @@ export function CompactBlogPostCard({ post }: { post: BlogPost }) {
 export function BlogPostCard({ post }: { post: BlogPost }) {
   const excerpt = post.excerpt || fallbackExcerpt(post.content);
   const subcategoryName = useBlogSubcategoryName(post.blogCategoryId, post.blogSubcategoryId);
+  const categorySlug = useBlogCategorySlug(post.blogCategoryId);
   return (
     <Link href={`/blog/${post.slug}`}>
       <Card className="overflow-hidden transition-shadow hover:shadow-md">
-        {post.featuredImageUrl && (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={post.featuredImageUrl} alt="" className="h-36 w-full object-cover" />
-        )}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={resolveCoverImage(post, categorySlug)}
+          alt=""
+          className="h-36 w-full object-cover"
+        />
         <div className="p-5">
           <div className="flex flex-wrap items-center gap-2">
             {post.isPinned && (
@@ -110,3 +129,4 @@ export function BlogPostCard({ post }: { post: BlogPost }) {
     </Link>
   );
 }
+

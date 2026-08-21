@@ -15,7 +15,7 @@ export async function PATCH(request: Request, { params }: RouteParams) {
     return NextResponse.json({ error: 'Only admins/moderators can edit abbreviations' }, { status: 403 });
   }
 
-  let body: { abbreviation: string; meaning: string; category?: string };
+  let body: { abbreviation: string; meaning: string; category?: string; isGlossary?: boolean };
   try {
     body = await request.json();
   } catch {

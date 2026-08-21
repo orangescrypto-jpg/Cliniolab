@@ -2,13 +2,16 @@
 
 import { useEffect, useState } from 'react';
 import { LeaderboardList } from '@/components/quiz/LeaderboardList';
+import { useAuth } from '@/lib/auth/AuthProvider';
 import type { Category, LeaderboardEntry } from '@/types';
 
 export default function LeaderboardPage() {
+  const { user } = useAuth();
   const [categories, setCategories] = useState<Category[]>([]);
   const [selected, setSelected] = useState<string>('general');
   const [entries, setEntries] = useState<LeaderboardEntry[]>([]);
   const [enabled, setEnabled] = useState(true);
+  const [currentUserRank, setCurrentUserRank] = useState<number | null>(null);
 
   useEffect(() => {
     fetch('/api/categories')
@@ -23,6 +26,7 @@ export default function LeaderboardPage() {
       .then((data) => {
         setEnabled(data.enabled);
         setEntries(data.entries ?? []);
+        setCurrentUserRank(data.currentUserRank ?? null);
       });
   }, [selected]);
 
@@ -53,7 +57,12 @@ export default function LeaderboardPage() {
 
       <div className="mt-8">
         {enabled ? (
-          <LeaderboardList entries={entries} title={title} />
+          <LeaderboardList
+            entries={entries}
+            title={title}
+            currentUserId={user?.id ?? null}
+            currentUserRank={currentUserRank}
+          />
         ) : (
           <p className="text-sm text-ink-400">The leaderboard is currently disabled.</p>
         )}

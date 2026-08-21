@@ -43,31 +43,47 @@ export async function POST(request: Request) {
   // Duplicate checks are scoped separately for abbreviations vs glossary
   // terms, so the same word can exist once as a short abbreviation and
   // once as a full glossary entry without colliding.
-  const abbrevTerms = cleaned.filter((e) => !e.isGlossary).map((e) => e.abbreviation);
-  const glossaryTerms = cleaned.filter((e) => e.isGlossary).map((e) => e.abbreviation);
-  const [existingAbbrev, existingGlossary] = await Promise.all([
-    abbreviationService.findExistingAbbreviationTerms(abbrevTerms, 'abbreviation'),
-    abbreviationService.findExistingAbbreviationTerms(glossaryTerms, 'glossary'),
-  ]);
+  //
+  // Everything from here down touches the database. Any of these calls can
+  // throw (bad connection, a schema mismatch like a missing column, a
+  // constraint violation, etc). Without this try/catch, an exception here
+  // bubbles up as an unhandled 500 with no JSON body, which breaks the
+  // client's `await res.json()` and surfaces as a generic "Network error"
+  // even though the request actually reached the server.
+  try {
+    const abbrevTerms = cleaned.filter((e) => !e.isGlossary).map((e) => e.abbreviation);
+    const glossaryTerms = cleaned.filter((e) => e.isGlossary).map((e) => e.abbreviation);
+    const [existingAbbrev, existingGlossary] = await Promise.all([
+      abbreviationService.findExistingAbbreviationTerms(abbrevTerms, 'abbreviation'),
+      abbreviationService.findExistingAbbreviationTerms(glossaryTerms, 'glossary'),
+    ]);
 
-  const seenAbbrev = new Set<string>();
-  const seenGlossary = new Set<string>();
-  const toCreate: typeof cleaned = [];
-  const skipped: string[] = [];
+    const seenAbbrev = new Set<string>();
+    const seenGlossary = new Set<string>();
+    const toCreate: typeof cleaned = [];
+    const skipped: string[] = [];
 
-  for (const entry of cleaned) {
-    const key = entry.abbreviation.toLowerCase();
-    const existing = entry.isGlossary ? existingGlossary : existingAbbrev;
-    const seen = entry.isGlossary ? seenGlossary : seenAbbrev;
-    if (existing.has(key) || seen.has(key)) {
-      skipped.push(entry.abbreviation);
-      continue;
+    for (const entry of cleaned) {
+      const key = entry.abbreviation.toLowerCase();
+      const existing = entry.isGlossary ? existingGlossary : existingAbbrev;
+      const seen = entry.isGlossary ? seenGlossary : seenAbbrev;
+      if (existing.has(key) || seen.has(key)) {
+        skipped.push(entry.abbreviation);
+        continue;
+      }
+      seen.add(key);
+      toCreate.push(entry);
     }
-    seen.add(key);
-    toCreate.push(entry);
+
+    const created = toCreate.length > 0 ? await abbreviationService.createAbbreviationsBulk(user.id, toCreate) : [];
+
+    return NextResponse.json({ abbreviations: created, createdCount: created.length, skipped }, { status: 201 });
+  } catch (err) {
+    console.error('Bulk abbreviation upload failed', err);
+    const message = err instanceof Error ? err.message : 'Unknown database error';
+    return NextResponse.json(
+      { error: `Upload failed while saving to the database: ${message}` },
+      { status: 500 }
+    );
   }
-
-  const created = toCreate.length > 0 ? await abbreviationService.createAbbreviationsBulk(user.id, toCreate) : [];
-
-  return NextResponse.json({ abbreviations: created, createdCount: created.length, skipped }, { status: 201 });
 }

@@ -1,6 +1,7 @@
 'use client';
 
 import { useRef, useState } from 'react';
+import { ImageLibraryModal } from './ImageLibraryModal';
 
 interface ImagePickerProps {
   value: string;
@@ -13,6 +14,7 @@ export function ImagePicker({ value, onChange, purpose, label }: ImagePickerProp
   const [mode, setMode] = useState<'url' | 'upload'>('url');
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [libraryOpen, setLibraryOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   async function handleFileSelected(e: React.ChangeEvent<HTMLInputElement>) {
@@ -65,7 +67,24 @@ export function ImagePicker({ value, onChange, purpose, label }: ImagePickerProp
         >
           Upload image
         </button>
+        <button
+          type="button"
+          onClick={() => setLibraryOpen(true)}
+          className="rounded-md border border-ink-100 px-3 py-1.5 text-xs font-medium text-ink-600"
+        >
+          Choose existing
+        </button>
       </div>
+
+      {libraryOpen && (
+        <ImageLibraryModal
+          onSelect={(path) => {
+            onChange(path);
+            setLibraryOpen(false);
+          }}
+          onClose={() => setLibraryOpen(false)}
+        />
+      )}
 
       {mode === 'url' ? (
         <input

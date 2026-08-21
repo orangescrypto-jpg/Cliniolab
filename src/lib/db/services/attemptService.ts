@@ -1,6 +1,7 @@
 import { getDb, generateId, nowIso } from '@/lib/db/client';
 import { getQuizById, getQuizQuestions } from '@/lib/db/services/quizService';
 import type { AttemptResult, AttemptSubmission, QuizAttempt } from '@/types';
+import { resolveEffectiveCorrectAnswer } from '@/lib/quizAnswers';
 
 interface AttemptRow {
   id: string;
@@ -131,9 +132,10 @@ export async function submitAttempt(
   let totalMarks = 0;
   const perQuestion = questions.map((q) => {
     const submittedAnswer = answerMap.get(q.id) ?? null;
+    const effectiveCorrectAnswer = resolveEffectiveCorrectAnswer(q.correctAnswer, q.options);
     const isCorrect =
       submittedAnswer !== null &&
-      submittedAnswer.trim().toLowerCase() === q.correctAnswer.trim().toLowerCase();
+      submittedAnswer.trim().toLowerCase() === effectiveCorrectAnswer.trim().toLowerCase();
     const mark = q.mark ?? quiz.defaultMark;
     totalMarks += mark;
     if (isCorrect) {
@@ -143,7 +145,7 @@ export async function submitAttempt(
       questionId: q.id,
       prompt: q.prompt,
       submittedAnswer,
-      correctAnswer: q.correctAnswer,
+      correctAnswer: effectiveCorrectAnswer,
       isCorrect,
       explanation: q.explanation,
       options: q.options ?? [],

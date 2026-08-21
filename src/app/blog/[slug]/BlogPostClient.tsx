@@ -8,7 +8,21 @@ import { ShareButton } from '@/components/quiz/ShareButton';
 import { RelatedQuizzes } from '@/components/quiz/RelatedQuizzes';
 import { CommentThread } from '@/components/quiz/CommentThread';
 import { useBlogSubcategoryName } from '@/lib/hooks/useBlogSubcategoryName';
+import { useBlogCategorySlug } from '@/lib/hooks/useBlogCategorySlug';
 import type { BlogPost } from '@/types';
+
+const FALLBACK_COVERS: Record<'job' | 'scholarship' | 'default', string> = {
+  job: '/job-fallback.svg',
+  scholarship: '/scholarship-fallback.svg',
+  default: '/blog-fallback.svg',
+};
+
+function resolveCoverImage(post: BlogPost, categorySlug: string | null): string {
+  if (post.featuredImageUrl) return post.featuredImageUrl;
+  if (categorySlug === 'job') return FALLBACK_COVERS.job;
+  if (categorySlug === 'scholarship') return FALLBACK_COVERS.scholarship;
+  return FALLBACK_COVERS.default;
+}
 
 function looksLikeHtml(content: string): boolean {
   const sample = content.slice(0, 1000);
@@ -171,6 +185,7 @@ export function BlogPostClient({ slug }: { slug: string }) {
 
 function BlogPostBody({ post }: { post: BlogPost }) {
   const subcategoryName = useBlogSubcategoryName(post.blogCategoryId, post.blogSubcategoryId);
+  const categorySlug = useBlogCategorySlug(post.blogCategoryId);
   const isRaw = isFullRawDocument(post.content);
   // Covers old/edge-case posts that carry their own <style> or fixed
   // pixel widths but, for whatever historical reason, don't trip the
@@ -196,14 +211,12 @@ function BlogPostBody({ post }: { post: BlogPost }) {
           since that's the part authors sometimes paste as a complete,
           wide HTML document. */}
       <div className="mx-auto max-w-2xl px-6">
-        {post.featuredImageUrl && (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={post.featuredImageUrl}
-            alt=""
-            className="mb-6 h-64 w-full rounded-lg object-cover"
-          />
-        )}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={resolveCoverImage(post, categorySlug)}
+          alt=""
+          className="mb-6 h-64 w-full rounded-lg object-cover"
+        />
         <div className="flex flex-wrap items-center gap-2">
           {post.isPinned && (
             <span className="rounded bg-flag-50 px-2 py-0.5 text-xs font-medium text-flag-600">Pinned</span>

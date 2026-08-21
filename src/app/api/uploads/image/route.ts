@@ -28,6 +28,16 @@ export async function POST(request: Request) {
     if (err instanceof ImageUploadError) {
       return NextResponse.json({ error: err.message }, { status: 400 });
     }
-    return NextResponse.json({ error: 'Upload failed' }, { status: 500 });
+    // Any other error here is a storage/config problem (missing R2
+    // binding, bad S3 credentials, network failure to R2's endpoint,
+    // etc.) rather than something the uploader did wrong. Surface the
+    // real message instead of a bare "Upload failed" — a generic 500
+    // with no detail is nearly impossible to diagnose from the client
+    // side, and this project's threat model doesn't call for hiding
+    // storage config errors from the small set of admins who can even
+    // reach this endpoint (auth/role check already happened above).
+    const detail = err instanceof Error ? err.message : String(err);
+    console.error('Image upload failed (non-ImageUploadError):', err);
+    return NextResponse.json({ error: `Upload failed: ${detail}` }, { status: 500 });
   }
 }

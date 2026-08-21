@@ -4,14 +4,17 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { QuizCard } from '@/components/quiz/QuizCard';
 import { LeaderboardList } from '@/components/quiz/LeaderboardList';
+import { useAuth } from '@/lib/auth/AuthProvider';
 import type { Category, LeaderboardEntry, QuizWithStats } from '@/types';
 
 export default function CategoryGroupPage() {
   const params = useParams<{ categorySlug: string }>();
+  const { user } = useAuth();
   const [category, setCategory] = useState<Category | null>(null);
   const [quizzes, setQuizzes] = useState<QuizWithStats[]>([]);
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
   const [leaderboardEnabled, setLeaderboardEnabled] = useState(true);
+  const [leaderboardCurrentUserRank, setLeaderboardCurrentUserRank] = useState<number | null>(null);
 
   useEffect(() => {
     fetch('/api/categories')
@@ -28,6 +31,7 @@ export default function CategoryGroupPage() {
             .then((lbData) => {
               setLeaderboardEnabled(lbData.enabled);
               setLeaderboard(lbData.entries ?? []);
+              setLeaderboardCurrentUserRank(lbData.currentUserRank ?? null);
             });
         }
       });
@@ -53,7 +57,12 @@ export default function CategoryGroupPage() {
         </div>
         {leaderboardEnabled && category && (
           <div>
-            <LeaderboardList entries={leaderboard} title={`${category.name} Leaders`} />
+            <LeaderboardList
+              entries={leaderboard}
+              title={`${category.name} Leaders`}
+              currentUserId={user?.id ?? null}
+              currentUserRank={leaderboardCurrentUserRank}
+            />
           </div>
         )}
       </div>

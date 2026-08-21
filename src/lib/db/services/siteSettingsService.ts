@@ -1,7 +1,8 @@
 import { getDb, nowIso } from '@/lib/db/client';
-import type { HomepageVideoSetting, CookieConsentSetting, RelatedQuizzesSetting, ResourcePaymentMode } from '@/types';
+import type { HomepageVideoSetting, CookieConsentSetting, RelatedQuizzesSetting, RelatedPostsSetting, ResourcePaymentMode } from '@/types';
 
-const DEFAULT_RELATED_QUIZZES: RelatedQuizzesSetting = { enabled: true, count: 6 };
+const DEFAULT_RELATED_QUIZZES: RelatedQuizzesSetting = { enabled: true, count: 6, disabledCategoryIds: [] };
+const DEFAULT_RELATED_POSTS: RelatedPostsSetting = { enabled: true, count: 4 };
 
 const DEFAULT_COOKIE_CONSENT: CookieConsentSetting = {
   enabled: true,
@@ -98,6 +99,7 @@ async function getRelatedQuizzesSetting(key: string): Promise<RelatedQuizzesSett
     return {
       enabled: parsed.enabled ?? DEFAULT_RELATED_QUIZZES.enabled,
       count: clampRelatedCount(parsed.count ?? DEFAULT_RELATED_QUIZZES.count),
+      disabledCategoryIds: Array.isArray(parsed.disabledCategoryIds) ? parsed.disabledCategoryIds : [],
     };
   } catch {
     return DEFAULT_RELATED_QUIZZES;
@@ -111,7 +113,15 @@ async function setRelatedQuizzesSetting(key: string, setting: RelatedQuizzesSett
       `INSERT INTO site_settings (key, value, updated_at) VALUES (?, ?, ?)
        ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`
     )
-    .bind(key, JSON.stringify({ enabled: setting.enabled, count: clampRelatedCount(setting.count) }), nowIso())
+    .bind(
+      key,
+      JSON.stringify({
+        enabled: setting.enabled,
+        count: clampRelatedCount(setting.count),
+        disabledCategoryIds: Array.isArray(setting.disabledCategoryIds) ? setting.disabledCategoryIds : [],
+      }),
+      nowIso()
+    )
     .run();
 }
 
@@ -131,6 +141,45 @@ export async function getRelatedQuizzesBlogPageSetting(): Promise<RelatedQuizzes
 
 export async function setRelatedQuizzesBlogPageSetting(setting: RelatedQuizzesSetting): Promise<void> {
   return setRelatedQuizzesSetting('related_quizzes_blog_page', setting);
+}
+
+function clampRelatedPostsCount(count: number): number {
+  if (!Number.isFinite(count)) return DEFAULT_RELATED_POSTS.count;
+  return Math.min(12, Math.max(1, Math.round(count)));
+}
+
+/** Related-posts widget shown below a blog post (other posts in the same category). */
+export async function getRelatedPostsSetting(): Promise<RelatedPostsSetting> {
+  const db = getDb();
+  const row = await db
+    .prepare('SELECT * FROM site_settings WHERE key = ?')
+    .bind('related_posts_blog_page')
+    .first<SettingRow>();
+  if (!row) return DEFAULT_RELATED_POSTS;
+  try {
+    const parsed = JSON.parse(row.value) as Partial<RelatedPostsSetting>;
+    return {
+      enabled: parsed.enabled ?? DEFAULT_RELATED_POSTS.enabled,
+      count: clampRelatedPostsCount(parsed.count ?? DEFAULT_RELATED_POSTS.count),
+    };
+  } catch {
+    return DEFAULT_RELATED_POSTS;
+  }
+}
+
+export async function setRelatedPostsSetting(setting: RelatedPostsSetting): Promise<void> {
+  const db = getDb();
+  await db
+    .prepare(
+      `INSERT INTO site_settings (key, value, updated_at) VALUES (?, ?, ?)
+       ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`
+    )
+    .bind(
+      'related_posts_blog_page',
+      JSON.stringify({ enabled: setting.enabled, count: clampRelatedPostsCount(setting.count) }),
+      nowIso()
+    )
+    .run();
 }
 
 export async function getPlatformFeePercent(): Promise<number> {

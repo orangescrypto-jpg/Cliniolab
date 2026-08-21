@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { QuestionNavigator } from '@/components/quiz/QuestionNavigator';
 import { clearDraft, loadDraft, saveDraft } from '@/lib/localDraft';
+import { resolveEffectiveCorrectAnswer } from '@/lib/quizAnswers';
 import type { Quiz, QuizQuestion } from '@/types';
 
 interface StudyModeRunnerProps {
@@ -71,7 +72,16 @@ export function StudyModeRunner({ quiz, questions: rawQuestions }: StudyModeRunn
   // If a resumable draft exists, reorder questions to match the order the
   // user was actually studying in, rather than re-shuffling.
   const [questions] = useState(() => {
-    let list = rawQuestions;
+    // Normalize `correctAnswer` once up front so it's always a real option
+    // id from here on. Older bulk-uploaded quizzes may have this stored as
+    // a bare letter (e.g. "C") instead of an option id - resolving it here,
+    // rather than at each comparison site below, keeps every downstream
+    // check in this component correct with no other changes and without
+    // touching the underlying D1 row.
+    let list = rawQuestions.map((q) => ({
+      ...q,
+      correctAnswer: resolveEffectiveCorrectAnswer(q.correctAnswer, q.options),
+    }));
     if (quiz.shuffleQuestions) list = shuffleArray(list);
     if (quiz.shuffleOptions) {
       list = list.map((q) =>

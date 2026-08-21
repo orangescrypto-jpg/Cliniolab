@@ -182,7 +182,9 @@ INSERT INTO blog_categories (id, name, slug, sort_order) VALUES
 ('blogcat_clinical_scenarios', 'Clinical Scenarios', 'clinical-scenarios', 9),
 ('blogcat_others', 'Others', 'others', 10),
 ('blogcat_job', 'Job', 'job', 11),
-('blogcat_scholarship', 'Scholarship', 'scholarship', 12);
+('blogcat_scholarship', 'Scholarship', 'scholarship', 12),
+('blogcat_clinical_pearls', 'Clinical Pearls', 'clinical-pearls', 13),
+('blogcat_exam_prep_guides', 'Exam Prep Guides', 'exam-prep-guides', 14);
 
 CREATE TABLE static_pages (
   id TEXT PRIMARY KEY,       -- e.g. 'about', 'contact', 'terms', 'privacy', 'faq'
@@ -390,15 +392,17 @@ CREATE INDEX idx_bookmarks_user ON bookmarks(user_id, kind);
 -- tool) - staff enter these manually, same trust model as everything else.
 CREATE TABLE medical_abbreviations (
   id TEXT PRIMARY KEY,
-  abbreviation TEXT NOT NULL,         -- e.g. "NPO"
+  abbreviation TEXT NOT NULL,         -- e.g. "NPO", or the full term when is_glossary = 1, e.g. "Homeostasis"
   meaning TEXT NOT NULL,              -- e.g. "Nil per os (nothing by mouth)"
   category TEXT,                      -- optional grouping, e.g. "Vital Signs", "Medication Orders"
+  is_glossary INTEGER NOT NULL DEFAULT 0, -- 0 = short abbreviation, 1 = full glossary term
   created_by TEXT NOT NULL REFERENCES users(id),
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
 CREATE INDEX idx_abbreviations_term ON medical_abbreviations(abbreviation);
+CREATE INDEX idx_abbreviations_is_glossary ON medical_abbreviations(is_glossary);
 
 -- Homepage-featured spotlight. Admin/moderator can feature ANY person,
 -- not necessarily tied to a platform user account (student_user_id is

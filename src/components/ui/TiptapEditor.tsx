@@ -217,6 +217,33 @@ export function TiptapEditor({
             if (path) editor.chain().focus().insertFigure({ src: path }).run();
           }}
         />
+
+        {/* Always-visible insert-image button, pinned to the bottom-right of
+            the editor pane. Exists so inserting an image mid-post doesn't
+            require scrolling back up to the toolbar — same uploadFile()
+            path as the toolbar button and the slash-menu "Image" command,
+            just reachable from wherever the admin is currently typing. */}
+        <label
+          htmlFor="tiptap-floating-image-input"
+          className="absolute bottom-3 right-3 z-10 flex h-10 w-10 cursor-pointer items-center justify-center rounded-full border border-ink-100 bg-white text-base shadow-lg hover:bg-ink-50"
+          title="Insert image here"
+        >
+          🖼
+        </label>
+        <input
+          id="tiptap-floating-image-input"
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            e.target.value = '';
+            if (!file) return;
+            uploadFile(file).then((path) => {
+              if (path) editor.chain().focus().insertFigure({ src: path }).run();
+            });
+          }}
+        />
       </div>
 
       <div className="flex items-center justify-between border-t border-ink-100 bg-ink-50/50 px-3 py-1.5 text-[11px] text-ink-400">

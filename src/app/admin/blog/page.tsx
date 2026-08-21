@@ -1,12 +1,12 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Toggle } from '@/components/ui/Toggle';
 import { ImagePicker } from '@/components/ui/ImagePicker';
 import { InlineImageManager } from '@/components/ui/InlineImageManager';
-import { TiptapEditor } from '@/components/ui/TiptapEditor';
+import { TiptapEditor, type TiptapEditorHandle } from '@/components/ui/TiptapEditor';
 import { RawHtmlFrame } from '@/components/ui/RawHtmlFrame';
 import type { BlogContentFormat, BlogPost, BlogStatus } from '@/types';
 
@@ -32,6 +32,7 @@ export default function AdminBlogPage() {
   const [slug, setSlug] = useState('');
   const [slugTouched, setSlugTouched] = useState(false);
   const [content, setContent] = useState('');
+  const editorRef = useRef<TiptapEditorHandle>(null);
   const [excerpt, setExcerpt] = useState('');
   // Tiptap always authors real HTML, so new/edited posts are always saved
   // as 'html'. Existing 'markdown' posts already in the DB are unaffected
@@ -433,6 +434,7 @@ export default function AdminBlogPage() {
               </div>
             ) : (
               <TiptapEditor
+                ref={editorRef}
                 value={content}
                 onChange={setContent}
                 uploadPurpose="blog"
@@ -444,7 +446,11 @@ export default function AdminBlogPage() {
             <div className="mt-2">
               <InlineImageManager
                 purpose="blog"
-                onInsert={(html) => setContent((current) => `${current}\n${html}\n`)}
+                content={content}
+                onInsertMarker={(marker) => editorRef.current?.insertTextAtCursor(marker)}
+                onReplaceMarker={(marker, html) =>
+                  setContent((current) => current.replace(marker, html))
+                }
               />
             </div>
           )}

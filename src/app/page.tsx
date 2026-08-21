@@ -210,7 +210,7 @@ export default function HomePage() {
                 See more →
               </Link>
             </div>
-            <div className="mt-6 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="mt-6 grid grid-cols-2 gap-3 sm:gap-5 lg:grid-cols-3">
               {resources.map((resource) => (
                 <ResourceCard key={resource.id} resource={resource} />
               ))}

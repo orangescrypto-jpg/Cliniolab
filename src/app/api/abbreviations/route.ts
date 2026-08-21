@@ -3,15 +3,40 @@ import { getCurrentUser } from '@/lib/auth/currentUser';
 import { permissions } from '@/lib/auth/permissions';
 import { abbreviationService, featureFlagService } from '@/lib/db';
 
+function parseKind(value: string | null): 'abbreviation' | 'glossary' | 'all' {
+  return value === 'abbreviation' || value === 'glossary' ? value : 'all';
+}
+
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const search = searchParams.get('search') ?? undefined;
   const random = searchParams.get('random');
+  const kind = parseKind(searchParams.get('kind'));
+  const page = searchParams.get('page');
+  const pageSize = searchParams.get('pageSize');
 
-  const abbreviations = random
-    ? await abbreviationService.listRandomAbbreviations(Number(random))
-    : await abbreviationService.listAbbreviations(search);
+  if (random) {
+    const abbreviations = await abbreviationService.listRandomAbbreviations(Number(random), kind);
+    return NextResponse.json({ abbreviations });
+  }
 
+  if (page) {
+    const pageNum = Math.max(1, Number(page) || 1);
+    const size = Math.min(100, Math.max(1, Number(pageSize) || 40));
+    const [abbreviations, total] = await Promise.all([
+      abbreviationService.listAbbreviationsPage(pageNum, size, search, kind),
+      abbreviationService.countAbbreviations(search, kind),
+    ]);
+    return NextResponse.json({
+      abbreviations,
+      total,
+      page: pageNum,
+      pageSize: size,
+      totalPages: Math.max(1, Math.ceil(total / size)),
+    });
+  }
+
+  const abbreviations = await abbreviationService.listAbbreviations(search, kind);
   return NextResponse.json({ abbreviations });
 }
 
@@ -27,7 +52,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Medical abbreviations are currently disabled' }, { status: 403 });
   }
 
-  let body: { abbreviation: string; meaning: string; category?: string };
+  let body: { abbreviation: string; meaning: string; category?: string; isGlossary?: boolean };
   try {
     body = await request.json();
   } catch {

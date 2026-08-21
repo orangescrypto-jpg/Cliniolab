@@ -161,6 +161,57 @@ export async function createResource(
   };
 }
 
+export async function updateResource(
+  id: string,
+  input: {
+    kind?: ResourceKind;
+    title?: string;
+    description?: string | null;
+    coverImageUrl?: string | null;
+    institutionName?: string | null;
+    subjectTag?: string | null;
+    pricing?: ResourcePricing;
+    priceKobo?: number | null;
+    driveLink?: string;
+  }
+): Promise<Resource | null> {
+  const db = getDb();
+  const existing = await db.prepare('SELECT * FROM resources WHERE id = ?').bind(id).first<ResourceRow>();
+  if (!existing) return null;
+
+  const kind = input.kind ?? (existing.kind as ResourceKind);
+  const pricing = input.pricing ?? (existing.pricing as ResourcePricing);
+  const priceKobo =
+    pricing === 'paid'
+      ? input.priceKobo !== undefined
+        ? input.priceKobo
+        : existing.price_kobo
+      : null;
+
+  await db
+    .prepare(
+      `UPDATE resources SET
+        kind = ?, title = ?, description = ?, cover_image_url = ?,
+        institution_name = ?, subject_tag = ?, pricing = ?, price_kobo = ?, drive_link = ?
+       WHERE id = ?`
+    )
+    .bind(
+      kind,
+      input.title ?? existing.title,
+      input.description !== undefined ? input.description : existing.description,
+      input.coverImageUrl !== undefined ? input.coverImageUrl : existing.cover_image_url,
+      input.institutionName !== undefined ? input.institutionName : existing.institution_name,
+      input.subjectTag !== undefined ? input.subjectTag : existing.subject_tag,
+      pricing,
+      priceKobo,
+      input.driveLink ?? existing.drive_link,
+      id
+    )
+    .run();
+
+  return getResourceById(id);
+}
+
 export async function deleteResource(id: string): Promise<void> {
   const db = getDb();
   await db.batch([

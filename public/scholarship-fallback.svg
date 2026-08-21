@@ -1,0 +1,47 @@
+<svg width="600" height="400" viewBox="0 0 600 400" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bgGradSch" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#122b42"/>
+      <stop offset="100%" stop-color="#0a1b2b"/>
+    </linearGradient>
+    <linearGradient id="accentGradSch" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#3a6fd1"/>
+      <stop offset="100%" stop-color="#6ea1f5"/>
+    </linearGradient>
+    <radialGradient id="glowSch" cx="80%" cy="15%" r="60%">
+      <stop offset="0%" stop-color="#5b8def" stop-opacity="0.25"/>
+      <stop offset="100%" stop-color="#5b8def" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <rect width="600" height="400" fill="url(#bgGradSch)"/>
+  <rect width="600" height="400" fill="url(#glowSch)"/>
+  <rect x="0" y="0" width="600" height="6" fill="url(#accentGradSch)"/>
+
+  <!-- Decorative graduation cap, top-right -->
+  <g transform="translate(430,50)" opacity="0.95">
+    <polygon points="65,10 130,42 65,74 0,42" fill="#132f47" stroke="#6ea1f5" stroke-opacity="0.6" stroke-width="1.5"/>
+    <polygon points="65,10 130,42 65,74 0,42" fill="#5b8def" opacity="0.25"/>
+    <path d="M30 52 V80 C30 92 96 92 96 80 V52" fill="none" stroke="#6ea1f5" stroke-width="3"/>
+    <line x1="122" y1="46" x2="122" y2="92" stroke="#f0b542" stroke-width="2.5"/>
+    <circle cx="122" cy="96" r="5" fill="#f0b542"/>
+  </g>
+
+  <!-- Subtle sparkle/star cluster suggesting achievement -->
+  <g opacity="0.5" fill="#6ea1f5">
+    <path d="M90 300 l4 10 10 4 -10 4 -4 10 -4 -10 -10 -4 10 -4 z"/>
+    <path d="M140 320 l3 7 7 3 -7 3 -3 7 -3 -7 -7 -3 7 -3 z"/>
+  </g>
+
+  <!-- Wordmark -->
+  <text x="48" y="180" font-family="Georgia, 'Times New Roman', serif" font-size="46" font-weight="bold" fill="#ffffff">Cliniolab</text>
+
+  <line x1="48" y1="205" x2="330" y2="205" stroke="#6ea1f5" stroke-width="1.5" opacity="0.7"/>
+
+  <!-- Label with small cap icon -->
+  <g transform="translate(48,214)">
+    <polygon points="14,0 28,7 14,14 0,7" fill="#6ea1f5"/>
+    <path d="M7,9.5 V17 C7,20 21,20 21,17 V9.5" fill="none" stroke="#6ea1f5" stroke-width="2"/>
+    <text x="42" y="20" font-family="Arial, Helvetica, sans-serif" font-size="18" fill="#6ea1f5" letter-spacing="0.5">Scholarship</text>
+  </g>
+</svg>

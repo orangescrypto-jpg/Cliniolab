@@ -87,6 +87,49 @@ export default function AdminBlogPage() {
 
   useEffect(load, []);
 
+  // Recover an in-progress draft if the page was reloaded mid-edit — e.g.
+  // Android reclaiming this WebView while the native file picker was open
+  // for an in-content image insert. Only offers recovery when there is no
+  // in-flight edit already (fresh page load) and something was actually
+  // saved, so this never clobbers a normal fresh "New post" start.
+  useEffect(() => {
+    const saved = window.localStorage.getItem('cliniolab-blog-draft');
+    if (!saved) return;
+    try {
+      const draft = JSON.parse(saved) as { title: string; content: string; excerpt: string; savedAt: number };
+      if (!draft.content && !draft.title) return;
+      const ageMinutes = Math.round((Date.now() - draft.savedAt) / 60000);
+      const restore = window.confirm(
+        `Recover unsaved draft "${draft.title || '(untitled)'}" from ${ageMinutes} minute(s) ago? This can happen after the editor reloads mid-edit (e.g. right after picking an image).`
+      );
+      if (restore) {
+        setTitle(draft.title);
+        setContent(draft.content);
+        setExcerpt(draft.excerpt);
+      } else {
+        window.localStorage.removeItem('cliniolab-blog-draft');
+      }
+    } catch {
+      window.localStorage.removeItem('cliniolab-blog-draft');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Continuously mirror the in-progress post to localStorage so a WebView
+  // crash/reload never loses more than a few keystrokes. Cheap (title +
+  // content + excerpt only) and debounced via the browser's own event loop
+  // since this only runs on state changes, not on a timer.
+  useEffect(() => {
+    if (!title && !content) return;
+    const handle = window.setTimeout(() => {
+      window.localStorage.setItem(
+        'cliniolab-blog-draft',
+        JSON.stringify({ title, content, excerpt, savedAt: Date.now() })
+      );
+    }, 500);
+    return () => window.clearTimeout(handle);
+  }, [title, content, excerpt]);
+
   const [categoriesLoadError, setCategoriesLoadError] = useState(false);
 
   function loadBlogCategories() {
@@ -170,6 +213,7 @@ export default function AdminBlogPage() {
     setFullWidth(false);
     setSendAsNewsletter(false);
     setError(null);
+    window.localStorage.removeItem('cliniolab-blog-draft');
   }
 
   function startEdit(post: BlogPost) {
@@ -268,6 +312,7 @@ export default function AdminBlogPage() {
             body: JSON.stringify(payload),
           });
       if (res.ok) {
+        window.localStorage.removeItem('cliniolab-blog-draft');
         resetForm();
         load();
       } else {

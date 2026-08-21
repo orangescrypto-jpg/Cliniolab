@@ -23,7 +23,7 @@ export function AbbreviationsTeaser() {
   return (
     <section className="mx-auto max-w-7xl px-6 py-16">
       <div className="flex items-center justify-between">
-        <h2 className="font-display text-2xl font-semibold text-ink-800">Medical Abbreviations</h2>
+        <h2 className="font-display text-2xl font-semibold text-ink-800">Abbreviations &amp; Glossary</h2>
         <Link href="/abbreviations" className="text-sm font-medium text-pulse-600 hover:text-pulse-700">
           See all →
         </Link>
@@ -31,7 +31,11 @@ export function AbbreviationsTeaser() {
       <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {abbreviations.map((a) => (
           <Card key={a.id} className="flex items-start gap-3 p-4">
-            <span className="font-mono text-sm font-semibold text-pulse-600">{a.abbreviation}</span>
+            <span
+              className={`shrink-0 font-mono text-sm font-semibold ${a.isGlossary ? 'text-ink-700' : 'text-pulse-600'}`}
+            >
+              {a.abbreviation}
+            </span>
             <p className="text-sm text-ink-600">{a.meaning}</p>
           </Card>
         ))}

@@ -17,14 +17,32 @@ export default function AdminAbbreviationsPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<Filter>('all');
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const pageSize = 40;
 
   function load() {
-    fetch(`/api/abbreviations${filter !== 'all' ? `?kind=${filter}` : ''}`)
+    setLoading(true);
+    const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
+    if (filter !== 'all') params.set('kind', filter);
+    fetch(`/api/abbreviations?${params.toString()}`)
       .then((res) => res.json())
-      .then((data) => setAbbreviations(data.abbreviations ?? []));
+      .then((data) => {
+        setAbbreviations(data.abbreviations ?? []);
+        setTotalPages(data.totalPages ?? 1);
+        setTotal(data.total ?? 0);
+      })
+      .finally(() => setLoading(false));
   }
 
-  useEffect(load, [filter]);
+  useEffect(load, [filter, page]);
+
+  function changeFilter(f: Filter) {
+    setFilter(f);
+    setPage(1);
+  }
 
   function startEdit(a: MedicalAbbreviation) {
     setEditingId(a.id);
@@ -145,55 +163,91 @@ export default function AdminAbbreviationsPage() {
         {error && <p className="text-sm text-critical-500">{error}</p>}
       </Card>
 
-      <div className="mt-6 flex gap-2">
-        {(['all', 'abbreviation', 'glossary'] as Filter[]).map((f) => (
-          <button
-            key={f}
-            onClick={() => setFilter(f)}
-            className={`rounded-md px-3 py-1.5 text-xs font-medium ${
-              filter === f ? 'bg-pulse-50 text-pulse-700' : 'text-ink-500 hover:bg-ink-50'
-            }`}
-          >
-            {f === 'all' ? 'All' : f === 'abbreviation' ? 'Abbreviations' : 'Glossary terms'}
-          </button>
-        ))}
+      <div className="mt-6 flex flex-wrap items-center justify-between gap-2">
+        <div className="flex flex-wrap gap-2">
+          {(['all', 'abbreviation', 'glossary'] as Filter[]).map((f) => (
+            <button
+              key={f}
+              onClick={() => changeFilter(f)}
+              className={`rounded-md px-3 py-1.5 text-xs font-medium ${
+                filter === f ? 'bg-pulse-50 text-pulse-700' : 'text-ink-500 hover:bg-ink-50'
+              }`}
+            >
+              {f === 'all' ? 'All' : f === 'abbreviation' ? 'Abbreviations' : 'Glossary terms'}
+            </button>
+          ))}
+        </div>
+        {total > 0 && (
+          <p className="text-xs text-ink-400">
+            {total} {total === 1 ? 'entry' : 'entries'}
+          </p>
+        )}
       </div>
 
       <div className="mt-4 space-y-2">
-        {abbreviations.map((a) => (
-          <Card key={a.id} className="flex items-start justify-between gap-4 p-4">
-            <div className="flex items-start gap-4">
-              <span
-                className={`shrink-0 rounded font-mono text-sm font-semibold ${
-                  a.isGlossary ? 'px-2 py-0.5 text-ink-700' : 'w-20 text-pulse-600'
-                }`}
-              >
-                {a.abbreviation}
-              </span>
-              <div>
-                <p className="text-sm text-ink-700">{a.meaning}</p>
-                <div className="mt-0.5 flex items-center gap-2">
-                  {a.isGlossary && (
-                    <span className="rounded bg-ink-50 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-ink-400">
-                      Glossary
-                    </span>
-                  )}
-                  {a.category && <p className="text-xs text-ink-400">{a.category}</p>}
+        {loading && (
+          <p className="text-sm text-ink-400">Loading…</p>
+        )}
+        {!loading && abbreviations.map((a) => (
+          <Card key={a.id} className="p-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:gap-4 sm:min-w-0">
+                <span
+                  className={`shrink-0 rounded font-mono text-sm font-semibold break-words ${
+                    a.isGlossary ? 'text-ink-700' : 'text-pulse-600 sm:w-20'
+                  }`}
+                >
+                  {a.abbreviation}
+                </span>
+                <div className="min-w-0">
+                  <p className="text-sm text-ink-700 break-words">{a.meaning}</p>
+                  <div className="mt-0.5 flex flex-wrap items-center gap-2">
+                    {a.isGlossary && (
+                      <span className="rounded bg-ink-50 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-ink-400">
+                        Glossary
+                      </span>
+                    )}
+                    {a.category && <p className="text-xs text-ink-400">{a.category}</p>}
+                  </div>
                 </div>
               </div>
-            </div>
-            <div className="flex shrink-0 gap-2">
-              <button onClick={() => startEdit(a)} className="text-xs font-medium text-pulse-600 hover:text-pulse-700">
-                Edit
-              </button>
-              <button onClick={() => remove(a.id)} className="text-xs font-medium text-critical-500 hover:text-critical-600">
-                Delete
-              </button>
+              <div className="flex shrink-0 gap-3 sm:gap-2">
+                <button onClick={() => startEdit(a)} className="text-xs font-medium text-pulse-600 hover:text-pulse-700">
+                  Edit
+                </button>
+                <button onClick={() => remove(a.id)} className="text-xs font-medium text-critical-500 hover:text-critical-600">
+                  Delete
+                </button>
+              </div>
             </div>
           </Card>
         ))}
-        {abbreviations.length === 0 && <p className="text-sm text-ink-400">No entries yet.</p>}
+        {!loading && abbreviations.length === 0 && <p className="text-sm text-ink-400">No entries yet.</p>}
       </div>
+
+      {totalPages > 1 && (
+        <div className="mt-6 flex items-center justify-center gap-3">
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+            disabled={page <= 1 || loading}
+          >
+            Previous
+          </Button>
+          <span className="text-xs text-ink-500">
+            Page {page} of {totalPages}
+          </span>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+            disabled={page >= totalPages || loading}
+          >
+            Next
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

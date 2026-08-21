@@ -16,6 +16,11 @@ export interface R2Bucket {
   put(key: string, value: ArrayBuffer | ArrayBufferView | ReadableStream, options?: { httpMetadata?: { contentType?: string } }): Promise<unknown>;
   delete(key: string): Promise<void>;
   get(key: string): Promise<{ body: ReadableStream; httpMetadata?: { contentType?: string } } | null>;
+  list(options?: { prefix?: string; cursor?: string; limit?: number }): Promise<{
+    objects: { key: string; size: number; uploaded: Date }[];
+    cursor?: string;
+    truncated: boolean;
+  }>;
 }
 
 type StorageDriver = 'binding' | 's3';
@@ -107,4 +112,40 @@ export async function deleteImageByPath(imagePath: string): Promise<void> {
 export async function getImageObject(key: string) {
   const bucket = getBucket();
   return bucket.get(key);
+}
+
+export interface StoredImage {
+  path: string; // /api/images/<key>, ready to use as an <img src>
+  key: string;
+  purpose: string; // the keyPrefix folder, e.g. "blog"
+  size: number;
+  uploadedAt: string; // ISO timestamp
+}
+
+/**
+ * Lists previously uploaded images so the admin can reuse one instead of
+ * uploading the same file again — e.g. a diagram already used in one
+ * post that fits a later post too. Scoped by purpose/folder (blog,
+ * resources, banners, scholars) since that's how uploadImage() already
+ * organizes keys; pass no purpose to list across all of them.
+ */
+export async function listImages(purpose?: 'blog' | 'resources' | 'banners' | 'scholars', cursor?: string): Promise<{
+  images: StoredImage[];
+  nextCursor?: string;
+}> {
+  const bucket = getBucket();
+  const result = await bucket.list({ prefix: purpose ? `${purpose}/` : undefined, cursor, limit: 60 });
+  const images: StoredImage[] = result.objects
+    .filter((obj) => !obj.key.endsWith('/')) // skip any folder placeholder entries
+    .map((obj) => ({
+      path: `/api/images/${obj.key}`,
+      key: obj.key,
+      purpose: obj.key.split('/')[0] ?? 'unknown',
+      size: obj.size,
+      uploadedAt: new Date(obj.uploaded).toISOString(),
+    }))
+    // Newest first — mirrors how the admin thinks about "the image I just used".
+    .sort((a, b) => b.uploadedAt.localeCompare(a.uploadedAt));
+
+  return { images, nextCursor: result.truncated ? result.cursor : undefined };
 }

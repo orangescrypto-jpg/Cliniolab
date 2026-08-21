@@ -33,6 +33,20 @@ export default function AdminResourcesPage() {
   const [driveLink, setDriveLink] = useState('');
   const [error, setError] = useState<string | null>(null);
 
+  // Editing state — when set, the form above the list becomes "Edit resource"
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editLoading, setEditLoading] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
+  const [editKind, setEditKind] = useState<ResourceKind>('book');
+  const [editTitle, setEditTitle] = useState('');
+  const [editDescription, setEditDescription] = useState('');
+  const [editCoverImageUrl, setEditCoverImageUrl] = useState('');
+  const [editInstitutionName, setEditInstitutionName] = useState('');
+  const [editSubjectTag, setEditSubjectTag] = useState('');
+  const [editPricing, setEditPricing] = useState<ResourcePricing>('free');
+  const [editPriceNaira, setEditPriceNaira] = useState(0);
+  const [editDriveLink, setEditDriveLink] = useState('');
+
   function loadResources() {
     fetch('/api/admin/resources')
       .then((res) => res.json())
@@ -91,6 +105,74 @@ export default function AdminResourcesPage() {
     } else {
       const data = await res.json();
       setError(data.error);
+    }
+  }
+
+  async function startEdit(id: string) {
+    setEditError(null);
+    setEditLoading(true);
+    setEditingId(id);
+    try {
+      const res = await fetch(`/api/admin/resources/${id}`);
+      const data = await res.json();
+      if (!res.ok) {
+        setEditError(data.error ?? 'Failed to load resource.');
+        return;
+      }
+      const r = data.resource;
+      setEditKind(r.kind);
+      setEditTitle(r.title ?? '');
+      setEditDescription(r.description ?? '');
+      setEditCoverImageUrl(r.coverImageUrl ?? '');
+      setEditInstitutionName(r.institutionName ?? '');
+      setEditSubjectTag(r.subjectTag ?? '');
+      setEditPricing(r.pricing);
+      setEditPriceNaira(r.priceKobo ? r.priceKobo / 100 : 0);
+      setEditDriveLink(r.driveLink ?? '');
+    } finally {
+      setEditLoading(false);
+    }
+  }
+
+  function cancelEdit() {
+    setEditingId(null);
+    setEditError(null);
+  }
+
+  async function saveEdit() {
+    if (!editingId) return;
+    setEditError(null);
+    if (!editTitle.trim() || !editDriveLink.trim()) {
+      setEditError('Title and Google Drive link are required.');
+      return;
+    }
+    if (editPricing === 'paid' && editPriceNaira <= 0) {
+      setEditError('Set a price for a paid resource.');
+      return;
+    }
+
+    const res = await fetch(`/api/admin/resources/${editingId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        kind: editKind,
+        title: editTitle,
+        description: editDescription,
+        coverImageUrl: editCoverImageUrl,
+        institutionName: editKind === 'past_question_pack' ? editInstitutionName : '',
+        subjectTag: editSubjectTag,
+        pricing: editPricing,
+        priceKobo: editPricing === 'paid' ? Math.round(editPriceNaira * 100) : undefined,
+        driveLink: editDriveLink,
+      }),
+    });
+
+    if (res.ok) {
+      setEditingId(null);
+      loadResources();
+    } else {
+      const data = await res.json();
+      setEditError(data.error ?? 'Failed to save changes.');
     }
   }
 
@@ -185,16 +267,108 @@ export default function AdminResourcesPage() {
       <h2 className="mt-8 font-display text-lg font-semibold text-ink-800">All resources</h2>
       <div className="mt-4 space-y-3">
         {resources.map((r) => (
-          <Card key={r.id} className="flex flex-wrap items-center justify-between gap-3 p-4">
-            <div>
-              <p className="font-medium text-ink-800">{r.title}</p>
-              <p className="text-xs text-ink-400">
-                {r.kind === 'past_question_pack' ? 'Past Question Pack' : 'Book'} · {r.pricing}
-                {r.institutionName ? ` · ${r.institutionName}` : ''}
-              </p>
-            </div>
-            <Button size="sm" variant="danger" onClick={() => deleteResource(r.id)}>Delete</Button>
-          </Card>
+          <div key={r.id}>
+            <Card className="flex flex-wrap items-center justify-between gap-3 p-4">
+              <div>
+                <p className="font-medium text-ink-800">{r.title}</p>
+                <p className="text-xs text-ink-400">
+                  {r.kind === 'past_question_pack' ? 'Past Question Pack' : 'Book'} · {r.pricing}
+                  {r.institutionName ? ` · ${r.institutionName}` : ''}
+                </p>
+              </div>
+              <div className="flex gap-2">
+                <Button size="sm" variant="secondary" onClick={() => (editingId === r.id ? cancelEdit() : startEdit(r.id))}>
+                  {editingId === r.id ? 'Cancel' : 'Edit'}
+                </Button>
+                <Button size="sm" variant="danger" onClick={() => deleteResource(r.id)}>Delete</Button>
+              </div>
+            </Card>
+
+            {editingId === r.id && (
+              <Card className="mt-2 space-y-3 border border-pulse-200 p-5">
+                {editLoading ? (
+                  <p className="text-sm text-ink-400">Loading…</p>
+                ) : (
+                  <>
+                    <div className="grid grid-cols-2 gap-3">
+                      <select
+                        value={editKind}
+                        onChange={(e) => setEditKind(e.target.value as ResourceKind)}
+                        className="rounded-md border border-ink-100 px-3 py-1.5 text-sm"
+                      >
+                        <option value="book">Book / Slide</option>
+                        <option value="past_question_pack">Past Question Pack</option>
+                      </select>
+                      <select
+                        value={editPricing}
+                        onChange={(e) => setEditPricing(e.target.value as ResourcePricing)}
+                        className="rounded-md border border-ink-100 px-3 py-1.5 text-sm"
+                      >
+                        <option value="free">Free</option>
+                        <option value="paid">Paid</option>
+                      </select>
+                    </div>
+
+                    <input
+                      value={editTitle}
+                      onChange={(e) => setEditTitle(e.target.value)}
+                      placeholder="Title"
+                      className="w-full rounded-md border border-ink-100 px-4 py-2 text-sm focus:border-pulse-400 focus:outline-none"
+                    />
+                    <textarea
+                      value={editDescription}
+                      onChange={(e) => setEditDescription(e.target.value)}
+                      placeholder="Description (optional)"
+                      rows={2}
+                      className="w-full rounded-md border border-ink-100 px-4 py-2 text-sm focus:border-pulse-400 focus:outline-none"
+                    />
+                    <ImagePicker
+                      value={editCoverImageUrl}
+                      onChange={setEditCoverImageUrl}
+                      purpose="resources"
+                      label="Cover image (optional — falls back to a default cover if left blank)"
+                    />
+                    {editKind === 'past_question_pack' && (
+                      <input
+                        value={editInstitutionName}
+                        onChange={(e) => setEditInstitutionName(e.target.value)}
+                        placeholder="Institution name (e.g. UBTH School of Nursing)"
+                        className="w-full rounded-md border border-ink-100 px-4 py-2 text-sm focus:border-pulse-400 focus:outline-none"
+                      />
+                    )}
+                    <input
+                      value={editSubjectTag}
+                      onChange={(e) => setEditSubjectTag(e.target.value)}
+                      placeholder="Subject tag (optional)"
+                      className="w-full rounded-md border border-ink-100 px-4 py-2 text-sm focus:border-pulse-400 focus:outline-none"
+                    />
+                    {editPricing === 'paid' && (
+                      <input
+                        type="number"
+                        min={0}
+                        value={editPriceNaira}
+                        onChange={(e) => setEditPriceNaira(Number(e.target.value))}
+                        placeholder="Price in Naira"
+                        className="w-full rounded-md border border-ink-100 px-4 py-2 text-sm focus:border-pulse-400 focus:outline-none"
+                      />
+                    )}
+                    <input
+                      value={editDriveLink}
+                      onChange={(e) => setEditDriveLink(e.target.value)}
+                      placeholder="Google Drive link (never shown to users directly)"
+                      className="w-full rounded-md border border-ink-100 px-4 py-2 text-sm focus:border-pulse-400 focus:outline-none"
+                    />
+
+                    {editError && <p className="text-sm text-critical-500">{editError}</p>}
+                    <div className="flex gap-2">
+                      <Button size="sm" onClick={saveEdit}>Save changes</Button>
+                      <Button size="sm" variant="secondary" onClick={cancelEdit}>Cancel</Button>
+                    </div>
+                  </>
+                )}
+              </Card>
+            )}
+          </div>
         ))}
       </div>
 

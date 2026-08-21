@@ -30,13 +30,17 @@ export function AbbreviationsTeaser() {
       </div>
       <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {abbreviations.map((a) => (
-          <Card key={a.id} className="flex items-start gap-3 p-4">
-            <span
-              className={`shrink-0 font-mono text-sm font-semibold ${a.isGlossary ? 'text-ink-700' : 'text-pulse-600'}`}
-            >
-              {a.abbreviation}
-            </span>
-            <p className="text-sm text-ink-600">{a.meaning}</p>
+          <Card key={a.id} className="p-4">
+            <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:gap-3">
+              <span
+                className={`shrink-0 break-words font-mono text-sm font-semibold ${
+                  a.isGlossary ? 'text-ink-700' : 'text-pulse-600'
+                }`}
+              >
+                {a.abbreviation}
+              </span>
+              <p className="min-w-0 break-words text-sm text-ink-600">{a.meaning}</p>
+            </div>
           </Card>
         ))}
       </div>

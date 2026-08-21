@@ -375,7 +375,7 @@ export function QuizDetailClient({
       </Card>
 
       <CommentThread endpoint={`/api/quizzes/${quizId}/comments`} />
-      <QuizLeaderboardSection quizId={quizId} />
+      <QuizLeaderboardSection quizId={quizId} currentUserId={user?.id ?? null} />
       <RelatedQuizzes endpoint={`/api/quizzes/${quizId}/related`} />
     </div>
   );

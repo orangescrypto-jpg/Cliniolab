@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useState } from 'react';
 import { useEditor, EditorContent, BubbleMenu, type Editor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Link from '@tiptap/extension-link';
@@ -32,6 +32,19 @@ interface TiptapEditorProps {
   minHeightPx?: number;
 }
 
+/** Imperative handle exposed via ref, for callers (like InlineImageManager)
+ * that need to act on the live editor at a specific moment — e.g. drop a
+ * plain-text marker at the current cursor — without owning the editor
+ * instance themselves. Deliberately minimal: insertTextAtCursor is a
+ * plain, synchronous ProseMirror text insert, nothing that depends on
+ * anything still being in flight (no upload, no async work), so it's
+ * safe to call at any point without the crash risk that motivated moving
+ * image uploads out of the live editor's command chain in the first
+ * place. */
+export interface TiptapEditorHandle {
+  insertTextAtCursor: (text: string) => void;
+}
+
 const HIGHLIGHT_COLORS = ['#FEF08A', '#BBF7D0', '#BFDBFE', '#FBCFE8'];
 const TEXT_COLORS = ['#0F172A', '#DC2626', '#EA580C', '#16A34A', '#2563EB', '#7C3AED'];
 
@@ -48,15 +61,16 @@ const TEXT_COLORS = ['#0F172A', '#DC2626', '#EA580C', '#16A34A', '#2563EB', '#7C
  * callouts) all serialize to tags/attrs/style-properties that
  * sanitizeHtml() explicitly allows; nothing here bypasses that boundary.
  */
-export function TiptapEditor({
+export const TiptapEditor = forwardRef<TiptapEditorHandle, TiptapEditorProps>(function TiptapEditor({
   value,
   onChange,
   placeholder = 'Write your post…',
   uploadPurpose = 'blog',
   minHeightPx = 320,
-}: TiptapEditorProps) {
+}, ref) {
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
+
 
   const uploadFile = useCallback(
     async (file: File): Promise<string | null> => {
@@ -155,6 +169,17 @@ export function TiptapEditor({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value]);
 
+  useImperativeHandle(
+    ref,
+    () => ({
+      insertTextAtCursor: (text: string) => {
+        if (!editor) return;
+        editor.chain().focus().insertContent(text).run();
+      },
+    }),
+    [editor]
+  );
+
   if (!editor) return null;
 
   const wordCount = editor.storage.characterCount?.words?.() ?? 0;
@@ -224,7 +249,7 @@ export function TiptapEditor({
       </div>
     </div>
   );
-}
+});
 
 function MarkButton({
   editor,

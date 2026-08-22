@@ -11,6 +11,7 @@ import { QuizLeaderboardSection } from '@/components/quiz/QuizLeaderboardSection
 import { RelatedQuizzes } from '@/components/quiz/RelatedQuizzes';
 import { Button } from '@/components/ui/Button';
 import { Card, DifficultyBadge } from '@/components/ui/Card';
+import { clearDraft } from '@/lib/localDraft';
 import type { Quiz, QuizQuestion, QuizWithStats } from '@/types';
 
 const MODE_LABELS: Record<Quiz['mode'], string> = {
@@ -112,6 +113,21 @@ export function QuizDetailClient({
     setError(null);
     setRequiresPurchase(false);
     setAttemptKey((k) => k + 1);
+
+    // "Start" doubles as "Restart" once an attempt has already been taken
+    // this visit (e.g. unlimited-retake quizzes where the user lands back
+    // here after finishing and clicks Start again). Without this, the new
+    // QuizRunner/StudyModeRunner mount would pick up the previous
+    // attempt's cached draft/result from localStorage and show stale
+    // answers or jump straight back to the old score screen instead of a
+    // clean attempt. Anti-cheat exams never write these in the first
+    // place (see QuizRunner), so this is a harmless no-op for them.
+    if (started) {
+      clearDraft('attempt', quizId);
+      clearDraft('attempt-result', quizId);
+      clearDraft('study', quizId);
+    }
+
     try {
       // "Retake missed only" arrives back here as a query param after the
       // user clicks it on the result screen (see QuizRunner). It narrows

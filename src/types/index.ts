@@ -426,9 +426,21 @@ export type ResourceKind = 'book' | 'past_question_pack';
 export type ResourcePricing = 'free' | 'paid';
 export type ResourceStatus = 'draft' | 'published' | 'archived';
 
+/** Sub-category shown under the Book / Past Question Pack tabs, e.g. "OSCE". */
+export interface ResourceCategory {
+  id: string;
+  kind: ResourceKind;
+  name: string;
+  slug: string;
+  sortOrder: number;
+}
+
 export interface Resource {
   id: string;
   kind: ResourceKind;
+  categoryId: string | null;
+  categoryName: string | null; // denormalized for display, joined in from resource_categories
+  categorySlug: string | null;
   title: string;
   description: string | null;
   coverImageUrl: string | null;

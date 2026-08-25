@@ -42,6 +42,8 @@ export async function PATCH(request: Request, { params }: RouteParams) {
 
   const updated = await resourceService.updateResource(resourceId, {
     kind: body.kind,
+    categoryId: body.categoryId !== undefined ? body.categoryId || null : undefined,
+    newCategoryName: body.newCategoryName,
     title: body.title,
     description: body.description !== undefined ? body.description || null : undefined,
     coverImageUrl: body.coverImageUrl !== undefined ? body.coverImageUrl || null : undefined,

@@ -71,7 +71,7 @@ export default function HomePage() {
 
 
 
-    fetch('/api/resources?limit=7')
+    fetch('/api/resources?limit=8')
       .then((res) => res.json())
       .then((data) => {
         setResourcesEnabled(data.enabled);

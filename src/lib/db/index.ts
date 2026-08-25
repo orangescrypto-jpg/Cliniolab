@@ -20,6 +20,7 @@ export * as featureFlagService from './services/featureFlagService';
 export * as siteSettingsService from './services/siteSettingsService';
 export * as pushSubscriptionService from './services/pushSubscriptionService';
 export * as resourceService from './services/resourceService';
+export * as resourceCategoryService from './services/resourceCategoryService';
 export * as emailLogService from './services/emailLogService';
 export * as searchService from './services/searchService';
 export * as feedbackService from './services/feedbackService';

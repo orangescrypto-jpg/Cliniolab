@@ -1,13 +1,15 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ResourceCard } from '@/components/resources/ResourceCard';
-import type { Resource } from '@/types';
+import type { Resource, ResourceCategory } from '@/types';
 
 export default function ResourcesPage() {
   const [resources, setResources] = useState<Resource[]>([]);
+  const [categories, setCategories] = useState<ResourceCategory[]>([]);
   const [enabled, setEnabled] = useState(true);
   const [filter, setFilter] = useState<'all' | 'book' | 'past_question_pack'>('all');
+  const [categorySlug, setCategorySlug] = useState<string | null>(null);
 
   useEffect(() => {
     fetch('/api/resources')
@@ -16,9 +18,29 @@ export default function ResourcesPage() {
         setEnabled(data.enabled);
         setResources(data.resources ?? []);
       });
+    fetch('/api/admin/resource-categories')
+      .then((res) => res.json())
+      .then((data) => setCategories(data.categories ?? []));
   }, []);
 
-  const filtered = resources.filter((r) => filter === 'all' || r.kind === filter);
+  // Category selection is cleared whenever the Book/PQ tab changes, since
+  // categories are scoped to a kind and a stale slug from the other tab
+  // wouldn't match anything.
+  function selectFilter(f: typeof filter) {
+    setFilter(f);
+    setCategorySlug(null);
+  }
+
+  const visibleCategories = useMemo(
+    () => categories.filter((c) => filter === 'all' || c.kind === filter),
+    [categories, filter]
+  );
+
+  const filtered = resources.filter((r) => {
+    if (filter !== 'all' && r.kind !== filter) return false;
+    if (categorySlug && r.categorySlug !== categorySlug) return false;
+    return true;
+  });
 
   if (!enabled) {
     return (
@@ -35,11 +57,11 @@ export default function ResourcesPage() {
         Study guides, e-books, and institution-specific past question packs.
       </p>
 
-      <div className="mt-6 flex gap-2">
+      <div className="mt-6 flex flex-wrap gap-2">
         {(['all', 'book', 'past_question_pack'] as const).map((f) => (
           <button
             key={f}
-            onClick={() => setFilter(f)}
+            onClick={() => selectFilter(f)}
             className={`rounded-md border px-3 py-1.5 text-xs font-medium ${
               filter === f ? 'border-pulse-400 bg-pulse-50 text-pulse-700' : 'border-ink-100 text-ink-600'
             }`}
@@ -48,6 +70,34 @@ export default function ResourcesPage() {
           </button>
         ))}
       </div>
+
+      {visibleCategories.length > 0 && (
+        <div className="mt-3 flex flex-wrap gap-2">
+          <button
+            onClick={() => setCategorySlug(null)}
+            className={`rounded-full border px-3 py-1 text-xs ${
+              categorySlug === null
+                ? 'border-ink-400 bg-ink-50 text-ink-700'
+                : 'border-ink-100 text-ink-500'
+            }`}
+          >
+            All categories
+          </button>
+          {visibleCategories.map((c) => (
+            <button
+              key={c.id}
+              onClick={() => setCategorySlug(c.slug)}
+              className={`rounded-full border px-3 py-1 text-xs ${
+                categorySlug === c.slug
+                  ? 'border-ink-400 bg-ink-50 text-ink-700'
+                  : 'border-ink-100 text-ink-500'
+              }`}
+            >
+              {c.name}
+            </button>
+          ))}
+        </div>
+      )}
 
       <div className="mt-8 grid grid-cols-2 gap-3 sm:gap-5">
         {filtered.map((resource) => (

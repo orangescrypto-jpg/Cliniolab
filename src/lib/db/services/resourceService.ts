@@ -1,4 +1,5 @@
 import { getDb, generateId, nowIso } from '@/lib/db/client';
+import { getOrCreateResourceCategory } from '@/lib/db/services/resourceCategoryService';
 import type {
   PurchaseStatus,
   Resource,
@@ -11,6 +12,9 @@ import type {
 interface ResourceRow {
   id: string;
   kind: string;
+  category_id: string | null;
+  category_name: string | null;
+  category_slug: string | null;
   title: string;
   description: string | null;
   cover_image_url: string | null;
@@ -23,6 +27,15 @@ interface ResourceRow {
   status: string;
   created_at: string;
 }
+
+// Joins in the category name/slug for display without a second round trip.
+// `status` on resources is unrelated to `resources.status`, so it's aliased
+// away in mapResource below rather than colliding on the row shape.
+const RESOURCE_SELECT = `
+  SELECT r.*, rc.name AS category_name, rc.slug AS category_slug
+  FROM resources r
+  LEFT JOIN resource_categories rc ON rc.id = r.category_id
+`;
 
 interface PurchaseRow {
   id: string;
@@ -42,6 +55,9 @@ function mapResource(row: ResourceRow): Resource {
   return {
     id: row.id,
     kind: row.kind as ResourceKind,
+    categoryId: row.category_id,
+    categoryName: row.category_name,
+    categorySlug: row.category_slug,
     title: row.title,
     description: row.description,
     coverImageUrl: row.cover_image_url,
@@ -72,7 +88,7 @@ function mapPurchase(row: PurchaseRow): ResourcePurchase {
 
 export async function listResources(limit?: number): Promise<Resource[]> {
   const db = getDb();
-  const query = `SELECT * FROM resources WHERE status = 'published' ORDER BY created_at DESC${
+  const query = `${RESOURCE_SELECT} WHERE r.status = 'published' ORDER BY r.created_at DESC${
     limit ? ' LIMIT ?' : ''
   }`;
   const stmt = limit ? db.prepare(query).bind(limit) : db.prepare(query);
@@ -83,14 +99,17 @@ export async function listResources(limit?: number): Promise<Resource[]> {
 export async function adminListAllResources(): Promise<Resource[]> {
   const db = getDb();
   const { results } = await db
-    .prepare('SELECT * FROM resources ORDER BY created_at DESC')
+    .prepare(`${RESOURCE_SELECT} ORDER BY r.created_at DESC`)
     .all<ResourceRow>();
   return results.map(mapResource);
 }
 
 export async function getResourceById(id: string): Promise<Resource | null> {
   const db = getDb();
-  const row = await db.prepare('SELECT * FROM resources WHERE id = ?').bind(id).first<ResourceRow>();
+  const row = await db
+    .prepare(`${RESOURCE_SELECT} WHERE r.id = ?`)
+    .bind(id)
+    .first<ResourceRow>();
   return row ? mapResource(row) : null;
 }
 
@@ -100,7 +119,7 @@ export async function getResourcesByIds(ids: string[]): Promise<Resource[]> {
   const db = getDb();
   const placeholders = ids.map(() => '?').join(',');
   const { results } = await db
-    .prepare(`SELECT * FROM resources WHERE id IN (${placeholders})`)
+    .prepare(`${RESOURCE_SELECT} WHERE r.id IN (${placeholders})`)
     .bind(...ids)
     .all<ResourceRow>();
   return results.map(mapResource);
@@ -110,6 +129,8 @@ export async function createResource(
   uploadedBy: string,
   input: {
     kind: ResourceKind;
+    categoryId?: string | null;
+    newCategoryName?: string; // if set, get-or-create a category by this name under `kind` and use it
     title: string;
     description?: string;
     coverImageUrl?: string;
@@ -123,15 +144,23 @@ export async function createResource(
   const db = getDb();
   const id = generateId('resource');
   const createdAt = nowIso();
+
+  let categoryId = input.categoryId ?? null;
+  if (input.newCategoryName?.trim()) {
+    const category = await getOrCreateResourceCategory(input.kind, input.newCategoryName.trim());
+    categoryId = category.id;
+  }
+
   await db
     .prepare(
       `INSERT INTO resources
-        (id, kind, title, description, cover_image_url, institution_name, subject_tag, pricing, price_kobo, drive_link, uploaded_by, status, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'published', ?)`
+        (id, kind, category_id, title, description, cover_image_url, institution_name, subject_tag, pricing, price_kobo, drive_link, uploaded_by, status, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'published', ?)`
     )
     .bind(
       id,
       input.kind,
+      categoryId,
       input.title,
       input.description ?? null,
       input.coverImageUrl ?? null,
@@ -145,26 +174,17 @@ export async function createResource(
     )
     .run();
 
-  return {
-    id,
-    kind: input.kind,
-    title: input.title,
-    description: input.description ?? null,
-    coverImageUrl: input.coverImageUrl ?? null,
-    institutionName: input.institutionName ?? null,
-    subjectTag: input.subjectTag ?? null,
-    pricing: input.pricing,
-    priceKobo: input.pricing === 'paid' ? input.priceKobo ?? null : null,
-    uploadedBy,
-    status: 'published',
-    createdAt,
-  };
+  const created = await getResourceById(id);
+  if (!created) throw new Error('Failed to load resource after creation');
+  return created;
 }
 
 export async function updateResource(
   id: string,
   input: {
     kind?: ResourceKind;
+    categoryId?: string | null; // pass null explicitly to clear
+    newCategoryName?: string; // if set, get-or-create a category by this name under the resolved kind and use it
     title?: string;
     description?: string | null;
     coverImageUrl?: string | null;
@@ -188,15 +208,22 @@ export async function updateResource(
         : existing.price_kobo
       : null;
 
+  let categoryId = input.categoryId !== undefined ? input.categoryId : existing.category_id;
+  if (input.newCategoryName?.trim()) {
+    const category = await getOrCreateResourceCategory(kind, input.newCategoryName.trim());
+    categoryId = category.id;
+  }
+
   await db
     .prepare(
       `UPDATE resources SET
-        kind = ?, title = ?, description = ?, cover_image_url = ?,
+        kind = ?, category_id = ?, title = ?, description = ?, cover_image_url = ?,
         institution_name = ?, subject_tag = ?, pricing = ?, price_kobo = ?, drive_link = ?
        WHERE id = ?`
     )
     .bind(
       kind,
+      categoryId,
       input.title ?? existing.title,
       input.description !== undefined ? input.description : existing.description,
       input.coverImageUrl !== undefined ? input.coverImageUrl : existing.cover_image_url,

@@ -5,7 +5,7 @@ import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { ImagePicker } from '@/components/ui/ImagePicker';
 import { useAuth } from '@/lib/auth/AuthProvider';
-import type { Resource, ResourceKind, ResourcePricing } from '@/types';
+import type { Resource, ResourceCategory, ResourceKind, ResourcePricing } from '@/types';
 
 interface PendingPurchase {
   id: string;
@@ -33,6 +33,12 @@ export default function AdminResourcesPage() {
   const [driveLink, setDriveLink] = useState('');
   const [error, setError] = useState<string | null>(null);
 
+  // Categories (sub-categories under Book / Past Question Pack), e.g. "OSCE".
+  const [categories, setCategories] = useState<ResourceCategory[]>([]);
+  const [categoryId, setCategoryId] = useState('');
+  const [addingNewCategory, setAddingNewCategory] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState('');
+
   // Editing state — when set, the form above the list becomes "Edit resource"
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editLoading, setEditLoading] = useState(false);
@@ -46,6 +52,9 @@ export default function AdminResourcesPage() {
   const [editPricing, setEditPricing] = useState<ResourcePricing>('free');
   const [editPriceNaira, setEditPriceNaira] = useState(0);
   const [editDriveLink, setEditDriveLink] = useState('');
+  const [editCategoryId, setEditCategoryId] = useState('');
+  const [editAddingNewCategory, setEditAddingNewCategory] = useState(false);
+  const [editNewCategoryName, setEditNewCategoryName] = useState('');
 
   function loadResources() {
     fetch('/api/admin/resources')
@@ -60,11 +69,28 @@ export default function AdminResourcesPage() {
       .then((data) => setPending(data.purchases ?? []));
   }
 
+  function loadCategories() {
+    // Fetched unscoped (all kinds) and filtered client-side below, so
+    // switching the kind dropdown doesn't require a re-fetch.
+    fetch('/api/admin/resource-categories')
+      .then((res) => res.json())
+      .then((data) => setCategories(data.categories ?? []));
+  }
+
   useEffect(() => {
     loadResources();
     loadPending();
+    loadCategories();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
+
+  // Categories are scoped to a kind — reset the selection when the kind
+  // changes so a "book" category can't be attached to a "past_question_pack".
+  useEffect(() => {
+    setCategoryId('');
+    setAddingNewCategory(false);
+    setNewCategoryName('');
+  }, [kind]);
 
   async function createResource() {
     setError(null);
@@ -82,6 +108,8 @@ export default function AdminResourcesPage() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         kind,
+        categoryId: addingNewCategory ? undefined : categoryId || undefined,
+        newCategoryName: addingNewCategory ? newCategoryName.trim() || undefined : undefined,
         title,
         description: description || undefined,
         coverImageUrl: coverImageUrl || undefined,
@@ -101,7 +129,11 @@ export default function AdminResourcesPage() {
       setSubjectTag('');
       setPriceNaira(0);
       setDriveLink('');
+      setCategoryId('');
+      setAddingNewCategory(false);
+      setNewCategoryName('');
       loadResources();
+      loadCategories(); // in case a new category was just created
     } else {
       const data = await res.json();
       setError(data.error);
@@ -129,6 +161,9 @@ export default function AdminResourcesPage() {
       setEditPricing(r.pricing);
       setEditPriceNaira(r.priceKobo ? r.priceKobo / 100 : 0);
       setEditDriveLink(r.driveLink ?? '');
+      setEditCategoryId(r.categoryId ?? '');
+      setEditAddingNewCategory(false);
+      setEditNewCategoryName('');
     } finally {
       setEditLoading(false);
     }
@@ -137,6 +172,14 @@ export default function AdminResourcesPage() {
   function cancelEdit() {
     setEditingId(null);
     setEditError(null);
+  }
+
+  function onEditKindChange(newKind: ResourceKind) {
+    setEditKind(newKind);
+    // Categories are scoped to a kind — clear the selection when switching.
+    setEditCategoryId('');
+    setEditAddingNewCategory(false);
+    setEditNewCategoryName('');
   }
 
   async function saveEdit() {
@@ -156,6 +199,8 @@ export default function AdminResourcesPage() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         kind: editKind,
+        categoryId: editAddingNewCategory ? undefined : editCategoryId || null,
+        newCategoryName: editAddingNewCategory ? editNewCategoryName.trim() || undefined : undefined,
         title: editTitle,
         description: editDescription,
         coverImageUrl: editCoverImageUrl,
@@ -170,6 +215,7 @@ export default function AdminResourcesPage() {
     if (res.ok) {
       setEditingId(null);
       loadResources();
+      loadCategories();
     } else {
       const data = await res.json();
       setEditError(data.error ?? 'Failed to save changes.');
@@ -213,6 +259,42 @@ export default function AdminResourcesPage() {
             <option value="free">Free</option>
             <option value="paid">Paid</option>
           </select>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <select
+            value={addingNewCategory ? '__new__' : categoryId}
+            onChange={(e) => {
+              if (e.target.value === '__new__') {
+                setCategoryId('');
+                setAddingNewCategory(true);
+              } else {
+                setAddingNewCategory(false);
+                setNewCategoryName('');
+                setCategoryId(e.target.value);
+              }
+            }}
+            className="rounded-md border border-ink-100 px-3 py-1.5 text-sm"
+          >
+            <option value="">No category</option>
+            {categories
+              .filter((c) => c.kind === kind)
+              .map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            <option value="__new__">+ New category…</option>
+          </select>
+          {addingNewCategory && (
+            <input
+              value={newCategoryName}
+              onChange={(e) => setNewCategoryName(e.target.value)}
+              placeholder={`New category name (under ${kind === 'book' ? 'Books' : 'Past Question Packs'})`}
+              className="rounded-md border border-pulse-300 px-3 py-1.5 text-sm focus:border-pulse-400 focus:outline-none"
+              autoFocus
+            />
+          )}
         </div>
 
         <input
@@ -273,6 +355,7 @@ export default function AdminResourcesPage() {
                 <p className="font-medium text-ink-800">{r.title}</p>
                 <p className="text-xs text-ink-400">
                   {r.kind === 'past_question_pack' ? 'Past Question Pack' : 'Book'} · {r.pricing}
+                  {r.categoryName ? ` · ${r.categoryName}` : ''}
                   {r.institutionName ? ` · ${r.institutionName}` : ''}
                 </p>
               </div>
@@ -293,7 +376,7 @@ export default function AdminResourcesPage() {
                     <div className="grid grid-cols-2 gap-3">
                       <select
                         value={editKind}
-                        onChange={(e) => setEditKind(e.target.value as ResourceKind)}
+                        onChange={(e) => onEditKindChange(e.target.value as ResourceKind)}
                         className="rounded-md border border-ink-100 px-3 py-1.5 text-sm"
                       >
                         <option value="book">Book / Slide</option>
@@ -307,6 +390,42 @@ export default function AdminResourcesPage() {
                         <option value="free">Free</option>
                         <option value="paid">Paid</option>
                       </select>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <select
+                        value={editAddingNewCategory ? '__new__' : editCategoryId}
+                        onChange={(e) => {
+                          if (e.target.value === '__new__') {
+                            setEditCategoryId('');
+                            setEditAddingNewCategory(true);
+                          } else {
+                            setEditAddingNewCategory(false);
+                            setEditNewCategoryName('');
+                            setEditCategoryId(e.target.value);
+                          }
+                        }}
+                        className="rounded-md border border-ink-100 px-3 py-1.5 text-sm"
+                      >
+                        <option value="">No category</option>
+                        {categories
+                          .filter((c) => c.kind === editKind)
+                          .map((c) => (
+                            <option key={c.id} value={c.id}>
+                              {c.name}
+                            </option>
+                          ))}
+                        <option value="__new__">+ New category…</option>
+                      </select>
+                      {editAddingNewCategory && (
+                        <input
+                          value={editNewCategoryName}
+                          onChange={(e) => setEditNewCategoryName(e.target.value)}
+                          placeholder={`New category name (under ${editKind === 'book' ? 'Books' : 'Past Question Packs'})`}
+                          className="rounded-md border border-pulse-300 px-3 py-1.5 text-sm focus:border-pulse-400 focus:outline-none"
+                          autoFocus
+                        />
+                      )}
                     </div>
 
                     <input

@@ -262,9 +262,24 @@ CREATE TABLE push_subscriptions (
 -- question packs, shown together on one page but distinguished by `kind`.
 -- The real Drive link is never sent to the client for paid+unconfirmed
 -- resources - only resolved server-side at download-click time.
+-- Sub-categories shown under the Book / Past Question Pack tabs on the
+-- resources page (e.g. "OSCE", "Pharmacology", "Nursing Council Prep").
+-- Scoped by `kind`, not by a parent category row — separate tree from the
+-- quiz categories/subcategories above.
+CREATE TABLE resource_categories (
+  id TEXT PRIMARY KEY,
+  kind TEXT NOT NULL,                 -- 'book' | 'past_question_pack'
+  name TEXT NOT NULL,
+  slug TEXT NOT NULL,
+  sort_order INTEGER DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE(kind, slug)
+);
+
 CREATE TABLE resources (
   id TEXT PRIMARY KEY,
   kind TEXT NOT NULL,                 -- 'book' | 'past_question_pack'
+  category_id TEXT REFERENCES resource_categories(id), -- optional sub-category, scoped to `kind`
   title TEXT NOT NULL,
   description TEXT,
   cover_image_url TEXT,
@@ -277,6 +292,8 @@ CREATE TABLE resources (
   status TEXT NOT NULL DEFAULT 'published', -- draft | published | archived
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
+
+CREATE INDEX idx_resources_category ON resources(category_id);
 
 -- One row per user's purchase attempt/entitlement for a paid resource.
 -- Serves BOTH payment modes (site setting: resource_payment_mode):

@@ -95,11 +95,14 @@ export function ResourceCard({ resource }: { resource: Resource }) {
             {resource.kind === 'past_question_pack' ? 'Past Questions' : 'Book'}
           </span>
           {isFree && <span className="rounded bg-pulse-50 px-2 py-0.5 text-xs text-pulse-600">Free</span>}
+          {resource.categoryName && (
+            <span className="rounded bg-ink-50 px-2 py-0.5 text-xs text-ink-500">{resource.categoryName}</span>
+          )}
           <span className="ml-auto">
             <BookmarkButton kind="resource" targetId={resource.id} />
           </span>
         </div>
-        <h3 className="mt-2 line-clamp-3 font-display text-sm font-semibold text-ink-800 sm:text-base">{resource.title}</h3>
+        <h3 className="mt-2 font-display text-sm font-semibold text-ink-800 sm:text-base">{resource.title}</h3>
         {resource.institutionName && (
           <p className="mt-0.5 text-xs text-ink-400">{resource.institutionName}</p>
         )}

@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
+import { BlogPostCard } from '@/components/cms/BlogPostCard';
 import type { BlogPost } from '@/types';
 
 interface CompactTeaserBlogSectionProps {
@@ -15,16 +16,12 @@ interface CompactTeaserBlogSectionProps {
   limit?: number;
 }
 
-/** Strips HTML/markdown-ish characters and truncates for a compact-card preview. */
-function fallbackExcerpt(content: string, length = 90): string {
-  const stripped = content.replace(/<[^>]*>/g, ' ').replace(/[#*_>[\]()!-]/g, '').replace(/\s+/g, ' ').trim();
-  return stripped.length > length ? `${stripped.slice(0, length).trimEnd()}…` : stripped;
-}
-
 /**
- * Compact, badge-style card section — deliberately different from
- * CategoryBlogSection's big-image layout so Clinical Pearls / Exam Prep
- * Guides read as quick-hit reference cards rather than full articles.
+ * Section wrapper for Clinical Pearls / Exam Prep Guides — same
+ * image-forward BlogPostCard used everywhere else on the site, just
+ * under a compact icon+tagline header instead of a plain heading, so
+ * these sections read as part of the same magazine rather than a
+ * separate, image-less reference-card style.
  */
 export function CompactTeaserBlogSection({
   categoryId,
@@ -68,19 +65,7 @@ export function CompactTeaserBlogSection({
 
       <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {posts.map((post) => (
-          <Link key={post.id} href={`/blog/${post.slug}`}>
-            <div className="h-full rounded-lg border border-ink-100 bg-paper p-4 transition-shadow hover:shadow-md">
-              <span className="inline-flex items-center gap-1 rounded-full bg-pulse-50 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-pulse-600">
-                {icon} {categoryName}
-              </span>
-              <h3 className="mt-2 font-display text-sm font-semibold leading-snug text-ink-800">
-                {post.title}
-              </h3>
-              <p className="mt-1 text-xs text-ink-500 line-clamp-2">
-                {post.excerpt || fallbackExcerpt(post.content)}
-              </p>
-            </div>
-          </Link>
+          <BlogPostCard key={post.id} post={post} />
         ))}
       </div>
     </section>

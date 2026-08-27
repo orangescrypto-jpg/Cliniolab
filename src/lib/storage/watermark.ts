@@ -21,8 +21,8 @@ import { PhotonImage, watermark } from '@cf-wasm/photon/node';
 // at build time via the .ts wrapper below.
 import LOGO_BASE64 from './cliniolabLogoBase64';
 
-const MARK_WIDTH_FRACTION = 0.16; // logo width as a fraction of the uploaded image's width
-const MARGIN_FRACTION = 0.03; // gap from the image edge, as a fraction of image width
+const MARK_WIDTH_FRACTION = 0.24; // logo+wordmark width as a fraction of the uploaded image's width
+const MARGIN_FRACTION = 0.035; // gap from the bottom edge, as a fraction of image height
 
 let cachedLogoBytes: Uint8Array | null = null;
 function getLogoBytes(): Uint8Array {
@@ -41,6 +41,17 @@ function getLogoBytes(): Uint8Array {
  * which is fine since uploadImage() stores whatever bytes we hand it
  * under the original content-type; see the caller for why JPEG/WEBP/GIF
  * inputs are re-tagged as PNG after this step).
+ *
+ * Placement: bottom-center, not a corner. Every place this app displays
+ * an uploaded image (blog cover, card grids, banners) renders it with
+ * CSS object-fit: cover inside a fixed-aspect box, which crops from
+ * whichever edges don't match the box's ratio — almost always trimming
+ * the corners first. A logo stamped in a corner gets cropped off
+ * constantly. Center-bottom survives that crop far more often since
+ * object-cover keeps the full width or height (whichever the box ratio
+ * allows) and only trims the other axis symmetrically from both edges,
+ * so a horizontally-centered mark near (but not at) the bottom edge
+ * stays inside frame unless the crop is extremely aggressive.
  */
 export async function applyWatermark(inputBytes: Uint8Array): Promise<Uint8Array> {
   const baseImage = PhotonImage.new_from_byteslice(inputBytes);
@@ -62,8 +73,8 @@ export async function applyWatermark(inputBytes: Uint8Array): Promise<Uint8Array
     const { resize, SamplingFilter } = await import('@cf-wasm/photon/node');
     const resizedLogo = resize(logoImage, targetLogoWidth, targetLogoHeight, SamplingFilter.Lanczos3);
 
-    const margin = Math.round(baseWidth * MARGIN_FRACTION);
-    const x = Math.max(0, baseWidth - targetLogoWidth - margin);
+    const margin = Math.round(baseHeight * MARGIN_FRACTION);
+    const x = Math.max(0, Math.round((baseWidth - targetLogoWidth) / 2));
     const y = Math.max(0, baseHeight - targetLogoHeight - margin);
 
     watermark(baseImage, resizedLogo, BigInt(x), BigInt(y));

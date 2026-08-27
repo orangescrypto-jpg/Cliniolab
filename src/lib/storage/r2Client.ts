@@ -78,6 +78,11 @@ export class ImageUploadError extends Error {}
  * Uploads an image file to R2 and returns a public-servable path
  * (served back out via /api/images/[key], not a direct R2 URL, so we
  * control caching/headers centrally).
+ *
+ * Every upload is watermarked with the Cliniolab logo before it's
+ * stored (see watermark.ts) — GIFs are the one exception, since Photon
+ * only reads/writes static frames and would silently flatten an
+ * animated GIF to its first frame.
  */
 export async function uploadImage(
   file: File,
@@ -91,11 +96,35 @@ export async function uploadImage(
   }
 
   const bucket = getBucket();
-  const ext = file.type.split('/')[1];
-  const key = `${keyPrefix}/${crypto.randomUUID()}.${ext}`;
-  const buffer = await file.arrayBuffer();
+  const originalBuffer = await file.arrayBuffer();
 
-  await bucket.put(key, buffer, { httpMetadata: { contentType: file.type } });
+  let outBytes: ArrayBuffer | Uint8Array = originalBuffer;
+  let ext = file.type.split('/')[1];
+  let contentType = file.type;
+
+  if (file.type !== 'image/gif') {
+    try {
+      const { applyWatermark } = await import('@/lib/storage/watermark');
+      outBytes = await applyWatermark(new Uint8Array(originalBuffer));
+      // Photon's get_bytes() always encodes PNG regardless of input
+      // format, so the stored extension/content-type must follow suit
+      // for JPEG/WEBP inputs or the file would be mislabeled.
+      ext = 'png';
+      contentType = 'image/png';
+    } catch (err) {
+      // Watermarking is a nice-to-have layered on top of a working
+      // upload path; a WASM init failure or decode edge case shouldn't
+      // block the admin from publishing content. Store the original
+      // un-watermarked bytes instead of failing the whole upload.
+      console.error('Watermarking failed, storing original image instead:', err);
+      outBytes = originalBuffer;
+      ext = file.type.split('/')[1];
+      contentType = file.type;
+    }
+  }
+
+  const key = `${keyPrefix}/${crypto.randomUUID()}.${ext}`;
+  await bucket.put(key, outBytes, { httpMetadata: { contentType } });
 
   return `/api/images/${key}`;
 }

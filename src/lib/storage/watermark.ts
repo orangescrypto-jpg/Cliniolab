@@ -4,13 +4,15 @@
  * attribution back to Cliniolab.
  *
  * Uses Photon (Rust image lib compiled to WASM via @cf-wasm/photon)
- * rather than sharp: sharp needs native bindings that don't exist in the
- * workerd runtime this app deploys to on Cloudflare, whereas Photon runs
- * as pure WASM anywhere V8 does. The workerd entrypoint is imported
- * explicitly since that's the runtime `open-next`'s wrangler build
- * actually targets.
+ * rather than sharp: sharp needs native bindings, which complicates
+ * portability across this app's deploy targets. Photon runs as pure
+ * WASM instead. This app's API routes build and deploy through Vercel
+ * (see the build logs — `next build` via Vercel, not a wrangler/
+ * workerd build), so the `node` subpath is the correct entrypoint here;
+ * a separate wrangler/workerd deploy target would need `/workerd`
+ * instead.
  */
-import { PhotonImage, watermark } from '@cf-wasm/photon/workerd';
+import { PhotonImage, watermark } from '@cf-wasm/photon/node';
 
 // Logo is bundled as a module-scope constant rather than fetched per
 // request — it's a fixed local asset (public/icon-512.png), so paying a
@@ -57,7 +59,7 @@ export async function applyWatermark(inputBytes: Uint8Array): Promise<Uint8Array
     // resized to the target footprint first via a scratch canvas... but
     // Photon doesn't expose a standalone resize-then-return-new-image
     // helper that's simpler than just importing resize() directly.
-    const { resize, SamplingFilter } = await import('@cf-wasm/photon/workerd');
+    const { resize, SamplingFilter } = await import('@cf-wasm/photon/node');
     const resizedLogo = resize(logoImage, targetLogoWidth, targetLogoHeight, SamplingFilter.Lanczos3);
 
     const margin = Math.round(baseWidth * MARGIN_FRACTION);
@@ -67,7 +69,7 @@ export async function applyWatermark(inputBytes: Uint8Array): Promise<Uint8Array
     watermark(baseImage, resizedLogo, BigInt(x), BigInt(y));
 
     const outBytes = baseImage.get_bytes();
-    resizedLogo.ptr && resizedLogo.free();
+    resizedLogo.free();
     return outBytes;
   } finally {
     baseImage.free();

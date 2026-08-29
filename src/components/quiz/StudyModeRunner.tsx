@@ -12,6 +12,15 @@ import type { Quiz, QuizQuestion } from '@/types';
 interface StudyModeRunnerProps {
   quiz: Quiz;
   questions: QuizQuestion[]; // includes correctAnswer, unlike QuizRunner's questions
+  /**
+   * Called instead of the default "go to /quizzes/[quizId]" navigation when
+   * the user taps Done. Needed for shared-link viewers, who aren't
+   * necessarily the quiz owner and so may not have access to the owner
+   * quiz-detail route (that route 404s/403s for them, making Done look
+   * like it does nothing). The owner-facing QuizDetailClient doesn't pass
+   * this, so it keeps the original router.push behavior.
+   */
+  onDone?: () => void;
 }
 
 type ResultFilter = 'all' | 'unanswered' | 'incorrect' | 'skipped';
@@ -57,7 +66,7 @@ function shuffleArray<T>(arr: T[]): T[] {
  * lose your place. That cache is purely local and disposable; it's cleared
  * once you finish studying.
  */
-export function StudyModeRunner({ quiz, questions: rawQuestions }: StudyModeRunnerProps) {
+export function StudyModeRunner({ quiz, questions: rawQuestions, onDone }: StudyModeRunnerProps) {
   const router = useRouter();
 
   // Try to resume a prior session for this quiz before falling back to a
@@ -236,7 +245,11 @@ export function StudyModeRunner({ quiz, questions: rawQuestions }: StudyModeRunn
 
   function finishStudying() {
     clearDraft(DRAFT_NAMESPACE, quiz.id);
-    router.push(`/quizzes/${quiz.id}`);
+    if (onDone) {
+      onDone();
+    } else {
+      router.push(`/quizzes/${quiz.id}`);
+    }
   }
 
   function goPrevious() {

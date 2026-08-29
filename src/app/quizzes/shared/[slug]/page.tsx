@@ -75,7 +75,14 @@ export default function SharedQuizPage() {
 
   if (started && quiz) {
     if (quiz.mode === 'study') {
-      return <StudyModeRunner key={attemptKey} quiz={quiz} questions={studyQuestions} />;
+      return (
+        <StudyModeRunner
+          key={attemptKey}
+          quiz={quiz}
+          questions={studyQuestions}
+          onDone={() => setStarted(false)}
+        />
+      );
     }
     return (
       <QuizRunner

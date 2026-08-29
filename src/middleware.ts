@@ -20,10 +20,16 @@ export async function middleware(request: NextRequest) {
   // it, and calling it there can hang instead of throwing synchronously —
   // since this is a fatal, blocking error, it stalls this middleware on
   // every request until Vercel kills it with a 504
-  // (MIDDLEWARE_INVOCATION_TIMEOUT). Gate the call behind an explicit
-  // runtime check instead of relying on try/catch alone.
+  // (MIDDLEWARE_INVOCATION_TIMEOUT).
+  //
+  // NOTE: don't gate this on the `caches` global — Vercel's Edge runtime
+  // also exposes `caches` (it's a standard Web API, not Cloudflare-specific),
+  // so that check doesn't distinguish the two platforms. Vercel reliably
+  // sets process.env.VERCEL at build and runtime, so use that as the
+  // exclusion signal instead: only attempt the Cloudflare-only call when
+  // we are NOT on Vercel.
   let cfEnv: Record<string, unknown> = {};
-  if (process.env.NEXT_RUNTIME === 'edge' && (globalThis as Record<string, unknown>).caches) {
+  if (!process.env.VERCEL) {
     try {
       const { getCloudflareContext } = await import('@opennextjs/cloudflare');
       cfEnv = getCloudflareContext().env as Record<string, unknown>;

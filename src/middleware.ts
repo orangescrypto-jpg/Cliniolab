@@ -1,7 +1,6 @@
 import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 import type { CookieOptions } from '@supabase/ssr';
-import { getCloudflareContext } from '@opennextjs/cloudflare';
 
 /**
  * Refreshes the Supabase auth session cookie on every request. Required by
@@ -15,12 +14,22 @@ export async function middleware(request: NextRequest) {
   // getCloudflareContext().env at runtime, not in process.env the way
   // Node-hosted platforms (Vercel) expose them — so check both, preferring
   // whichever is actually populated.
+  //
+  // getCloudflareContext() is only safe to call when actually running on
+  // Cloudflare Workers/Pages. On Vercel there's no Workers runtime backing
+  // it, and calling it there can hang instead of throwing synchronously —
+  // since this is a fatal, blocking error, it stalls this middleware on
+  // every request until Vercel kills it with a 504
+  // (MIDDLEWARE_INVOCATION_TIMEOUT). Gate the call behind an explicit
+  // runtime check instead of relying on try/catch alone.
   let cfEnv: Record<string, unknown> = {};
-  try {
-    cfEnv = getCloudflareContext().env as Record<string, unknown>;
-  } catch {
-    // Not running in a Workers/OpenNext context (e.g. Vercel) — process.env
-    // alone is authoritative there.
+  if (process.env.NEXT_RUNTIME === 'edge' && (globalThis as Record<string, unknown>).caches) {
+    try {
+      const { getCloudflareContext } = await import('@opennextjs/cloudflare');
+      cfEnv = getCloudflareContext().env as Record<string, unknown>;
+    } catch {
+      // Defensive fallback — process.env alone is authoritative here.
+    }
   }
 
   const url =

@@ -137,6 +137,8 @@ export interface QuizInput {
 }
 
 export interface QuizQuestionInput {
+  /** Present when editing an existing question so updates can preserve its id (and any attempt history/reports tied to it). Omit for new questions. */
+  id?: string;
   type: QuestionType;
   prompt: string;
   options?: QuestionOption[];

@@ -36,6 +36,7 @@ function emptyQuestion(): QuizQuestionInput {
 /** Converts loaded QuizQuestion records (edit mode) into the input shape the form edits. */
 function toQuestionInput(q: QuizQuestion): QuizQuestionInput {
   return {
+    id: q.id,
     type: q.type,
     prompt: q.prompt,
     options: q.options ?? undefined,

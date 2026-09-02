@@ -243,16 +243,26 @@ export async function createQuiz(creatorId: string, input: QuizInput): Promise<Q
 }
 
 /**
- * Updates an existing quiz's metadata and replaces its full question set.
- * Works identically for study, quiz, and exam mode since all three share
- * the same QuizInput shape as createQuiz. Existing attempt history,
+ * Updates an existing quiz's metadata and its question set. Works
+ * identically for study, quiz, and exam mode since all three share the
+ * same QuizInput shape as createQuiz. Existing attempt history,
  * leaderboard standing, and comments are preserved — only the quizzes and
  * questions tables are touched, unlike deleteQuiz which cascades further.
  *
- * Questions are replaced wholesale (delete then re-insert) rather than
- * diffed, matching the simple insert-only pattern createQuiz already uses.
- * This means existing attempts still show their originally-submitted
- * answers/scores; only future attempts see the updated question set.
+ * Questions are diffed by id rather than replaced wholesale:
+ *  - input questions carrying an existing id are UPDATEd in place, so their
+ *    row (and anything referencing it, e.g. attempt_answers/question_reports)
+ *    stays intact
+ *  - input questions with no id (newly added in the edit form) are INSERTed
+ *  - existing questions absent from the input are only DELETEd if nothing
+ *    references them; ones with attempt history or reports are left in
+ *    place untouched rather than deleted, since removing them would either
+ *    violate the questions(id) foreign key or silently orphan that history
+ *
+ * Blind delete-then-reinsert previously caused a FOREIGN KEY constraint
+ * failure on ANY edit (even just a title/description change) for quizzes
+ * that already had recorded attempts or flagged-question reports, because
+ * those rows reference questions.id and D1 rejects deleting a referenced row.
  */
 export async function updateQuiz(quizId: string, input: QuizInput): Promise<Quiz> {
   const db = getDb();
@@ -297,10 +307,47 @@ export async function updateQuiz(quizId: string, input: QuizInput): Promise<Quiz
       quizId
     );
 
-  const deleteQuestionsStatement = db.prepare('DELETE FROM questions WHERE quiz_id = ?').bind(quizId);
+  const existingIds = new Set(
+    (await db.prepare('SELECT id FROM questions WHERE quiz_id = ?').bind(quizId).all<{ id: string }>()).results.map(
+      (r) => r.id
+    )
+  );
+  const incomingIds = new Set(input.questions.filter((q) => q.id).map((q) => q.id as string));
+  const removedIds = [...existingIds].filter((id) => !incomingIds.has(id));
 
-  const questionStatements = input.questions.map((q, index) =>
-    db
+  // Only drop removed questions that nothing references; leave the rest in
+  // place so we never trip the questions(id) foreign key.
+  const deletableIds: string[] = [];
+  for (const id of removedIds) {
+    const [attemptRef, reportRef] = await Promise.all([
+      db.prepare('SELECT 1 FROM attempt_answers WHERE question_id = ? LIMIT 1').bind(id).first(),
+      db.prepare('SELECT 1 FROM question_reports WHERE question_id = ? LIMIT 1').bind(id).first(),
+    ]);
+    if (!attemptRef && !reportRef) deletableIds.push(id);
+  }
+
+  const deleteStatements = deletableIds.map((id) => db.prepare('DELETE FROM questions WHERE id = ?').bind(id));
+
+  const questionStatements = input.questions.map((q, index) => {
+    if (q.id && existingIds.has(q.id)) {
+      return db
+        .prepare(
+          `UPDATE questions SET
+            type = ?, prompt = ?, options = ?, correct_answer = ?, explanation = ?, sort_order = ?, mark = ?
+          WHERE id = ?`
+        )
+        .bind(
+          q.type,
+          q.prompt,
+          q.options ? JSON.stringify(q.options) : null,
+          q.correctAnswer,
+          q.explanation ?? null,
+          index,
+          q.mark ?? null,
+          q.id
+        );
+    }
+    return db
       .prepare(
         `INSERT INTO questions (id, quiz_id, type, prompt, options, correct_answer, explanation, sort_order, mark)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
@@ -315,12 +362,10 @@ export async function updateQuiz(quizId: string, input: QuizInput): Promise<Quiz
         q.explanation ?? null,
         index,
         q.mark ?? null
-      )
-  );
+      );
+  });
 
-  // Delete must fully complete before the re-inserts run, so it stays in
-  // its own call ahead of the (potentially large, chunked) insert batch.
-  await db.batch([quizStatement, deleteQuestionsStatement]);
+  await db.batch([quizStatement, ...deleteStatements]);
   await runBatchChunked(db, questionStatements);
 
   return {

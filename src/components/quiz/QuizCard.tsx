@@ -26,9 +26,13 @@ export function QuizCard({ quiz }: { quiz: QuizWithStats }) {
           <span>
             {quiz.mode === 'exam' ? 'Exam / CBT Mode' : quiz.mode === 'study' ? 'Study Mode' : 'Quiz Mode'}
           </span>
-          <span>{quiz.attemptCount} attempts</span>
-          {quiz.averageScorePercent !== null && (
-            <span>Avg {Math.round(quiz.averageScorePercent)}%</span>
+          {quiz.mode !== 'study' && (
+            <>
+              <span>{quiz.attemptCount} attempts</span>
+              {quiz.averageScorePercent !== null && (
+                <span>Avg {Math.round(quiz.averageScorePercent)}%</span>
+              )}
+            </>
           )}
           {quiz.commentCount > 0 && (
             <span>{quiz.commentCount} {quiz.commentCount === 1 ? 'comment' : 'comments'}</span>
@@ -102,9 +106,13 @@ export function FeaturedQuizCard({ quiz }: { quiz: QuizWithStats }) {
           <span>
             {quiz.mode === 'exam' ? 'Exam / CBT Mode' : quiz.mode === 'study' ? 'Study Mode' : 'Quiz Mode'}
           </span>
-          <span>{quiz.attemptCount} attempts</span>
-          {quiz.averageScorePercent !== null && (
-            <span>Avg {Math.round(quiz.averageScorePercent)}%</span>
+          {quiz.mode !== 'study' && (
+            <>
+              <span>{quiz.attemptCount} attempts</span>
+              {quiz.averageScorePercent !== null && (
+                <span>Avg {Math.round(quiz.averageScorePercent)}%</span>
+              )}
+            </>
           )}
           {quiz.commentCount > 0 && (
             <span>{quiz.commentCount} {quiz.commentCount === 1 ? 'comment' : 'comments'}</span>
@@ -173,9 +181,13 @@ export function CompactQuizCard({ quiz }: { quiz: QuizWithStats }) {
             <span>
               {quiz.mode === 'exam' ? 'Exam / CBT Mode' : quiz.mode === 'study' ? 'Study Mode' : 'Quiz Mode'}
             </span>
-            <span>{quiz.attemptCount} attempts</span>
-            {quiz.averageScorePercent !== null && (
-              <span>Avg {Math.round(quiz.averageScorePercent)}%</span>
+            {quiz.mode !== 'study' && (
+              <>
+                <span>{quiz.attemptCount} attempts</span>
+                {quiz.averageScorePercent !== null && (
+                  <span>Avg {Math.round(quiz.averageScorePercent)}%</span>
+                )}
+              </>
             )}
           </div>
           {quiz.creatorName && (

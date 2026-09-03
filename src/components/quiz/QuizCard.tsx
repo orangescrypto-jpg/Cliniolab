@@ -28,9 +28,11 @@ export function QuizCard({ quiz }: { quiz: QuizWithStats }) {
           </span>
           {quiz.mode !== 'study' && (
             <>
-              <span>{quiz.attemptCount} attempts</span>
+              <span title="Number of users who have taken this quiz">{quiz.attemptCount} attempts</span>
               {quiz.averageScorePercent !== null && (
-                <span>Avg {Math.round(quiz.averageScorePercent)}%</span>
+                <span title="Average of each user's first attempt only">
+                  Avg {Math.round(quiz.averageScorePercent)}% (1st try)
+                </span>
               )}
             </>
           )}
@@ -108,9 +110,11 @@ export function FeaturedQuizCard({ quiz }: { quiz: QuizWithStats }) {
           </span>
           {quiz.mode !== 'study' && (
             <>
-              <span>{quiz.attemptCount} attempts</span>
+              <span title="Number of users who have taken this quiz">{quiz.attemptCount} attempts</span>
               {quiz.averageScorePercent !== null && (
-                <span>Avg {Math.round(quiz.averageScorePercent)}%</span>
+                <span title="Average of each user's first attempt only">
+                  Avg {Math.round(quiz.averageScorePercent)}% (1st try)
+                </span>
               )}
             </>
           )}
@@ -183,9 +187,11 @@ export function CompactQuizCard({ quiz }: { quiz: QuizWithStats }) {
             </span>
             {quiz.mode !== 'study' && (
               <>
-                <span>{quiz.attemptCount} attempts</span>
+                <span title="Number of users who have taken this quiz">{quiz.attemptCount} attempts</span>
                 {quiz.averageScorePercent !== null && (
-                  <span>Avg {Math.round(quiz.averageScorePercent)}%</span>
+                  <span title="Average of each user's first attempt only">
+                    Avg {Math.round(quiz.averageScorePercent)}% (1st try)
+                  </span>
                 )}
               </>
             )}

@@ -5,7 +5,7 @@ import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Toggle } from '@/components/ui/Toggle';
 import { ImagePicker } from '@/components/ui/ImagePicker';
-import type { Banner, BannerPlacement, BannerStats } from '@/types';
+import type { Banner, BannerPlacement, BannerDisplayMode, BannerStats } from '@/types';
 
 const PLACEMENTS: { key: BannerPlacement; flagKey: 'banners_header' | 'banners_footer'; label: string; hint: string }[] = [
   {
@@ -26,9 +26,10 @@ interface DraftBanner {
   title: string;
   imagePath: string;
   linkUrl: string;
+  displayMode: BannerDisplayMode;
 }
 
-const EMPTY_DRAFT: DraftBanner = { title: '', imagePath: '', linkUrl: '' };
+const EMPTY_DRAFT: DraftBanner = { title: '', imagePath: '', linkUrl: '', displayMode: 'static' };
 
 export default function AdminBannersPage() {
   const [banners, setBanners] = useState<Banner[]>([]);
@@ -84,6 +85,7 @@ export default function AdminBannersPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           placement,
+          displayMode: draft.displayMode,
           title: draft.title.trim(),
           imagePath: draft.imagePath,
           linkUrl: draft.linkUrl.trim() || null,
@@ -107,6 +109,15 @@ export default function AdminBannersPage() {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ isActive: !banner.isActive }),
+    });
+  }
+
+  async function changeDisplayMode(banner: Banner, displayMode: BannerDisplayMode) {
+    setBanners((prev) => prev.map((b) => (b.id === banner.id ? { ...b, displayMode } : b)));
+    await fetch(`/api/admin/banners/${banner.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ displayMode }),
     });
   }
 
@@ -160,6 +171,14 @@ export default function AdminBannersPage() {
                       )}
                       <BannerStatsLine stats={stats[banner.id]} />
                     </div>
+                    <select
+                      value={banner.displayMode}
+                      onChange={(e) => changeDisplayMode(banner, e.target.value as BannerDisplayMode)}
+                      className="rounded-md border border-ink-100 px-2 py-1.5 text-xs focus:border-pulse-400 focus:outline-none"
+                    >
+                      <option value="static">Static</option>
+                      <option value="slider">Slider</option>
+                    </select>
                     <Toggle checked={banner.isActive} onChange={() => toggleBanner(banner)} />
                     <Button size="sm" variant="danger" onClick={() => deleteBanner(banner)}>
                       Delete
@@ -172,6 +191,41 @@ export default function AdminBannersPage() {
             {/* Add new */}
             <Card className="mt-4 space-y-4 p-5">
               <p className="text-sm font-medium text-ink-700">Add a new {placement.label.toLowerCase()}</p>
+              <div>
+                <label className="text-sm font-medium text-ink-700">Display type</label>
+                <div className="mt-1 flex gap-4">
+                  <label className="flex items-center gap-2 text-sm text-ink-700">
+                    <input
+                      type="radio"
+                      name={`display-mode-${placement.key}`}
+                      checked={draft.displayMode === 'static'}
+                      onChange={() =>
+                        setDrafts((prev) => ({
+                          ...prev,
+                          [placement.key]: { ...prev[placement.key], displayMode: 'static' },
+                        }))
+                      }
+                      className="accent-pulse-500"
+                    />
+                    Static (always visible)
+                  </label>
+                  <label className="flex items-center gap-2 text-sm text-ink-700">
+                    <input
+                      type="radio"
+                      name={`display-mode-${placement.key}`}
+                      checked={draft.displayMode === 'slider'}
+                      onChange={() =>
+                        setDrafts((prev) => ({
+                          ...prev,
+                          [placement.key]: { ...prev[placement.key], displayMode: 'slider' },
+                        }))
+                      }
+                      className="accent-pulse-500"
+                    />
+                    Slider (auto + manual rotation)
+                  </label>
+                </div>
+              </div>
               <div>
                 <label className="text-sm font-medium text-ink-700">Title (internal label)</label>
                 <input

@@ -61,10 +61,16 @@ export function BannerSlot({ placement }: BannerSlotProps) {
 
   if (!loaded || banners.length === 0) return null;
 
+  const sliderBanners = banners.filter((b) => b.displayMode === 'slider');
+  const staticBanners = banners.filter((b) => b.displayMode === 'static');
+
   if (placement === 'header') {
     return (
-      <div className="mx-auto max-w-7xl px-6 py-4">
-        {banners.map((banner) => (
+      <div className="mx-auto max-w-7xl px-6 py-4 space-y-4">
+        {sliderBanners.length > 0 && (
+          <BannerCarousel banners={sliderBanners} className="aspect-[16/3] w-full sm:aspect-[16/2.5]" />
+        )}
+        {staticBanners.map((banner) => (
           <BannerImage key={banner.id} banner={banner} className="aspect-[16/3] w-full sm:aspect-[16/2.5]" />
         ))}
       </div>
@@ -73,9 +79,10 @@ export function BannerSlot({ placement }: BannerSlotProps) {
 
   // Footer banner(s): normal-sized, stacked if there's more than one.
   return (
-    <div className="mx-auto max-w-7xl px-6 py-8">
+    <div className="mx-auto max-w-7xl px-6 py-8 space-y-4">
+      {sliderBanners.length > 0 && <BannerCarousel banners={sliderBanners} className="aspect-[16/6] w-full" />}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        {banners.map((banner) => (
+        {staticBanners.map((banner) => (
           <BannerImage key={banner.id} banner={banner} className="aspect-[16/6] w-full" />
         ))}
       </div>
@@ -83,9 +90,108 @@ export function BannerSlot({ placement }: BannerSlotProps) {
   );
 }
 
-function BannerImage({ banner, className }: { banner: Banner; className: string }) {
-  const image = (
+/**
+ * Auto-advancing (with manual override) slider for banners the admin has
+ * explicitly marked as displayMode: 'slider'. Rendered above the static
+ * stacked grid, which independently shows every displayMode: 'static'
+ * banner at once.
+ */
+function BannerCarousel({ banners, className }: { banners: Banner[]; className: string }) {
+  const [index, setIndex] = useState(0);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Auto-advance every 5s. Restarts whenever `index` changes so a manual
+  // click resets the countdown instead of jumping again a moment later.
+  // Skipped entirely with only one slide, since there'd be nothing to
+  // advance to.
+  useEffect(() => {
+    if (banners.length <= 1) return;
+    timerRef.current = setInterval(() => {
+      setIndex((prev) => (prev + 1) % banners.length);
+    }, 5000);
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
+  }, [index, banners.length]);
+
+  // Clamp in case the banner list shrinks (e.g. one gets deactivated)
+  // while a later slide index was already selected.
+  const safeIndex = index % banners.length;
+  const current = banners[safeIndex];
+
+  function goTo(next: number) {
+    setIndex((next + banners.length) % banners.length);
+  }
+
+  const showControls = banners.length > 1;
+
+  return (
     <div className={`relative overflow-hidden rounded-lg border border-ink-100 shadow-sm ${className}`}>
+      <BannerImage banner={current} className="h-full w-full" fill />
+
+      {showControls && (
+        <>
+          <button
+            type="button"
+            aria-label="Previous banner"
+            onClick={() => goTo(safeIndex - 1)}
+            className="absolute left-2 top-1/2 -translate-y-1/2 rounded-full bg-ink-900/40 p-1.5 text-white hover:bg-ink-900/60"
+          >
+            <ChevronIcon direction="left" />
+          </button>
+          <button
+            type="button"
+            aria-label="Next banner"
+            onClick={() => goTo(safeIndex + 1)}
+            className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full bg-ink-900/40 p-1.5 text-white hover:bg-ink-900/60"
+          >
+            <ChevronIcon direction="right" />
+          </button>
+
+          <div className="absolute bottom-2 left-1/2 flex -translate-x-1/2 gap-1.5">
+            {banners.map((banner, i) => (
+              <button
+                key={banner.id}
+                type="button"
+                aria-label={`Go to banner ${i + 1}`}
+                onClick={() => goTo(i)}
+                className={`h-1.5 rounded-full transition-all ${
+                  i === safeIndex ? 'w-4 bg-white' : 'w-1.5 bg-white/50'
+                }`}
+              />
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function ChevronIcon({ direction }: { direction: 'left' | 'right' }) {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+      {direction === 'left' ? <path d="M15 18l-6-6 6-6" /> : <path d="M9 18l6-6-6-6" />}
+    </svg>
+  );
+}
+
+function BannerImage({
+  banner,
+  className,
+  fill,
+}: {
+  banner: Banner;
+  className: string;
+  fill?: boolean;
+}) {
+  const image = (
+    <div
+      className={
+        fill
+          ? `relative h-full w-full ${className}`
+          : `relative overflow-hidden rounded-lg border border-ink-100 shadow-sm ${className}`
+      }
+    >
       <Image src={banner.imagePath} alt={banner.title} fill className="object-cover" unoptimized />
     </div>
   );

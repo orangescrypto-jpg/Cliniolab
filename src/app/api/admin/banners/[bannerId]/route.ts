@@ -23,11 +23,16 @@ export async function PATCH(request: Request, { params }: RouteParams) {
     isActive?: boolean;
     sortOrder?: number;
     placement?: 'header' | 'footer';
+    displayMode?: 'static' | 'slider';
   };
   try {
     body = await request.json();
   } catch {
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
+  }
+
+  if (body.displayMode !== undefined && body.displayMode !== 'static' && body.displayMode !== 'slider') {
+    return NextResponse.json({ error: 'displayMode must be "static" or "slider"' }, { status: 400 });
   }
 
   const banner = await bannerService.updateBanner(bannerId, body);

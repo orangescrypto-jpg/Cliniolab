@@ -398,10 +398,12 @@ export interface RelatedPostsSetting {
 // ============================================
 
 export type BannerPlacement = 'header' | 'footer';
+export type BannerDisplayMode = 'static' | 'slider';
 
 export interface Banner {
   id: string;
   placement: BannerPlacement;
+  displayMode: BannerDisplayMode;
   title: string;
   imagePath: string;
   linkUrl: string | null;

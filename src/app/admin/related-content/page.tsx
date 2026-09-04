@@ -46,6 +46,14 @@ export default function AdminRelatedContentPage() {
     });
   }
 
+  // Lets the field hold whatever the user is mid-typing (including empty,
+  // or a single digit like "6" before a "1" from "12" is fully deleted)
+  // without fighting the cursor on every keystroke. Clamping to [1, 12]
+  // only happens once, on blur, when we know they're done editing.
+  function clamp(value: number) {
+    return Math.min(12, Math.max(1, value));
+  }
+
   async function save() {
     setSaving(true);
     setSaved(false);
@@ -84,10 +92,13 @@ export default function AdminRelatedContentPage() {
             type="number"
             min={1}
             max={12}
-            value={quizPage.count}
-            onChange={(e) =>
-              setQuizPage((prev) => ({ ...prev, count: Math.min(12, Math.max(1, Number(e.target.value) || 1)) }))
-            }
+            value={quizPage.count === 0 ? '' : quizPage.count}
+            onChange={(e) => {
+              const raw = e.target.value;
+              const parsed = raw === '' ? 0 : Number(raw);
+              setQuizPage((prev) => ({ ...prev, count: Number.isNaN(parsed) ? prev.count : parsed }));
+            }}
+            onBlur={() => setQuizPage((prev) => ({ ...prev, count: clamp(prev.count) }))}
             className="mt-1 w-32 rounded-md border border-ink-100 px-4 py-2 text-sm focus:border-pulse-400 focus:outline-none"
           />
         </div>
@@ -106,10 +117,13 @@ export default function AdminRelatedContentPage() {
             type="number"
             min={1}
             max={12}
-            value={blogPage.count}
-            onChange={(e) =>
-              setBlogPage((prev) => ({ ...prev, count: Math.min(12, Math.max(1, Number(e.target.value) || 1)) }))
-            }
+            value={blogPage.count === 0 ? '' : blogPage.count}
+            onChange={(e) => {
+              const raw = e.target.value;
+              const parsed = raw === '' ? 0 : Number(raw);
+              setBlogPage((prev) => ({ ...prev, count: Number.isNaN(parsed) ? prev.count : parsed }));
+            }}
+            onBlur={() => setBlogPage((prev) => ({ ...prev, count: clamp(prev.count) }))}
             className="mt-1 w-32 rounded-md border border-ink-100 px-4 py-2 text-sm focus:border-pulse-400 focus:outline-none"
           />
         </div>
@@ -156,13 +170,13 @@ export default function AdminRelatedContentPage() {
             type="number"
             min={1}
             max={12}
-            value={relatedPosts.count}
-            onChange={(e) =>
-              setRelatedPosts((prev) => ({
-                ...prev,
-                count: Math.min(12, Math.max(1, Number(e.target.value) || 1)),
-              }))
-            }
+            value={relatedPosts.count === 0 ? '' : relatedPosts.count}
+            onChange={(e) => {
+              const raw = e.target.value;
+              const parsed = raw === '' ? 0 : Number(raw);
+              setRelatedPosts((prev) => ({ ...prev, count: Number.isNaN(parsed) ? prev.count : parsed }));
+            }}
+            onBlur={() => setRelatedPosts((prev) => ({ ...prev, count: clamp(prev.count) }))}
             className="mt-1 w-32 rounded-md border border-ink-100 px-4 py-2 text-sm focus:border-pulse-400 focus:outline-none"
           />
         </div>

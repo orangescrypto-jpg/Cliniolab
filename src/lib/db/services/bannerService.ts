@@ -1,9 +1,10 @@
 import { getDb, nowIso } from '@/lib/db/client';
-import type { Banner, BannerPlacement, BannerStats } from '@/types';
+import type { Banner, BannerPlacement, BannerDisplayMode, BannerStats } from '@/types';
 
 interface BannerRow {
   id: string;
   placement: string;
+  display_mode: string;
   title: string;
   image_path: string;
   link_url: string | null;
@@ -17,6 +18,7 @@ function mapBanner(row: BannerRow): Banner {
   return {
     id: row.id,
     placement: row.placement as BannerPlacement,
+    displayMode: (row.display_mode as BannerDisplayMode) ?? 'static',
     title: row.title,
     imagePath: row.image_path,
     linkUrl: row.link_url,
@@ -65,6 +67,7 @@ export async function getBannerById(id: string): Promise<Banner | null> {
 
 export async function createBanner(input: {
   placement: BannerPlacement;
+  displayMode?: BannerDisplayMode;
   title: string;
   imagePath: string;
   linkUrl?: string | null;
@@ -76,12 +79,13 @@ export async function createBanner(input: {
   const now = nowIso();
   await db
     .prepare(
-      `INSERT INTO banners (id, placement, title, image_path, link_url, is_active, sort_order, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO banners (id, placement, display_mode, title, image_path, link_url, is_active, sort_order, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .bind(
       id,
       input.placement,
+      input.displayMode ?? 'static',
       input.title,
       input.imagePath,
       input.linkUrl ?? null,
@@ -105,6 +109,7 @@ export async function updateBanner(
     isActive: boolean;
     sortOrder: number;
     placement: BannerPlacement;
+    displayMode: BannerDisplayMode;
   }>
 ): Promise<Banner | null> {
   const db = getDb();
@@ -114,7 +119,7 @@ export async function updateBanner(
   await db
     .prepare(
       `UPDATE banners
-       SET title = ?, image_path = ?, link_url = ?, is_active = ?, sort_order = ?, placement = ?, updated_at = ?
+       SET title = ?, image_path = ?, link_url = ?, is_active = ?, sort_order = ?, placement = ?, display_mode = ?, updated_at = ?
        WHERE id = ?`
     )
     .bind(
@@ -124,6 +129,7 @@ export async function updateBanner(
       input.isActive !== undefined ? (input.isActive ? 1 : 0) : existing.isActive ? 1 : 0,
       input.sortOrder !== undefined ? input.sortOrder : existing.sortOrder,
       input.placement ?? existing.placement,
+      input.displayMode ?? existing.displayMode,
       nowIso(),
       id
     )

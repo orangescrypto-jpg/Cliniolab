@@ -713,6 +713,60 @@ export async function getQuizzesWithStatsByIds(ids: string[]): Promise<QuizWithS
   }));
 }
 
+export async function listQuizzesByCategoryPaginated(
+  categoryId: string,
+  page = 1,
+  pageSize = 25
+): Promise<{ quizzes: QuizWithStats[]; total: number; page: number; pageSize: number }> {
+  const db = getDb();
+  const offset = Math.max(0, (page - 1) * pageSize);
+
+  const [{ results }, countRow] = await Promise.all([
+    db
+      .prepare(
+        `SELECT
+          q.*,
+          (SELECT COUNT(*) FROM questions WHERE quiz_id = q.id) as question_count,
+          (SELECT COUNT(*) FROM quiz_attempts WHERE quiz_id = q.id) as attempt_count,
+          (SELECT AVG(CAST(score AS REAL) / total_questions * 100) FROM quiz_attempts WHERE quiz_id = q.id) as avg_score,
+          (SELECT COUNT(*) FROM comments WHERE quiz_id = q.id) as comment_count,
+          u.display_name as creator_name,
+          u.contact_phone as creator_contact
+        FROM quizzes q
+        JOIN subcategories s ON s.id = q.subcategory_id
+        JOIN users u ON u.id = q.creator_id
+        WHERE s.category_id = ? AND q.visibility = 'public' AND q.status = 'published'
+        ORDER BY q.created_at DESC
+        LIMIT ? OFFSET ?`
+      )
+      .bind(categoryId, pageSize, offset)
+      .all<QuizRow & { question_count: number; attempt_count: number; avg_score: number | null; comment_count: number; creator_name: string | null; creator_contact: string | null }>(),
+    db
+      .prepare(
+        `SELECT COUNT(*) as total FROM quizzes q
+         JOIN subcategories s ON s.id = q.subcategory_id
+         WHERE s.category_id = ? AND q.visibility = 'public' AND q.status = 'published'`
+      )
+      .bind(categoryId)
+      .first<{ total: number }>(),
+  ]);
+
+  return {
+    quizzes: results.map((row) => ({
+      ...mapQuiz(row),
+      questionCount: row.question_count,
+      attemptCount: row.attempt_count,
+      averageScorePercent: row.avg_score,
+      commentCount: row.comment_count,
+      creatorName: row.creator_name ?? 'Anonymous',
+      creatorContact: row.creator_contact,
+    })),
+    total: countRow?.total ?? 0,
+    page,
+    pageSize,
+  };
+}
+
 export async function listQuizzesByCategory(categoryId: string, limit?: number): Promise<QuizWithStats[]> {
   const db = getDb();
   const query = `SELECT
@@ -741,6 +795,58 @@ export async function listQuizzesByCategory(categoryId: string, limit?: number):
     creatorName: row.creator_name ?? 'Anonymous',
     creatorContact: row.creator_contact,
   }));
+}
+
+export async function listQuizzesBySubcategoryPaginated(
+  subcategoryId: string,
+  page = 1,
+  pageSize = 25
+): Promise<{ quizzes: QuizWithStats[]; total: number; page: number; pageSize: number }> {
+  const db = getDb();
+  const offset = Math.max(0, (page - 1) * pageSize);
+
+  const [{ results }, countRow] = await Promise.all([
+    db
+      .prepare(
+        `SELECT
+          q.*,
+          (SELECT COUNT(*) FROM questions WHERE quiz_id = q.id) as question_count,
+          (SELECT COUNT(*) FROM quiz_attempts WHERE quiz_id = q.id) as attempt_count,
+          (SELECT AVG(CAST(score AS REAL) / total_questions * 100) FROM quiz_attempts WHERE quiz_id = q.id) as avg_score,
+          (SELECT COUNT(*) FROM comments WHERE quiz_id = q.id) as comment_count,
+          u.display_name as creator_name,
+          u.contact_phone as creator_contact
+        FROM quizzes q
+        JOIN users u ON u.id = q.creator_id
+        WHERE q.subcategory_id = ? AND q.visibility = 'public' AND q.status = 'published'
+        ORDER BY q.created_at DESC
+        LIMIT ? OFFSET ?`
+      )
+      .bind(subcategoryId, pageSize, offset)
+      .all<QuizRow & { question_count: number; attempt_count: number; avg_score: number | null; comment_count: number; creator_name: string | null; creator_contact: string | null }>(),
+    db
+      .prepare(
+        `SELECT COUNT(*) as total FROM quizzes q
+         WHERE q.subcategory_id = ? AND q.visibility = 'public' AND q.status = 'published'`
+      )
+      .bind(subcategoryId)
+      .first<{ total: number }>(),
+  ]);
+
+  return {
+    quizzes: results.map((row) => ({
+      ...mapQuiz(row),
+      questionCount: row.question_count,
+      attemptCount: row.attempt_count,
+      averageScorePercent: row.avg_score,
+      commentCount: row.comment_count,
+      creatorName: row.creator_name ?? 'Anonymous',
+      creatorContact: row.creator_contact,
+    })),
+    total: countRow?.total ?? 0,
+    page,
+    pageSize,
+  };
 }
 
 export async function listQuizzesBySubcategory(subcategoryId: string): Promise<QuizWithStats[]> {

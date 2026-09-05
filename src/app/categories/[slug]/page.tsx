@@ -4,8 +4,11 @@ import { Suspense, useEffect, useState } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 import { QuizCard } from '@/components/quiz/QuizCard';
 import { LeaderboardList } from '@/components/quiz/LeaderboardList';
+import { Pagination } from '@/components/ui/Pagination';
 import { useAuth } from '@/lib/auth/AuthProvider';
 import type { Category, LeaderboardEntry, QuizWithStats, Subcategory } from '@/types';
+
+const PAGE_SIZE = 25;
 
 function SubcategoryPageContent() {
   const params = useParams<{ slug: string }>();
@@ -16,6 +19,8 @@ function SubcategoryPageContent() {
   const [subcategory, setSubcategory] = useState<Subcategory | null>(null);
   const [category, setCategory] = useState<Category | null>(null);
   const [quizzes, setQuizzes] = useState<QuizWithStats[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
   const [leaderboardEnabled, setLeaderboardEnabled] = useState(true);
   const [leaderboardCurrentUserRank, setLeaderboardCurrentUserRank] = useState<number | null>(null);
@@ -29,11 +34,6 @@ function SubcategoryPageContent() {
         const sub = (data.subcategories as Subcategory[]).find((s) => s.slug === params.slug) ?? null;
         setSubcategory(sub);
 
-        if (sub) {
-          fetch(`/api/quizzes?subcategoryId=${sub.id}`)
-            .then((res) => res.json())
-            .then((quizData) => setQuizzes(quizData.quizzes ?? []));
-        }
         if (cat) {
           fetch(`/api/leaderboard/category/${cat.id}`)
             .then((res) => res.json())
@@ -45,6 +45,23 @@ function SubcategoryPageContent() {
         }
       });
   }, [params.slug, categorySlug]);
+
+  // Quiz list re-fetches whenever the subcategory resolves or the page
+  // changes, kept separate from the lookup above so paging doesn't
+  // re-trigger the category/subcategory/leaderboard fetch every time.
+  useEffect(() => {
+    if (!subcategory) return;
+    fetch(`/api/quizzes?subcategoryId=${subcategory.id}&page=${page}&pageSize=${PAGE_SIZE}`)
+      .then((res) => res.json())
+      .then((data) => {
+        setQuizzes(data.quizzes ?? []);
+        setTotal(data.total ?? 0);
+      });
+  }, [subcategory, page]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [subcategory?.id]);
 
   return (
     <div className="mx-auto max-w-7xl px-6 py-16">
@@ -63,6 +80,16 @@ function SubcategoryPageContent() {
               <p className="col-span-full text-sm text-ink-400">No quizzes in this subcategory yet.</p>
             )}
           </div>
+          <Pagination
+            page={page}
+            pageSize={PAGE_SIZE}
+            total={total}
+            onPageChange={(p) => {
+              setPage(p);
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
+            className="mt-8"
+          />
         </div>
         {leaderboardEnabled && category && (
           <div>

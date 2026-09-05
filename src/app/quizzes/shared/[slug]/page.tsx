@@ -25,6 +25,7 @@ export default function SharedQuizPage() {
   const [attemptKey, setAttemptKey] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [fetching, setFetching] = useState(false);
+  const [hasAttempted, setHasAttempted] = useState(false);
 
   async function handleStart() {
     setFetching(true);
@@ -53,6 +54,7 @@ export default function SharedQuizPage() {
         setQuiz(data.quiz);
         setQuestions(data.questions);
       }
+      setHasAttempted(!!data.hasAttempted);
       setStarted(true);
     } finally {
       setFetching(false);
@@ -90,6 +92,7 @@ export default function SharedQuizPage() {
         quiz={quiz}
         questions={questions}
         submitEndpoint={`/api/quizzes/${quiz.id}/attempt`}
+        isFirstAttempt={!hasAttempted}
       />
     );
   }

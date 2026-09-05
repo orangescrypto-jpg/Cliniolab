@@ -93,14 +93,24 @@ async function assertRetakeAllowed(quizId: string, userId: string): Promise<void
  * Every attempt after that is graded and shown to the user, but nothing
  * is persisted for it - this keeps the table from growing unbounded on
  * popular quizzes with no retake limit.
+ *
+ * Exported as hasUserAttemptedQuiz because it also doubles as the signal
+ * for "is this the user's first attempt" used to gate the copy-block
+ * anti-cheat overlay on the quiz-taking screen (see QuizRunner) - a quiz
+ * row existing here means they've seen these questions before, whatever
+ * the quiz's own retake/anti-cheat settings are.
  */
-async function hasRecordedAttempt(quizId: string, userId: string): Promise<boolean> {
+export async function hasUserAttemptedQuiz(quizId: string, userId: string): Promise<boolean> {
   const db = getDb();
   const existing = await db
     .prepare('SELECT id FROM quiz_attempts WHERE quiz_id = ? AND user_id = ? LIMIT 1')
     .bind(quizId, userId)
     .first<{ id: string }>();
   return !!existing;
+}
+
+async function hasRecordedAttempt(quizId: string, userId: string): Promise<boolean> {
+  return hasUserAttemptedQuiz(quizId, userId);
 }
 
 export async function submitAttempt(

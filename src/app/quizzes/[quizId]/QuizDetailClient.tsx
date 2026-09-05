@@ -60,6 +60,7 @@ export function QuizDetailClient({
   const [purchasing, setPurchasing] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [hasAttempted, setHasAttempted] = useState(false);
 
   // Lightweight preview load so the owner sees a Delete option before
   // committing to "Start" (which pulls full question sets).
@@ -176,6 +177,7 @@ export function QuizDetailClient({
         setQuiz(data.quiz);
         setQuestions(data.questions);
       }
+      setHasAttempted(!!data.hasAttempted);
       setStarted(true);
     } finally {
       setFetching(false);
@@ -279,6 +281,7 @@ export function QuizDetailClient({
         quiz={quiz}
         questions={questions}
         submitEndpoint={`/api/quizzes/${quizId}/attempt`}
+        isFirstAttempt={!hasAttempted}
       />
     );
   }

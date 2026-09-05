@@ -21,11 +21,23 @@ export async function GET(request: Request) {
   }
 
   if (subcategoryId) {
+    if (pageParam) {
+      const page = Math.max(1, Number(pageParam) || 1);
+      const pageSize = Math.min(50, Math.max(1, Number(searchParams.get('pageSize') ?? 25) || 25));
+      const result = await quizService.listQuizzesBySubcategoryPaginated(subcategoryId, page, pageSize);
+      return NextResponse.json(result);
+    }
     const quizzes = await quizService.listQuizzesBySubcategory(subcategoryId);
     return NextResponse.json({ quizzes });
   }
 
   if (categoryId) {
+    if (pageParam) {
+      const page = Math.max(1, Number(pageParam) || 1);
+      const pageSize = Math.min(50, Math.max(1, Number(searchParams.get('pageSize') ?? 25) || 25));
+      const result = await quizService.listQuizzesByCategoryPaginated(categoryId, page, pageSize);
+      return NextResponse.json(result);
+    }
     const quizzes = await quizService.listQuizzesByCategory(categoryId, limit);
     return NextResponse.json({ quizzes });
   }

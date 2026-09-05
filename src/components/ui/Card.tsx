@@ -1,9 +1,13 @@
 import React from 'react';
 import type { QuizDifficulty } from '@/types';
 
-export function Card({ className = '', children }: { className?: string; children: React.ReactNode }) {
+export function Card({
+  className = '',
+  children,
+  ...rest
+}: React.HTMLAttributes<HTMLDivElement> & { className?: string; children: React.ReactNode }) {
   return (
-    <div className={`rounded-lg border border-ink-100 bg-white shadow-sm ${className}`}>
+    <div className={`rounded-lg border border-ink-100 bg-white shadow-sm ${className}`} {...rest}>
       {children}
     </div>
   );

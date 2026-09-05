@@ -65,7 +65,15 @@ export async function GET(request: Request, { params }: RouteParams) {
     ? questions
     : questions.map(({ correctAnswer: _correctAnswer, ...rest }) => rest);
 
-  return NextResponse.json({ quiz, questions: safeQuestions });
+  // Whether this user has ever recorded an attempt on this quiz before -
+  // used client-side to gate the copy-block anti-cheat overlay to only a
+  // user's genuine first attempt, regardless of the quiz's own retake or
+  // anti-cheat settings. The owner/moderator previewing their own quiz
+  // isn't "attempting" it, so it's not meaningful to block copying for
+  // them.
+  const hasAttempted = isOwnerOrModerator ? false : await attemptService.hasUserAttemptedQuiz(quizId, user.id);
+
+  return NextResponse.json({ quiz, questions: safeQuestions, hasAttempted });
 }
 
 export async function PATCH(request: Request, { params }: RouteParams) {

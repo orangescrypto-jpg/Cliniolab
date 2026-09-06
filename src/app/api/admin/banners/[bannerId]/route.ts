@@ -51,12 +51,35 @@ export async function DELETE(_request: Request, { params }: RouteParams) {
   const existing = await bannerService.getBannerById(bannerId);
   if (!existing) return NextResponse.json({ error: 'Banner not found' }, { status: 404 });
 
+  // Checked BEFORE the D1 row is deleted, since another banner (e.g. the
+  // same graphic reused for both header and footer) might still point at
+  // this exact image file — deleting it from R2 in that case would break
+  // that other banner's image too.
+  const imageStillNeeded = await bannerService.isImagePathUsedByOtherBanner(existing.imagePath, bannerId);
+
+  // D1 row (and its banner_events) is deleted next. If the R2 delete
+  // below fails, the banner is already gone from the site and admin list
+  // either way — surfacing that failure as a warning (not blocking the
+  // delete on it) is more useful than a hard error, since the banner
+  // record itself is unrecoverable at that point regardless.
   await bannerService.deleteBanner(bannerId);
-  // Best-effort cleanup of the R2 object; don't fail the request if this errors.
+
+  if (imageStillNeeded) {
+    return NextResponse.json({ success: true });
+  }
+
   try {
     await deleteImageByPath(existing.imagePath);
-  } catch {
-    // ignore
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    return NextResponse.json(
+      {
+        success: true,
+        warning: `Banner was deleted, but removing its image from storage failed: ${message}. The image file may still exist in R2 and will need manual cleanup.`,
+      },
+      { status: 200 }
+    );
   }
+
   return NextResponse.json({ success: true });
 }

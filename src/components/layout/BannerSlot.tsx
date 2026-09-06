@@ -68,24 +68,24 @@ export function BannerSlot({ placement }: BannerSlotProps) {
     return (
       <div className="mx-auto max-w-7xl px-6 py-4 space-y-4">
         {sliderBanners.length > 0 && (
-          <BannerCarousel banners={sliderBanners} className="aspect-[16/9] w-full sm:aspect-[16/5]" />
+          <BannerCarousel banners={sliderBanners} className="aspect-[4/3] w-full sm:aspect-[16/5]" />
         )}
         {staticBanners.map((banner) => (
-          <BannerImage key={banner.id} banner={banner} className="aspect-[16/9] w-full sm:aspect-[16/5]" />
+          <BannerImage key={banner.id} banner={banner} className="aspect-[4/3] w-full sm:aspect-[16/5]" />
         ))}
       </div>
     );
   }
 
-  // Footer banner(s): normal-sized, stacked if there's more than one.
+  // Footer banner(s): large and full-width, stacked vertically if there's
+  // more than one static banner (no side-by-side grid — a 2-up grid would
+  // just make each banner narrower, working against making them bigger).
   return (
     <div className="mx-auto max-w-7xl px-6 py-8 space-y-4">
-      {sliderBanners.length > 0 && <BannerCarousel banners={sliderBanners} className="aspect-[16/9] w-full sm:aspect-[16/6]" />}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        {staticBanners.map((banner) => (
-          <BannerImage key={banner.id} banner={banner} className="aspect-[16/9] w-full sm:aspect-[16/6]" />
-        ))}
-      </div>
+      {sliderBanners.length > 0 && <BannerCarousel banners={sliderBanners} className="aspect-[4/3] w-full sm:aspect-[16/5]" />}
+      {staticBanners.map((banner) => (
+        <BannerImage key={banner.id} banner={banner} className="aspect-[4/3] w-full sm:aspect-[16/5]" />
+      ))}
     </div>
   );
 }
@@ -188,11 +188,11 @@ function BannerImage({
     <div
       className={
         fill
-          ? `relative h-full w-full ${className}`
-          : `relative overflow-hidden rounded-lg border border-ink-100 shadow-sm ${className}`
+          ? `relative h-full w-full bg-ink-50 ${className}`
+          : `relative overflow-hidden rounded-lg border border-ink-100 bg-ink-50 shadow-sm ${className}`
       }
     >
-      <Image src={banner.imagePath} alt={banner.title} fill className="object-cover" unoptimized />
+      <Image src={banner.imagePath} alt={banner.title} fill className="object-contain" unoptimized />
     </div>
   );
 

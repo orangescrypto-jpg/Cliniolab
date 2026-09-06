@@ -140,7 +140,26 @@ export async function updateBanner(
 
 export async function deleteBanner(id: string): Promise<void> {
   const db = getDb();
+  // banner_events references banners by id with no cascade in D1/SQLite,
+  // so its rows for this banner would otherwise be orphaned forever once
+  // the banner itself is gone.
+  await db.prepare('DELETE FROM banner_events WHERE banner_id = ?').bind(id).run();
   await db.prepare('DELETE FROM banners WHERE id = ?').bind(id).run();
+}
+
+/**
+ * Whether any OTHER banner still points at the same image_path. Two
+ * banners can end up sharing one uploaded file (e.g. the same graphic
+ * used for both the header and footer placement), so deleting one
+ * banner's R2 object is only safe once nothing else still references it.
+ */
+export async function isImagePathUsedByOtherBanner(imagePath: string, excludingBannerId: string): Promise<boolean> {
+  const db = getDb();
+  const row = await db
+    .prepare('SELECT id FROM banners WHERE image_path = ? AND id != ? LIMIT 1')
+    .bind(imagePath, excludingBannerId)
+    .first<{ id: string }>();
+  return !!row;
 }
 
 /**

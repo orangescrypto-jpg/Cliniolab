@@ -68,10 +68,10 @@ export function BannerSlot({ placement }: BannerSlotProps) {
     return (
       <div className="mx-auto max-w-7xl px-6 py-4 space-y-4">
         {sliderBanners.length > 0 && (
-          <BannerCarousel banners={sliderBanners} className="aspect-[16/3] w-full sm:aspect-[16/2.5]" />
+          <BannerCarousel banners={sliderBanners} className="aspect-[16/9] w-full sm:aspect-[16/5]" />
         )}
         {staticBanners.map((banner) => (
-          <BannerImage key={banner.id} banner={banner} className="aspect-[16/3] w-full sm:aspect-[16/2.5]" />
+          <BannerImage key={banner.id} banner={banner} className="aspect-[16/9] w-full sm:aspect-[16/5]" />
         ))}
       </div>
     );
@@ -80,10 +80,10 @@ export function BannerSlot({ placement }: BannerSlotProps) {
   // Footer banner(s): normal-sized, stacked if there's more than one.
   return (
     <div className="mx-auto max-w-7xl px-6 py-8 space-y-4">
-      {sliderBanners.length > 0 && <BannerCarousel banners={sliderBanners} className="aspect-[16/6] w-full" />}
+      {sliderBanners.length > 0 && <BannerCarousel banners={sliderBanners} className="aspect-[16/9] w-full sm:aspect-[16/6]" />}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         {staticBanners.map((banner) => (
-          <BannerImage key={banner.id} banner={banner} className="aspect-[16/6] w-full" />
+          <BannerImage key={banner.id} banner={banner} className="aspect-[16/9] w-full sm:aspect-[16/6]" />
         ))}
       </div>
     </div>

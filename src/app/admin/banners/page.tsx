@@ -121,10 +121,15 @@ export default function AdminBannersPage() {
     });
   }
 
+  const [deleteWarning, setDeleteWarning] = useState<string | null>(null);
+
   async function deleteBanner(banner: Banner) {
     if (!confirm(`Delete "${banner.title}"? This can't be undone.`)) return;
+    setDeleteWarning(null);
     setBanners((prev) => prev.filter((b) => b.id !== banner.id));
-    await fetch(`/api/admin/banners/${banner.id}`, { method: 'DELETE' });
+    const res = await fetch(`/api/admin/banners/${banner.id}`, { method: 'DELETE' });
+    const data = await res.json().catch(() => null);
+    if (data?.warning) setDeleteWarning(data.warning);
   }
 
   return (
@@ -135,6 +140,11 @@ export default function AdminBannersPage() {
         placement off, or hide individual banners without deleting them.
       </p>
       {error && <p className="mt-3 text-sm text-critical-500">{error}</p>}
+      {deleteWarning && (
+        <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          {deleteWarning}
+        </div>
+      )}
 
       {PLACEMENTS.map((placement) => {
         const placementBanners = banners.filter((b) => b.placement === placement.key);

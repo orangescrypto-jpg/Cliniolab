@@ -77,14 +77,17 @@ export function QuizDetailClient({
 
   const isOwner = !!user && !!quiz && (quiz.creatorId === user.id || user.role === 'admin' || user.role === 'moderator');
 
-  // Auto-start when arriving via the "Retake missed only" button on the
-  // result screen - that's an explicit, deliberate re-entry the user just
-  // chose, not a first-time landing, so it shouldn't require a second
-  // manual "Start" click.
+  // Auto-start when arriving via the "Retake missed only" or "Retake all"
+  // buttons on the result screen - those are explicit, deliberate re-entry
+  // choices the user just made, not a first-time landing, so neither
+  // should require a second manual "Start" click. "Retake all" is
+  // signalled by a bare ?retake=1 (no missedOnly narrowing); "Retake
+  // missed only" keeps its existing ?retakeMissed=1 signal.
   useEffect(() => {
     if (!user || started) return;
     if (typeof window === 'undefined') return;
-    if (new URLSearchParams(window.location.search).get('retakeMissed') === '1') {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('retakeMissed') === '1' || params.get('retake') === '1') {
       void handleStart();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -130,16 +133,21 @@ export function QuizDetailClient({
     }
 
     try {
-      // "Retake missed only" arrives back here as a query param after the
-      // user clicks it on the result screen (see QuizRunner). It narrows
-      // the fetched question set to whatever they missed on their most
-      // recently *recorded* attempt - derived from quiz_attempts on the
-      // server, no separate storage. Consumed once, then stripped from
-      // the URL so a plain refresh afterwards goes back to the full quiz.
+      // "Retake missed only" / "Retake all" arrive back here as query
+      // params after the user clicks one on the result screen (see
+      // QuizRunner). "Retake missed only" narrows the fetched question set
+      // to whatever they missed on their most recently *recorded* attempt
+      // - derived from quiz_attempts on the server, no separate storage.
+      // "Retake all" (?retake=1) carries no such narrowing, it's just the
+      // auto-start signal for a full fresh attempt. Both are consumed
+      // once, then stripped from the URL so a plain refresh afterwards
+      // behaves like an ordinary page load.
       const params = new URLSearchParams(window.location.search);
       const missedOnly = params.get('retakeMissed') === '1';
-      if (missedOnly) {
+      const isRetakeAll = params.get('retake') === '1';
+      if (missedOnly || isRetakeAll) {
         params.delete('retakeMissed');
+        params.delete('retake');
         const newUrl = `${window.location.pathname}${params.toString() ? `?${params.toString()}` : ''}`;
         window.history.replaceState({}, '', newUrl);
       }

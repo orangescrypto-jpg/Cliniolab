@@ -521,12 +521,27 @@ export function QuizRunner({ quiz, questions: rawQuestions, submitEndpoint, isFi
           </div>
           {flagError && <p className="mt-3 text-xs text-critical-500">{flagError}</p>}
           <div className="mt-8 flex flex-wrap justify-center gap-2">
+            {draftsEnabled && (
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  leaveResults();
+                  const url = new URL(window.location.href);
+                  url.searchParams.delete('retakeMissed');
+                  url.searchParams.set('retake', '1');
+                  window.location.href = url.toString();
+                }}
+              >
+                Retake all
+              </Button>
+            )}
             {result.perQuestion.some((pq) => !pq.isCorrect) && (
               <Button
                 variant="secondary"
                 onClick={() => {
                   leaveResults();
                   const url = new URL(window.location.href);
+                  url.searchParams.delete('retake');
                   url.searchParams.set('retakeMissed', '1');
                   window.location.href = url.toString();
                 }}

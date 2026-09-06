@@ -253,3 +253,149 @@ export async function getUserDashboardStats(userId: string): Promise<UserDashboa
     scoreHistory: history.map((h) => ({ date: h.date, percentage: h.percentage, quizTitle: h.quiz_title })),
   };
 }
+
+/**
+ * Well-known id for the placeholder account that quizzes/posts/resources
+ * get reassigned to when their original creator is deleted (see
+ * deleteUserCompletely below). Kept live with role 'user' and no login
+ * capability of its own (no matching Supabase Auth account), display name
+ * "User" - never surfaced as if it were the original person.
+ */
+export const DELETED_USER_PLACEHOLDER_ID = 'placeholder-deleted-user';
+
+async function ensurePlaceholderUserRecord(): Promise<void> {
+  const db = getDb();
+  const existing = await db
+    .prepare('SELECT id FROM users WHERE id = ?')
+    .bind(DELETED_USER_PLACEHOLDER_ID)
+    .first<{ id: string }>();
+  if (existing) return;
+
+  await db
+    .prepare(
+      `INSERT INTO users (id, email, display_name, role, created_at)
+       VALUES (?, ?, ?, 'user', ?)`
+    )
+    .bind(
+      DELETED_USER_PLACEHOLDER_ID,
+      'deleted-user-placeholder@cliniolab.internal',
+      'User',
+      nowIso()
+    )
+    .run();
+}
+
+/**
+ * Permanently deletes a user: their own personal activity (attempts,
+ * comments, bookmarks, etc.) is deleted outright, while content they
+ * created that other users have engaged with (quizzes, blog posts,
+ * resources, abbreviations, scholar features) is kept live but reassigned
+ * to a placeholder "User" account, so deleting one person's account
+ * doesn't erase other students' attempt history/comments on quizzes they
+ * happened to have made.
+ *
+ * Refuses to run if the user has any unresolved money owed to them
+ * (a pending/processing payout request, or a positive withdrawable
+ * balance) - that must be settled first, outside this flow.
+ *
+ * Does NOT touch Supabase Auth - the caller (the admin API route) is
+ * responsible for calling supabase.auth.admin.deleteUser() as well, since
+ * that's a separate system this service has no access to.
+ */
+export async function deleteUserCompletely(userId: string): Promise<void> {
+  const db = getDb();
+
+  const user = await db
+    .prepare('SELECT creator_balance_kobo FROM users WHERE id = ?')
+    .bind(userId)
+    .first<{ creator_balance_kobo: number }>();
+  if (!user) return; // already gone; nothing to do
+
+  if (user.creator_balance_kobo > 0) {
+    throw new Error(
+      'This user has an unpaid withdrawable balance. Settle or zero it out via a payout before deleting.'
+    );
+  }
+
+  const pendingPayout = await db
+    .prepare(
+      `SELECT id FROM payout_requests WHERE creator_id = ? AND status IN ('pending', 'processing') LIMIT 1`
+    )
+    .bind(userId)
+    .first<{ id: string }>();
+  if (pendingPayout) {
+    throw new Error(
+      'This user has a pending or processing payout request. Settle it (mark paid or failed) before deleting.'
+    );
+  }
+
+  await ensurePlaceholderUserRecord();
+  const placeholder = DELETED_USER_PLACEHOLDER_ID;
+
+  // --- Reassign content the user created, so other users' activity on it survives ---
+  await db.prepare('UPDATE quizzes SET creator_id = ? WHERE creator_id = ?').bind(placeholder, userId).run();
+  await db.prepare('UPDATE blog_posts SET author_id = ? WHERE author_id = ?').bind(placeholder, userId).run();
+  await db.prepare('UPDATE resources SET uploaded_by = ? WHERE uploaded_by = ?').bind(placeholder, userId).run();
+  await db
+    .prepare('UPDATE medical_abbreviations SET created_by = ? WHERE created_by = ?')
+    .bind(placeholder, userId)
+    .run();
+  await db
+    .prepare('UPDATE scholars_of_the_day SET created_by = ? WHERE created_by = ?')
+    .bind(placeholder, userId)
+    .run();
+  await db
+    .prepare('UPDATE scholars_of_the_day SET student_user_id = NULL WHERE student_user_id = ?')
+    .bind(userId)
+    .run();
+  await db
+    .prepare('UPDATE resource_purchases SET confirmed_by = ? WHERE confirmed_by = ?')
+    .bind(placeholder, userId)
+    .run();
+
+  // --- Delete the user's own personal activity outright ---
+
+  // attempt_answers reference quiz_attempts by attempt_id, not user_id
+  // directly, so their attempt ids must be looked up first.
+  const { results: attemptRows } = await db
+    .prepare('SELECT id FROM quiz_attempts WHERE user_id = ?')
+    .bind(userId)
+    .all<{ id: string }>();
+  for (const { id: attemptId } of attemptRows) {
+    await db.prepare('DELETE FROM attempt_answers WHERE attempt_id = ?').bind(attemptId).run();
+  }
+  await db.prepare('DELETE FROM quiz_attempts WHERE user_id = ?').bind(userId).run();
+
+  await db.prepare('DELETE FROM certificates WHERE user_id = ?').bind(userId).run();
+
+  // comment_reactions reference comments by comment_id, so both directions
+  // need clearing before the comments themselves can go: reactions BY this
+  // user on any comment, and reactions made BY OTHERS on this user's own
+  // comments (which would otherwise dangle once those comments are deleted).
+  await db.prepare('DELETE FROM comment_reactions WHERE user_id = ?').bind(userId).run();
+  const { results: commentRows } = await db
+    .prepare('SELECT id FROM comments WHERE user_id = ?')
+    .bind(userId)
+    .all<{ id: string }>();
+  for (const { id: commentId } of commentRows) {
+    await db.prepare('DELETE FROM comment_reactions WHERE comment_id = ?').bind(commentId).run();
+  }
+  await db.prepare('DELETE FROM comments WHERE user_id = ?').bind(userId).run();
+
+  await db.prepare('DELETE FROM question_reports WHERE user_id = ?').bind(userId).run();
+  await db.prepare('DELETE FROM bookmarks WHERE user_id = ?').bind(userId).run();
+  await db.prepare('DELETE FROM feedback WHERE user_id = ?').bind(userId).run();
+  await db.prepare('DELETE FROM email_log WHERE user_id = ?').bind(userId).run();
+  await db.prepare('DELETE FROM push_subscriptions WHERE user_id = ?').bind(userId).run();
+  await db.prepare('DELETE FROM resource_purchases WHERE user_id = ?').bind(userId).run();
+  await db.prepare('DELETE FROM quiz_purchases WHERE buyer_id = ?').bind(userId).run();
+
+  // The user's own payout_requests were already confirmed clear of
+  // pending/processing above; any resolved (paid/failed) ones are
+  // historical financial records worth keeping for the platform's own
+  // books, so they're reassigned to the placeholder rather than deleted.
+  await db.prepare('UPDATE payout_requests SET creator_id = ? WHERE creator_id = ?').bind(placeholder, userId).run();
+  await db.prepare('UPDATE payout_requests SET actioned_by = ? WHERE actioned_by = ?').bind(placeholder, userId).run();
+
+  await db.prepare('DELETE FROM users WHERE id = ?').bind(userId).run();
+}

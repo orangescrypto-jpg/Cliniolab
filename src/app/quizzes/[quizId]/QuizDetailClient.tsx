@@ -275,6 +275,8 @@ export function QuizDetailClient({
             Log in
           </Button>
         </Card>
+
+        <QuizLeaderboardSection quizId={quizId} currentUserId={null} />
       </div>
     );
   }

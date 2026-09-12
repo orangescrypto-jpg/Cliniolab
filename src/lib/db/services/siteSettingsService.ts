@@ -269,3 +269,46 @@ export async function setResourcePaymentMode(mode: ResourcePaymentMode): Promise
     .bind('resource_payment_mode', JSON.stringify(mode), nowIso())
     .run();
 }
+
+/**
+ * Site-wide Google AdSense configuration. `clientId` is the AdSense
+ * publisher id (e.g. ca-pub-xxxxxxxxxxxx) used both for the site
+ * verification script and to load the AdSense JS. `enabled` is the
+ * master on/off switch admins use to pull ads instantly without a
+ * redeploy.
+ */
+export interface AdSenseSetting {
+  enabled: boolean;
+  clientId: string;
+}
+
+const DEFAULT_ADSENSE: AdSenseSetting = { enabled: false, clientId: '' };
+
+export async function getAdSenseSetting(): Promise<AdSenseSetting> {
+  const db = getDb();
+  const row = await db
+    .prepare('SELECT * FROM site_settings WHERE key = ?')
+    .bind('adsense')
+    .first<SettingRow>();
+  if (!row) return DEFAULT_ADSENSE;
+  try {
+    const parsed = JSON.parse(row.value) as Partial<AdSenseSetting>;
+    return {
+      enabled: parsed.enabled ?? DEFAULT_ADSENSE.enabled,
+      clientId: typeof parsed.clientId === 'string' ? parsed.clientId : DEFAULT_ADSENSE.clientId,
+    };
+  } catch {
+    return DEFAULT_ADSENSE;
+  }
+}
+
+export async function setAdSenseSetting(setting: AdSenseSetting): Promise<void> {
+  const db = getDb();
+  await db
+    .prepare(
+      `INSERT INTO site_settings (key, value, updated_at) VALUES (?, ?, ?)
+       ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`
+    )
+    .bind('adsense', JSON.stringify({ enabled: setting.enabled, clientId: setting.clientId }), nowIso())
+    .run();
+}

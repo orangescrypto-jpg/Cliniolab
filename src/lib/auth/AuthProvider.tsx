@@ -42,18 +42,35 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const supabase = getSupabaseBrowserClient();
 
-    fetchAppUser().then((u) => {
-      setUser(u);
-      setLoading(false);
-    });
+    fetchAppUser()
+      .then((u) => {
+        setUser(u);
+      })
+      .finally(() => {
+        setLoading(false);
+      });
 
-    const { data: subscription } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      if (!session) {
+    const { data: subscription } = supabase.auth.onAuthStateChange(async (event, session) => {
+      // Only clear the user on an explicit logout. Other events (e.g. a
+      // momentary null session during INITIAL_SESSION, or a failed
+      // TOKEN_REFRESHED) must never log the user out on their own.
+      if (event === 'SIGNED_OUT') {
         setUser(null);
         return;
       }
+
+      if (!session) {
+        // No session yet for a non-logout event (e.g. still initializing).
+        // Do nothing and let the existing user state stand.
+        return;
+      }
+
       const appUser = await fetchAppUser();
-      setUser(appUser);
+      // Only apply the result if it succeeded; a transient failure here
+      // (network blip, cold start) must not wipe out a valid logged-in user.
+      if (appUser) {
+        setUser(appUser);
+      }
     });
 
     return () => subscription.subscription.unsubscribe();

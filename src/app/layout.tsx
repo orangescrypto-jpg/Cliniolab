@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { Fraunces, Inter, IBM_Plex_Mono } from 'next/font/google';
 import '@/styles/globals.css';
 import { AppLayout } from '@/components/layout/AppLayout';
+import { AdSenseLoader } from '@/components/layout/AdSenseLoader';
 import { Providers } from './providers';
 
 const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || 'https://cliniolab.com';
@@ -120,6 +121,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
         />
+        <AdSenseLoader />
       </head>
       <body>
         <Providers>

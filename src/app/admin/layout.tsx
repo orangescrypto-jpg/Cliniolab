@@ -18,6 +18,7 @@ const links = [
   { href: '/admin/pages', label: 'Site Pages' },
   { href: '/admin/homepage-video', label: 'Homepage Video' },
   { href: '/admin/banners', label: 'Banners' },
+  { href: '/admin/adsense', label: 'Google AdSense' },
   { href: '/admin/related-content', label: 'Related Content' },
   { href: '/admin/leaderboard', label: 'Leaderboard' },
   { href: '/admin/cookie-consent', label: 'Cookie Consent' },

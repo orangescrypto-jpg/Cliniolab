@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { HomepageVideoSection } from './HomepageVideoSection';
 import { BannerSlot } from './BannerSlot';
+import { AdSenseSlot } from './AdSenseSlot';
 
 interface BlogCategoryOption { id: string; name: string; slug: string; sortOrder: number }
 
@@ -21,6 +22,10 @@ export function Footer() {
       <HomepageVideoSection />
 
       <BannerSlot placement="footer" />
+
+      <div className="mx-auto max-w-7xl px-6 py-4">
+        <AdSenseSlot slot={process.env.NEXT_PUBLIC_ADSENSE_FOOTER_SLOT} />
+      </div>
 
       <div className="border-t border-ink-100 bg-ink-800 text-ink-100">
         <div className="mx-auto max-w-7xl px-6 py-12">

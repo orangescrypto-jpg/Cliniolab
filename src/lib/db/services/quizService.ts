@@ -587,7 +587,7 @@ export async function listLatestPublicQuizzes(limit = 20): Promise<QuizWithStats
       JOIN categories c ON c.id = s.category_id
       JOIN users u ON u.id = q.creator_id
       WHERE q.visibility = 'public' AND q.status = 'published'
-      ORDER BY q.created_at DESC
+      ORDER BY q.updated_at DESC
       LIMIT ?`
     )
     .bind(limit)
@@ -637,7 +637,7 @@ export async function listLatestPublicQuizzesPaginated(
         JOIN categories c ON c.id = s.category_id
         JOIN users u ON u.id = q.creator_id
         WHERE q.visibility = 'public' AND q.status = 'published'
-        ORDER BY q.created_at DESC
+        ORDER BY q.updated_at DESC
         LIMIT ? OFFSET ?`
       )
       .bind(pageSize, offset)
@@ -736,7 +736,7 @@ export async function listQuizzesByCategoryPaginated(
         JOIN subcategories s ON s.id = q.subcategory_id
         JOIN users u ON u.id = q.creator_id
         WHERE s.category_id = ? AND q.visibility = 'public' AND q.status = 'published'
-        ORDER BY q.created_at DESC
+        ORDER BY q.updated_at DESC
         LIMIT ? OFFSET ?`
       )
       .bind(categoryId, pageSize, offset)
@@ -781,7 +781,7 @@ export async function listQuizzesByCategory(categoryId: string, limit?: number):
     JOIN subcategories s ON s.id = q.subcategory_id
     JOIN users u ON u.id = q.creator_id
     WHERE s.category_id = ? AND q.visibility = 'public' AND q.status = 'published'
-    ORDER BY q.created_at DESC${limit ? ' LIMIT ?' : ''}`;
+    ORDER BY q.updated_at DESC${limit ? ' LIMIT ?' : ''}`;
 
   const stmt = limit ? db.prepare(query).bind(categoryId, limit) : db.prepare(query).bind(categoryId);
   const { results } = await stmt.all<QuizRow & { question_count: number; attempt_count: number; avg_score: number | null; comment_count: number; creator_name: string | null; creator_contact: string | null }>();
@@ -819,7 +819,7 @@ export async function listQuizzesBySubcategoryPaginated(
         FROM quizzes q
         JOIN users u ON u.id = q.creator_id
         WHERE q.subcategory_id = ? AND q.visibility = 'public' AND q.status = 'published'
-        ORDER BY q.created_at DESC
+        ORDER BY q.updated_at DESC
         LIMIT ? OFFSET ?`
       )
       .bind(subcategoryId, pageSize, offset)
@@ -864,7 +864,7 @@ export async function listQuizzesBySubcategory(subcategoryId: string): Promise<Q
       FROM quizzes q
       JOIN users u ON u.id = q.creator_id
       WHERE q.subcategory_id = ? AND q.visibility = 'public' AND q.status = 'published'
-      ORDER BY q.created_at DESC`
+      ORDER BY q.updated_at DESC`
     )
     .bind(subcategoryId)
     .all<QuizRow & { question_count: number; attempt_count: number; avg_score: number | null; comment_count: number; creator_name: string | null; creator_contact: string | null }>();
@@ -935,7 +935,7 @@ export async function listRelatedQuizzes(
        FROM quizzes q
        JOIN users u ON u.id = q.creator_id
        WHERE q.subcategory_id = ? AND q.visibility = 'public' AND q.status = 'published' ${excludeClause}
-       ORDER BY q.created_at DESC
+       ORDER BY q.updated_at DESC
        LIMIT ?`
     )
     .bind(subcategoryId, ...excludeArgs, limit)
@@ -957,7 +957,7 @@ export async function listRelatedQuizzes(
        WHERE s.category_id = (SELECT category_id FROM subcategories WHERE id = ?)
          AND q.subcategory_id != ?
          AND q.visibility = 'public' AND q.status = 'published' ${excludeClause}
-       ORDER BY q.created_at DESC
+       ORDER BY q.updated_at DESC
        LIMIT ?`
     )
     .bind(subcategoryId, subcategoryId, ...excludeArgs, remaining)
@@ -981,7 +981,7 @@ export async function listRelatedQuizzes(
        FROM quizzes q
        JOIN users u ON u.id = q.creator_id
        WHERE q.visibility = 'public' AND q.status = 'published' ${excludeClause}
-       ORDER BY q.created_at DESC
+       ORDER BY q.updated_at DESC
        LIMIT ?`
     )
     .bind(...excludeArgs, stillNeeded + picked.length)
@@ -1057,7 +1057,7 @@ export async function listRelatedQuizzesByLabel(
          JOIN users u ON u.id = q.creator_id
          JOIN subcategories s ON s.id = q.subcategory_id
          WHERE LOWER(s.name) = LOWER(?) AND q.visibility = 'public' AND q.status = 'published'
-         ORDER BY q.created_at DESC
+         ORDER BY q.updated_at DESC
          LIMIT ?`
       )
       .bind(label, limit)
@@ -1079,7 +1079,7 @@ export async function listRelatedQuizzesByLabel(
            JOIN subcategories s ON s.id = q.subcategory_id
            JOIN categories c ON c.id = s.category_id
            WHERE LOWER(c.name) = LOWER(?) AND q.visibility = 'public' AND q.status = 'published'
-           ORDER BY q.created_at DESC
+           ORDER BY q.updated_at DESC
            LIMIT ?`
         )
         .bind(label, limit - picked.length)
@@ -1105,7 +1105,7 @@ export async function listRelatedQuizzesByLabel(
          FROM quizzes q
          JOIN users u ON u.id = q.creator_id
          WHERE q.visibility = 'public' AND q.status = 'published' ${excludeClause}
-         ORDER BY q.created_at DESC
+         ORDER BY q.updated_at DESC
          LIMIT ?`
       )
       .bind(...pickedIds, limit - picked.length)
@@ -1132,7 +1132,7 @@ export async function listQuizzesByCreator(creatorId: string): Promise<QuizWithS
         (SELECT COUNT(*) FROM comments WHERE quiz_id = q.id) as comment_count
       FROM quizzes q
       WHERE q.creator_id = ?
-      ORDER BY q.created_at DESC`
+      ORDER BY q.updated_at DESC`
     )
     .bind(creatorId)
     .all<QuizRow & { question_count: number; attempt_count: number; avg_score: number | null; comment_count: number }>();
@@ -1243,7 +1243,7 @@ export async function adminListAllQuizzes(
           (SELECT AVG(CAST(score AS REAL) / total_questions * 100) FROM quiz_attempts WHERE quiz_id = q.id) as avg_score,
           (SELECT COUNT(*) FROM comments WHERE quiz_id = q.id) as comment_count
         FROM quizzes q
-        ORDER BY q.created_at DESC
+        ORDER BY q.updated_at DESC
         LIMIT ? OFFSET ?`
       )
       .bind(pageSize, offset)

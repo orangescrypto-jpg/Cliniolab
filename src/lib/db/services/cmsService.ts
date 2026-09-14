@@ -22,6 +22,7 @@ interface BlogRow {
   send_as_newsletter: number;
   newsletter_sent_at: string | null;
   created_at: string;
+  updated_at: string;
 }
 
 interface PageRow {
@@ -53,6 +54,7 @@ function mapBlog(row: BlogRow): BlogPost {
     sendAsNewsletter: row.send_as_newsletter === 1,
     newsletterSentAt: row.newsletter_sent_at,
     createdAt: row.created_at,
+    updatedAt: row.updated_at,
   };
 }
 
@@ -65,7 +67,7 @@ function mapPage(row: PageRow): StaticPage {
 
 export async function listPublishedPosts(limit?: number): Promise<BlogPost[]> {
   const db = getDb();
-  const query = `SELECT * FROM blog_posts WHERE status = 'published' ORDER BY is_pinned DESC, created_at DESC${
+  const query = `SELECT * FROM blog_posts WHERE status = 'published' ORDER BY is_pinned DESC, updated_at DESC${
     limit ? ' LIMIT ?' : ''
   }`;
   const stmt = limit ? db.prepare(query).bind(limit) : db.prepare(query);
@@ -77,7 +79,7 @@ export async function listPublishedPosts(limit?: number): Promise<BlogPost[]> {
  * posts created before the category/subcategory restructure keep working. */
 export async function getPostsByCategory(category: string, limit?: number): Promise<BlogPost[]> {
   const db = getDb();
-  const query = `SELECT * FROM blog_posts WHERE status = 'published' AND category = ? ORDER BY is_pinned DESC, created_at DESC${
+  const query = `SELECT * FROM blog_posts WHERE status = 'published' AND category = ? ORDER BY is_pinned DESC, updated_at DESC${
     limit ? ' LIMIT ?' : ''
   }`;
   const stmt = limit ? db.prepare(query).bind(category, limit) : db.prepare(query).bind(category);
@@ -88,7 +90,7 @@ export async function getPostsByCategory(category: string, limit?: number): Prom
 /** Current: filters by blog_category_id (the fixed top-level category FK). */
 export async function getPostsByCategoryId(blogCategoryId: string, limit?: number): Promise<BlogPost[]> {
   const db = getDb();
-  const query = `SELECT * FROM blog_posts WHERE status = 'published' AND blog_category_id = ? ORDER BY is_pinned DESC, created_at DESC${
+  const query = `SELECT * FROM blog_posts WHERE status = 'published' AND blog_category_id = ? ORDER BY is_pinned DESC, updated_at DESC${
     limit ? ' LIMIT ?' : ''
   }`;
   const stmt = limit ? db.prepare(query).bind(blogCategoryId, limit) : db.prepare(query).bind(blogCategoryId);
@@ -114,7 +116,7 @@ export async function getPostsByCategorySlug(categorySlug: string, limit?: numbe
  * without a full category switch. */
 export async function getPostsBySubcategoryId(blogSubcategoryId: string, limit?: number): Promise<BlogPost[]> {
   const db = getDb();
-  const query = `SELECT * FROM blog_posts WHERE status = 'published' AND blog_subcategory_id = ? ORDER BY is_pinned DESC, created_at DESC${
+  const query = `SELECT * FROM blog_posts WHERE status = 'published' AND blog_subcategory_id = ? ORDER BY is_pinned DESC, updated_at DESC${
     limit ? ' LIMIT ?' : ''
   }`;
   const stmt = limit ? db.prepare(query).bind(blogSubcategoryId, limit) : db.prepare(query).bind(blogSubcategoryId);
@@ -125,7 +127,7 @@ export async function getPostsBySubcategoryId(blogSubcategoryId: string, limit?:
 export async function adminListAllPosts(): Promise<BlogPost[]> {
   const db = getDb();
   const { results } = await db
-    .prepare('SELECT * FROM blog_posts ORDER BY is_pinned DESC, created_at DESC')
+    .prepare('SELECT * FROM blog_posts ORDER BY is_pinned DESC, updated_at DESC')
     .all<BlogRow>();
   return results.map(mapBlog);
 }
@@ -146,7 +148,7 @@ export async function getRelatedPosts(
     .prepare(
       `SELECT * FROM blog_posts
        WHERE status = 'published' AND blog_category_id = ? AND id != ?
-       ORDER BY is_pinned DESC, created_at DESC
+       ORDER BY is_pinned DESC, updated_at DESC
        LIMIT ?`
     )
     .bind(blogCategoryId, postId, limit)
@@ -189,8 +191,8 @@ export async function createPost(
   await db
     .prepare(
       `INSERT INTO blog_posts
-        (id, author_id, title, slug, content, content_format, excerpt, blog_category_id, blog_subcategory_id, featured_image_url, seo_title, seo_description, status, is_sponsored, is_pinned, full_width, send_as_newsletter, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        (id, author_id, title, slug, content, content_format, excerpt, blog_category_id, blog_subcategory_id, featured_image_url, seo_title, seo_description, status, is_sponsored, is_pinned, full_width, send_as_newsletter, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .bind(
       id,
@@ -210,6 +212,7 @@ export async function createPost(
       input.isPinned ? 1 : 0,
       input.fullWidth ? 1 : 0,
       input.sendAsNewsletter ? 1 : 0,
+      createdAt,
       createdAt
     )
     .run();
@@ -234,6 +237,7 @@ export async function createPost(
     sendAsNewsletter: input.sendAsNewsletter ?? false,
     newsletterSentAt: null,
     createdAt,
+    updatedAt: createdAt,
   };
 }
 
@@ -274,6 +278,8 @@ export async function updatePost(
   if (input.isPinned !== undefined) { fields.push('is_pinned = ?'); values.push(input.isPinned ? 1 : 0); }
   if (input.fullWidth !== undefined) { fields.push('full_width = ?'); values.push(input.fullWidth ? 1 : 0); }
   if (fields.length === 0) return;
+  fields.push('updated_at = ?');
+  values.push(nowIso());
   values.push(id);
   await db.prepare(`UPDATE blog_posts SET ${fields.join(', ')} WHERE id = ?`).bind(...values).run();
 }

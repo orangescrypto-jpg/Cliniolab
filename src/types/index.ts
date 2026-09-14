@@ -295,6 +295,7 @@ export interface BlogPost {
   sendAsNewsletter: boolean;
   newsletterSentAt: string | null;
   createdAt: string;
+  updatedAt: string;
 }
 
 export interface StaticPage {

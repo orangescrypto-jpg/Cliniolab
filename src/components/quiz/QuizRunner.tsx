@@ -485,6 +485,34 @@ export function QuizRunner({ quiz, questions: rawQuestions, submitEndpoint, isFi
                 {!pq.isCorrect && (
                   <p className="mt-1 text-sm text-ink-600">Correct answer: {correctText ?? '—'}</p>
                 )}
+                {pq.options && pq.options.length > 0 && (
+                  <ul className="mt-3 space-y-1.5">
+                    {pq.options.map((opt) => {
+                      const isCorrectOpt = opt.id === pq.correctAnswer;
+                      const isSubmittedOpt = opt.id === pq.submittedAnswer;
+                      return (
+                        <li
+                          key={opt.id}
+                          className={`flex items-center gap-2 rounded-md border px-3 py-1.5 text-sm ${
+                            isCorrectOpt
+                              ? 'border-pulse-300 bg-pulse-50 text-pulse-700'
+                              : isSubmittedOpt
+                                ? 'border-critical-300 bg-critical-50 text-critical-700'
+                                : 'border-ink-100 text-ink-600'
+                          }`}
+                        >
+                          <span>{opt.text}</span>
+                          {isCorrectOpt && (
+                            <span className="ml-auto text-xs font-medium uppercase tracking-wide">Correct</span>
+                          )}
+                          {isSubmittedOpt && !isCorrectOpt && (
+                            <span className="ml-auto text-xs font-medium uppercase tracking-wide">Your pick</span>
+                          )}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
                 {pq.explanation && (
                   <p className="mt-2 whitespace-pre-line text-sm leading-relaxed text-ink-600">
                     {pq.explanation}

@@ -140,6 +140,16 @@ export async function getFlashcardSetById(id: string): Promise<FlashcardSet | nu
   return row ? mapSet(row) : null;
 }
 
+/** Same as getFlashcardSetById but joined with card count, category, subcategory and creator name — used for the share preview on the detail page. */
+export async function getFlashcardSetByIdWithStats(id: string): Promise<FlashcardSetWithStats | null> {
+  const db = getDb();
+  const row = await db
+    .prepare(`SELECT ${STATS_SELECT} WHERE fs.id = ?`)
+    .bind(id)
+    .first<StatsRow>();
+  return row ? mapStatsRow(row) : null;
+}
+
 export async function getFlashcardsBySetId(setId: string): Promise<Flashcard[]> {
   const db = getDb();
   const { results } = await db

@@ -100,7 +100,7 @@ export default function HomePage() {
       .then((data) => setScholarshipPosts((data.posts ?? []).slice(0, 7)))
       .catch(() => {});
 
-    fetch('/api/flashcards?limit=7')
+    fetch('/api/flashcards?limit=6')
       .then((res) => res.json())
       .then((data) => {
         setFlashcardsEnabled(data.enabled ?? true);

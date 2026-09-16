@@ -1,8 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
+import { clearDraft, loadDraft, saveDraft } from '@/lib/localDraft';
 
 export interface FlashcardRunnerCard {
   id: string;
@@ -16,27 +17,66 @@ interface FlashcardRunnerProps {
   /** Shown above the progress bar, e.g. "Flashcards" or a quiz/set title. */
   title?: string;
   onDone?: () => void;
+  /**
+   * Stable id used to key the resumable localStorage draft (e.g. the
+   * flashcard set id, or `quiz-${quizId}-missed` for the embedded
+   * "Practice with flashcards" entry points). Sessions with different
+   * draftIds never collide. If omitted, progress isn't persisted.
+   */
+  draftId?: string;
 }
+
+/** What gets cached in localStorage for a resumable flashcard session. */
+interface FlashcardDraft {
+  current: number;
+  knownIds: string[];
+  reviewIds: string[];
+}
+
+export const FLASHCARD_DRAFT_NAMESPACE = 'flashcards';
+const DRAFT_NAMESPACE = FLASHCARD_DRAFT_NAMESPACE;
 
 /**
  * Shared flip-card study UI. Used both by the standalone Flashcard
  * section (/flashcards/[setId]) and by "Practice with flashcards" on a
  * regular quiz's results/detail screen — same front/back/explanation
  * shape either way, so one component covers both entry points.
+ *
+ * Session progress (position, known/review marks) is cached in
+ * localStorage, keyed by draftId, so closing the tab or navigating away
+ * mid-session doesn't lose your place — same pattern as Study Mode.
  */
-export function FlashcardRunner({ cards, title, onDone }: FlashcardRunnerProps) {
-  const [current, setCurrent] = useState(0);
+export function FlashcardRunner({ cards, title, onDone, draftId }: FlashcardRunnerProps) {
+  const initialDraft = useRef<FlashcardDraft | null>(
+    draftId ? loadDraft<FlashcardDraft>(DRAFT_NAMESPACE, draftId) : null
+  ).current;
+
+  const [current, setCurrent] = useState(
+    initialDraft && initialDraft.current < cards.length ? initialDraft.current : 0
+  );
   const [flipped, setFlipped] = useState(false);
-  const [knownIds, setKnownIds] = useState<Set<string>>(new Set());
-  const [reviewIds, setReviewIds] = useState<Set<string>>(new Set());
+  const [knownIds, setKnownIds] = useState<Set<string>>(new Set(initialDraft?.knownIds ?? []));
+  const [reviewIds, setReviewIds] = useState<Set<string>>(new Set(initialDraft?.reviewIds ?? []));
   const [finished, setFinished] = useState(false);
 
   const card = cards[current];
   const isLast = current === cards.length - 1;
 
+  // Persist progress after every change. Cleared once the session
+  // finishes, same as Study Mode's draft.
+  useEffect(() => {
+    if (!draftId || finished) return;
+    saveDraft<FlashcardDraft>(DRAFT_NAMESPACE, draftId, {
+      current,
+      knownIds: Array.from(knownIds),
+      reviewIds: Array.from(reviewIds),
+    });
+  }, [draftId, current, knownIds, reviewIds, finished]);
+
   function goNext() {
     if (isLast) {
       setFinished(true);
+      if (draftId) clearDraft(DRAFT_NAMESPACE, draftId);
       return;
     }
     setCurrent((c) => c + 1);
@@ -70,6 +110,7 @@ export function FlashcardRunner({ cards, title, onDone }: FlashcardRunnerProps) 
     setKnownIds(new Set());
     setReviewIds(new Set());
     setFinished(false);
+    if (draftId) clearDraft(DRAFT_NAMESPACE, draftId);
   }
 
   if (cards.length === 0) {

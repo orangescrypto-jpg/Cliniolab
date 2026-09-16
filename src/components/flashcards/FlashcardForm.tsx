@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
+import { Toggle } from '@/components/ui/Toggle';
 import type {
   Category,
   Flashcard,
@@ -44,6 +45,7 @@ export function FlashcardForm({
   const [subcategoryId, setSubcategoryId] = useState(initialSet?.subcategoryId ?? '');
   const [visibility, setVisibility] = useState<QuizVisibility>(initialSet?.visibility ?? 'public');
   const [pricing, setPricing] = useState<'free' | 'paid'>(initialSet?.pricing ?? 'free');
+  const [shuffleCards, setShuffleCards] = useState(initialSet?.shuffleCards ?? false);
   const [priceNaira, setPriceNaira] = useState(
     initialSet?.priceKobo ? Math.round(initialSet.priceKobo / 100) : 0
   );
@@ -96,6 +98,7 @@ export function FlashcardForm({
       visibility,
       pricing,
       priceKobo: pricing === 'paid' ? Math.round(priceNaira * 100) : undefined,
+      shuffleCards,
       cards,
     };
 
@@ -194,6 +197,8 @@ export function FlashcardForm({
             />
           </div>
         )}
+
+        <Toggle checked={shuffleCards} onChange={setShuffleCards} label="Shuffle card order" />
       </Card>
 
       <div className="mt-6 space-y-4">

@@ -24,6 +24,18 @@ interface FlashcardRunnerProps {
    * draftIds never collide. If omitted, progress isn't persisted.
    */
   draftId?: string;
+  /** Shuffle card order once per mount. Defaults to false — off for the shared "practice with flashcards" quiz entry point, which has no per-set shuffle concept. */
+  shuffle?: boolean;
+}
+
+/** Fisher-Yates shuffle, returns a new array without mutating the input. */
+function shuffleArray<T>(arr: T[]): T[] {
+  const copy = [...arr];
+  for (let i = copy.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [copy[i], copy[j]] = [copy[j], copy[i]];
+  }
+  return copy;
 }
 
 /** What gets cached in localStorage for a resumable flashcard session. */
@@ -46,7 +58,11 @@ const DRAFT_NAMESPACE = FLASHCARD_DRAFT_NAMESPACE;
  * localStorage, keyed by draftId, so closing the tab or navigating away
  * mid-session doesn't lose your place — same pattern as Study Mode.
  */
-export function FlashcardRunner({ cards, title, onDone, draftId }: FlashcardRunnerProps) {
+export function FlashcardRunner({ cards: rawCards, title, onDone, draftId, shuffle }: FlashcardRunnerProps) {
+  // Shuffle once per mount, same pattern as QuizRunner — not on every
+  // re-render, so flipping/marking a card doesn't reorder the deck.
+  const [cards] = useState(() => (shuffle ? shuffleArray(rawCards) : rawCards));
+
   const initialDraft = useRef<FlashcardDraft | null>(
     draftId ? loadDraft<FlashcardDraft>(DRAFT_NAMESPACE, draftId) : null
   ).current;

@@ -8,6 +8,8 @@ import { CategoryBlogSection } from '@/components/cms/CategoryBlogSection';
 import { CompactTeaserBlogSection } from '@/components/cms/CompactTeaserBlogSection';
 import { FeaturedBlogPostCard, CompactBlogPostCard } from '@/components/cms/BlogPostCard';
 import { CategoryQuizSection } from '@/components/quiz/CategoryQuizSection';
+import { CategoryFlashcardSection } from '@/components/flashcards/CategoryFlashcardSection';
+import { FlashcardSetCard, FeaturedFlashcardSetCard, CompactFlashcardSetCard } from '@/components/flashcards/FlashcardSetCard';
 import { DailyQuizBanner } from '@/components/layout/DailyQuizBanner';
 import { BannerSlot } from '@/components/layout/BannerSlot';
 import { ScholarOfTheDayCard } from '@/components/layout/ScholarOfTheDayCard';
@@ -21,7 +23,7 @@ import {
   CLINICAL_PEARLS_CATEGORY_SLUG,
   EXAM_PREP_GUIDES_CATEGORY_SLUG,
 } from '@/lib/constants/blogCategories';
-import type { BlogPost, Category, LeaderboardEntry, Resource } from '@/types';
+import type { BlogPost, Category, LeaderboardEntry, Resource, FlashcardSetWithStats } from '@/types';
 
 interface BlogCategoryOption { id: string; name: string; slug: string; sortOrder: number }
 
@@ -51,6 +53,8 @@ export default function HomePage() {
   const [resourcesEnabled, setResourcesEnabled] = useState(true);
   const [jobPosts, setJobPosts] = useState<BlogPost[]>([]);
   const [scholarshipPosts, setScholarshipPosts] = useState<BlogPost[]>([]);
+  const [flashcardSets, setFlashcardSets] = useState<FlashcardSetWithStats[]>([]);
+  const [flashcardsEnabled, setFlashcardsEnabled] = useState(true);
 
   useEffect(() => {
     fetch('/api/categories')
@@ -94,6 +98,14 @@ export default function HomePage() {
     fetch(`/api/blog?categorySlug=${SCHOLARSHIP_CATEGORY_SLUG}`)
       .then((res) => res.json())
       .then((data) => setScholarshipPosts((data.posts ?? []).slice(0, 7)))
+      .catch(() => {});
+
+    fetch('/api/flashcards?limit=7')
+      .then((res) => res.json())
+      .then((data) => {
+        setFlashcardsEnabled(data.enabled ?? true);
+        setFlashcardSets(data.sets ?? []);
+      })
       .catch(() => {});
   }, []);
 
@@ -195,6 +207,40 @@ export default function HomePage() {
 
       <div className="chart-strip mx-auto max-w-7xl text-ink-200" aria-hidden />
 
+      {/* Flashcards - general "all flashcards" feed across every category,
+          placed before Quiz/Exam/Study per product requirements. */}
+      {flashcardsEnabled && flashcardSets.length > 0 && (
+        <>
+          <div className="mx-auto max-w-7xl px-6 pt-12">
+            <div className="flex items-center gap-4">
+              <div className="h-px flex-1 bg-ink-100" />
+              <h2 className="font-display text-sm font-semibold uppercase tracking-widest text-ink-400">
+                Flashcards
+              </h2>
+              <div className="h-px flex-1 bg-ink-100" />
+            </div>
+          </div>
+          <section className="mx-auto max-w-7xl px-6 py-12">
+            <div className="flex items-center justify-between">
+              <h2 className="font-display text-2xl font-semibold text-ink-800">Flashcards</h2>
+              <Link href="/flashcards" className="text-sm font-medium text-pulse-600 hover:text-pulse-700">
+                See more →
+              </Link>
+            </div>
+            <div className="mt-6 grid grid-cols-1 gap-8 lg:grid-cols-[3fr_2fr]">
+              <FeaturedFlashcardSetCard set={flashcardSets[0]} />
+              {flashcardSets.length > 1 && (
+                <div className="divide-y divide-ink-100">
+                  {flashcardSets.slice(1).map((set) => (
+                    <CompactFlashcardSetCard key={set.id} set={set} />
+                  ))}
+                </div>
+              )}
+            </div>
+          </section>
+        </>
+      )}
+
       {/* Quizzes, one section per top-level quiz category */}
       {categories.length > 0 && (
         <div className="mx-auto max-w-7xl px-6 pt-12">
@@ -208,7 +254,10 @@ export default function HomePage() {
         </div>
       )}
       {categories.map((category) => (
-        <CategoryQuizSection key={category.id} category={category} />
+        <div key={category.id}>
+          <CategoryFlashcardSection category={category} />
+          <CategoryQuizSection category={category} />
+        </div>
       ))}
 
       <div className="mx-auto max-w-7xl px-6">

@@ -6,7 +6,8 @@ import Link from 'next/link';
 import { useAuth } from '@/lib/auth/AuthProvider';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
-import type { Certificate, QuestionReportWithContext, QuizWithStats, UserDashboardStats } from '@/types';
+import { FlashcardSetCard } from '@/components/flashcards/FlashcardSetCard';
+import type { Certificate, FlashcardSetWithStats, QuestionReportWithContext, QuizWithStats, UserDashboardStats } from '@/types';
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -14,6 +15,7 @@ export default function DashboardPage() {
   const [stats, setStats] = useState<UserDashboardStats | null>(null);
   const [certificates, setCertificates] = useState<Certificate[]>([]);
   const [myQuizzes, setMyQuizzes] = useState<QuizWithStats[]>([]);
+  const [myFlashcardSets, setMyFlashcardSets] = useState<FlashcardSetWithStats[]>([]);
   const [flaggedQuestions, setFlaggedQuestions] = useState<QuestionReportWithContext[]>([]);
   const [dismissingReportId, setDismissingReportId] = useState<string | null>(null);
   const [deletingQuizId, setDeletingQuizId] = useState<string | null>(null);
@@ -50,6 +52,9 @@ export default function DashboardPage() {
     fetch('/api/quizzes?mine=true')
       .then((res) => res.json())
       .then((data) => setMyQuizzes(data.quizzes ?? []));
+    fetch('/api/flashcards?mine=true')
+      .then((res) => res.json())
+      .then((data) => setMyFlashcardSets(data.sets ?? []));
     fetch('/api/dashboard/flagged-questions')
       .then((res) => res.json())
       .then((data) => setFlaggedQuestions(data.reports ?? []));
@@ -252,6 +257,24 @@ export default function DashboardPage() {
         ))}
         {myQuizzes.length === 0 && (
           <p className="text-sm text-ink-400">You haven&apos;t created any quizzes yet.</p>
+        )}
+      </div>
+
+      <div className="mt-10 flex items-center justify-between">
+        <h2 className="font-display text-xl font-semibold text-ink-800">My flashcard sets</h2>
+        <div className="flex gap-2">
+          <Link href="/flashcards/bulk-upload">
+            <Button size="sm" variant="secondary">Upload many</Button>
+          </Link>
+          <Link href="/flashcards/new"><Button size="sm">+ New flashcard set</Button></Link>
+        </div>
+      </div>
+      <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+        {myFlashcardSets.map((set) => (
+          <FlashcardSetCard key={set.id} set={set} />
+        ))}
+        {myFlashcardSets.length === 0 && (
+          <p className="text-sm text-ink-400">You haven&apos;t created any flashcard sets yet.</p>
         )}
       </div>
 

@@ -26,8 +26,8 @@ export async function POST(request: Request) {
   } catch {
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
   }
-  if (body.kind !== 'quiz' && body.kind !== 'resource') {
-    return NextResponse.json({ error: 'kind must be "quiz" or "resource"' }, { status: 400 });
+  if (body.kind !== 'quiz' && body.kind !== 'resource' && body.kind !== 'flashcard') {
+    return NextResponse.json({ error: 'kind must be "quiz", "resource", or "flashcard"' }, { status: 400 });
   }
   if (!body.targetId) {
     return NextResponse.json({ error: 'targetId is required' }, { status: 400 });

@@ -1,0 +1,323 @@
+import { getDb, generateId, nowIso } from '@/lib/db/client';
+import type { Flashcard, FlashcardInput, FlashcardSet, FlashcardSetWithStats } from '@/types';
+
+interface FlashcardSetRow {
+  id: string;
+  subcategory_id: string;
+  creator_id: string;
+  title: string;
+  description: string | null;
+  visibility: string;
+  status: string;
+  pricing: string;
+  price_kobo: number | null;
+  created_at: string;
+  updated_at: string;
+}
+
+interface FlashcardRow {
+  id: string;
+  set_id: string;
+  front: string;
+  back: string;
+  explanation: string | null;
+  sort_order: number;
+}
+
+function mapSet(row: FlashcardSetRow): FlashcardSet {
+  return {
+    id: row.id,
+    subcategoryId: row.subcategory_id,
+    creatorId: row.creator_id,
+    title: row.title,
+    description: row.description,
+    visibility: row.visibility as FlashcardSet['visibility'],
+    status: row.status as FlashcardSet['status'],
+    pricing: row.pricing as FlashcardSet['pricing'],
+    priceKobo: row.price_kobo,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+function mapCard(row: FlashcardRow): Flashcard {
+  return {
+    id: row.id,
+    setId: row.set_id,
+    front: row.front,
+    back: row.back,
+    explanation: row.explanation,
+    sortOrder: row.sort_order,
+  };
+}
+
+export async function createFlashcardSet(creatorId: string, input: FlashcardInput): Promise<FlashcardSet> {
+  const db = getDb();
+  const id = generateId('fcset');
+  const now = nowIso();
+  const pricing = input.pricing ?? 'free';
+  const priceKobo = pricing === 'paid' ? input.priceKobo ?? null : null;
+
+  await db
+    .prepare(
+      `INSERT INTO flashcard_sets
+        (id, subcategory_id, creator_id, title, description, visibility, status, pricing, price_kobo, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, 'published', ?, ?, ?, ?)`
+    )
+    .bind(
+      id,
+      input.subcategoryId,
+      creatorId,
+      input.title,
+      input.description ?? null,
+      input.visibility,
+      pricing,
+      priceKobo,
+      now,
+      now
+    )
+    .run();
+
+  const statements = input.cards.map((card, i) =>
+    db
+      .prepare(
+        `INSERT INTO flashcards (id, set_id, front, back, explanation, sort_order) VALUES (?, ?, ?, ?, ?, ?)`
+      )
+      .bind(generateId('fc'), id, card.front, card.back, card.explanation ?? null, i)
+  );
+  if (statements.length > 0) await db.batch(statements);
+
+  return {
+    id,
+    subcategoryId: input.subcategoryId,
+    creatorId,
+    title: input.title,
+    description: input.description ?? null,
+    visibility: input.visibility,
+    status: 'published',
+    pricing,
+    priceKobo,
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
+export async function updateFlashcardSet(setId: string, input: FlashcardInput): Promise<FlashcardSet> {
+  const db = getDb();
+  const now = nowIso();
+  const pricing = input.pricing ?? 'free';
+  const priceKobo = pricing === 'paid' ? input.priceKobo ?? null : null;
+
+  await db
+    .prepare(
+      `UPDATE flashcard_sets
+       SET subcategory_id = ?, title = ?, description = ?, visibility = ?, pricing = ?, price_kobo = ?, updated_at = ?
+       WHERE id = ?`
+    )
+    .bind(input.subcategoryId, input.title, input.description ?? null, input.visibility, pricing, priceKobo, now, setId)
+    .run();
+
+  // Replace all cards wholesale — simplest correct approach and matches
+  // how bulk quiz edits are typically done from a full form re-submit.
+  await db.prepare('DELETE FROM flashcards WHERE set_id = ?').bind(setId).run();
+  const statements = input.cards.map((card, i) =>
+    db
+      .prepare(
+        `INSERT INTO flashcards (id, set_id, front, back, explanation, sort_order) VALUES (?, ?, ?, ?, ?, ?)`
+      )
+      .bind(card.id ?? generateId('fc'), setId, card.front, card.back, card.explanation ?? null, i)
+  );
+  if (statements.length > 0) await db.batch(statements);
+
+  const updated = await getFlashcardSetById(setId);
+  if (!updated) throw new Error('Flashcard set not found after update');
+  return updated;
+}
+
+export async function getFlashcardSetById(id: string): Promise<FlashcardSet | null> {
+  const db = getDb();
+  const row = await db.prepare('SELECT * FROM flashcard_sets WHERE id = ?').bind(id).first<FlashcardSetRow>();
+  return row ? mapSet(row) : null;
+}
+
+export async function getFlashcardsBySetId(setId: string): Promise<Flashcard[]> {
+  const db = getDb();
+  const { results } = await db
+    .prepare('SELECT * FROM flashcards WHERE set_id = ? ORDER BY sort_order ASC')
+    .bind(setId)
+    .all<FlashcardRow>();
+  return results.map(mapCard);
+}
+
+export async function deleteFlashcardSet(setId: string): Promise<void> {
+  const db = getDb();
+  await db.batch([
+    db.prepare('DELETE FROM flashcard_purchases WHERE set_id = ?').bind(setId),
+    db.prepare('DELETE FROM flashcards WHERE set_id = ?').bind(setId),
+    db.prepare('DELETE FROM flashcard_sets WHERE id = ?').bind(setId),
+  ]);
+}
+
+export async function setFlashcardSetVisibility(
+  setId: string,
+  visibility: FlashcardSet['visibility']
+): Promise<void> {
+  const db = getDb();
+  await db
+    .prepare('UPDATE flashcard_sets SET visibility = ?, updated_at = ? WHERE id = ?')
+    .bind(visibility, nowIso(), setId)
+    .run();
+}
+
+const STATS_SELECT = `
+  fs.*,
+  (SELECT COUNT(*) FROM flashcards WHERE set_id = fs.id) as card_count,
+  c.name as category_name,
+  s.name as subcategory_name,
+  u.display_name as creator_name
+  FROM flashcard_sets fs
+  JOIN subcategories s ON s.id = fs.subcategory_id
+  JOIN categories c ON c.id = s.category_id
+  JOIN users u ON u.id = fs.creator_id
+`;
+
+type StatsRow = FlashcardSetRow & {
+  card_count: number;
+  category_name: string;
+  subcategory_name: string;
+  creator_name: string | null;
+};
+
+function mapStatsRow(row: StatsRow): FlashcardSetWithStats {
+  return {
+    ...mapSet(row),
+    cardCount: row.card_count,
+    categoryName: row.category_name,
+    subcategoryName: row.subcategory_name,
+    creatorName: row.creator_name ?? 'Anonymous',
+  };
+}
+
+/** General "all flashcards" homepage feed — latest published public sets across every category. */
+export async function listLatestPublicFlashcardSets(limit = 20): Promise<FlashcardSetWithStats[]> {
+  const db = getDb();
+  const { results } = await db
+    .prepare(
+      `SELECT ${STATS_SELECT}
+       WHERE fs.visibility = 'public' AND fs.status = 'published'
+       ORDER BY fs.updated_at DESC
+       LIMIT ?`
+    )
+    .bind(limit)
+    .all<StatsRow>();
+  return results.map(mapStatsRow);
+}
+
+export async function listLatestPublicFlashcardSetsPaginated(
+  page = 1,
+  pageSize = 12
+): Promise<{ sets: FlashcardSetWithStats[]; total: number; page: number; pageSize: number }> {
+  const db = getDb();
+  const offset = Math.max(0, (page - 1) * pageSize);
+  const [{ results }, countRow] = await Promise.all([
+    db
+      .prepare(
+        `SELECT ${STATS_SELECT}
+         WHERE fs.visibility = 'public' AND fs.status = 'published'
+         ORDER BY fs.updated_at DESC
+         LIMIT ? OFFSET ?`
+      )
+      .bind(pageSize, offset)
+      .all<StatsRow>(),
+    db
+      .prepare(`SELECT COUNT(*) as total FROM flashcard_sets WHERE visibility = 'public' AND status = 'published'`)
+      .first<{ total: number }>(),
+  ]);
+  return { sets: results.map(mapStatsRow), total: countRow?.total ?? 0, page, pageSize };
+}
+
+/** Used for each category's homepage block (labelled "Flashcard"), same shape/limit style as CategoryQuizSection. */
+export async function listFlashcardSetsByCategory(categoryId: string, limit?: number): Promise<FlashcardSetWithStats[]> {
+  const db = getDb();
+  const query = `
+    SELECT ${STATS_SELECT}
+    WHERE c.id = ? AND fs.visibility = 'public' AND fs.status = 'published'
+    ORDER BY fs.updated_at DESC
+    ${limit ? 'LIMIT ?' : ''}
+  `;
+  const stmt = limit ? db.prepare(query).bind(categoryId, limit) : db.prepare(query).bind(categoryId);
+  const { results } = await stmt.all<StatsRow>();
+  return results.map(mapStatsRow);
+}
+
+export async function listFlashcardSetsByCategoryPaginated(
+  categoryId: string,
+  page = 1,
+  pageSize = 25
+): Promise<{ sets: FlashcardSetWithStats[]; total: number; page: number; pageSize: number }> {
+  const db = getDb();
+  const offset = Math.max(0, (page - 1) * pageSize);
+  const [{ results }, countRow] = await Promise.all([
+    db
+      .prepare(
+        `SELECT ${STATS_SELECT}
+         WHERE c.id = ? AND fs.visibility = 'public' AND fs.status = 'published'
+         ORDER BY fs.updated_at DESC
+         LIMIT ? OFFSET ?`
+      )
+      .bind(categoryId, pageSize, offset)
+      .all<StatsRow>(),
+    db
+      .prepare(
+        `SELECT COUNT(*) as total FROM flashcard_sets fs
+         JOIN subcategories s ON s.id = fs.subcategory_id
+         JOIN categories c ON c.id = s.category_id
+         WHERE c.id = ? AND fs.visibility = 'public' AND fs.status = 'published'`
+      )
+      .bind(categoryId)
+      .first<{ total: number }>(),
+  ]);
+  return { sets: results.map(mapStatsRow), total: countRow?.total ?? 0, page, pageSize };
+}
+
+export async function listFlashcardSetsBySubcategory(subcategoryId: string): Promise<FlashcardSetWithStats[]> {
+  const db = getDb();
+  const { results } = await db
+    .prepare(
+      `SELECT ${STATS_SELECT}
+       WHERE fs.subcategory_id = ? AND fs.visibility = 'public' AND fs.status = 'published'
+       ORDER BY fs.updated_at DESC`
+    )
+    .bind(subcategoryId)
+    .all<StatsRow>();
+  return results.map(mapStatsRow);
+}
+
+export async function listFlashcardSetsByCreator(creatorId: string): Promise<FlashcardSetWithStats[]> {
+  const db = getDb();
+  const { results } = await db
+    .prepare(
+      `SELECT ${STATS_SELECT}
+       WHERE fs.creator_id = ?
+       ORDER BY fs.updated_at DESC`
+    )
+    .bind(creatorId)
+    .all<StatsRow>();
+  return results.map(mapStatsRow);
+}
+
+export async function adminListAllFlashcardSets(
+  page = 1,
+  pageSize = 25
+): Promise<{ sets: FlashcardSetWithStats[]; total: number; page: number; pageSize: number }> {
+  const db = getDb();
+  const offset = Math.max(0, (page - 1) * pageSize);
+  const [{ results }, countRow] = await Promise.all([
+    db
+      .prepare(`SELECT ${STATS_SELECT} ORDER BY fs.created_at DESC LIMIT ? OFFSET ?`)
+      .bind(pageSize, offset)
+      .all<StatsRow>(),
+    db.prepare('SELECT COUNT(*) as total FROM flashcard_sets').first<{ total: number }>(),
+  ]);
+  return { sets: results.map(mapStatsRow), total: countRow?.total ?? 0, page, pageSize };
+}

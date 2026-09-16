@@ -4,6 +4,7 @@ import type { UserRole } from '@/types';
 export const permissions = {
   canAttemptQuizzes: (role: UserRole | null) => role !== null, // any logged-in user
   canCreateQuizzes: (role: UserRole | null) => role !== null, // any logged-in user
+  canCreateFlashcards: (role: UserRole | null) => role !== null, // any logged-in user
   canManageBlog: (role: UserRole | null) => role === 'admin' || role === 'moderator',
   canManageLearningContent: (role: UserRole | null) => role === 'admin' || role === 'moderator',
   canAccessAdminPanel: (role: UserRole | null) => role === 'admin' || role === 'moderator',

@@ -1,20 +1,26 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useSearchParams } from 'next/navigation';
 import { QuizCard } from '@/components/quiz/QuizCard';
+import { FlashcardSetCard } from '@/components/flashcards/FlashcardSetCard';
 import { LeaderboardList } from '@/components/quiz/LeaderboardList';
 import { Pagination } from '@/components/ui/Pagination';
 import { useAuth } from '@/lib/auth/AuthProvider';
-import type { Category, LeaderboardEntry, QuizWithStats } from '@/types';
+import type { Category, FlashcardSetWithStats, LeaderboardEntry, QuizWithStats } from '@/types';
 
 const PAGE_SIZE = 25;
 
 export default function CategoryGroupPage() {
   const params = useParams<{ categorySlug: string }>();
+  const searchParams = useSearchParams();
   const { user } = useAuth();
   const [category, setCategory] = useState<Category | null>(null);
+  const [tab, setTab] = useState<'quizzes' | 'flashcards'>(
+    searchParams.get('tab') === 'flashcards' ? 'flashcards' : 'quizzes'
+  );
   const [quizzes, setQuizzes] = useState<QuizWithStats[]>([]);
+  const [flashcardSets, setFlashcardSets] = useState<FlashcardSetWithStats[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
@@ -45,18 +51,28 @@ export default function CategoryGroupPage() {
   // changes. Resets to page 1 whenever the category itself changes (e.g.
   // navigating directly between two category pages without a full reload).
   useEffect(() => {
-    if (!category) return;
+    if (!category || tab !== 'quizzes') return;
     fetch(`/api/quizzes?categoryId=${category.id}&page=${page}&pageSize=${PAGE_SIZE}`)
       .then((res) => res.json())
       .then((data) => {
         setQuizzes(data.quizzes ?? []);
         setTotal(data.total ?? 0);
       });
-  }, [category, page]);
+  }, [category, page, tab]);
+
+  useEffect(() => {
+    if (!category || tab !== 'flashcards') return;
+    fetch(`/api/flashcards?categoryId=${category.id}&page=${page}&pageSize=${PAGE_SIZE}`)
+      .then((res) => res.json())
+      .then((data) => {
+        setFlashcardSets(data.sets ?? []);
+        setTotal(data.total ?? 0);
+      });
+  }, [category, page, tab]);
 
   useEffect(() => {
     setPage(1);
-  }, [category?.id]);
+  }, [category?.id, tab]);
 
   return (
     <div className="mx-auto max-w-7xl px-6 py-16">
@@ -65,16 +81,46 @@ export default function CategoryGroupPage() {
       </h1>
       {category?.description && <p className="mt-2 text-ink-500">{category.description}</p>}
 
+      <div className="mt-6 flex gap-2 border-b border-ink-100">
+        <button
+          onClick={() => setTab('quizzes')}
+          className={`px-4 py-2 text-sm font-medium ${
+            tab === 'quizzes' ? 'border-b-2 border-pulse-500 text-pulse-600' : 'text-ink-500'
+          }`}
+        >
+          Quiz / Exam / Study
+        </button>
+        <button
+          onClick={() => setTab('flashcards')}
+          className={`px-4 py-2 text-sm font-medium ${
+            tab === 'flashcards' ? 'border-b-2 border-pulse-500 text-pulse-600' : 'text-ink-500'
+          }`}
+        >
+          Flashcards
+        </button>
+      </div>
+
       <div className="mt-10 grid grid-cols-1 gap-10 lg:grid-cols-3">
         <div className="lg:col-span-2">
-          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
-            {quizzes.map((quiz) => (
-              <QuizCard key={quiz.id} quiz={quiz} />
-            ))}
-            {quizzes.length === 0 && (
-              <p className="col-span-full text-sm text-ink-400">No quizzes in this category yet.</p>
-            )}
-          </div>
+          {tab === 'quizzes' ? (
+            <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+              {quizzes.map((quiz) => (
+                <QuizCard key={quiz.id} quiz={quiz} />
+              ))}
+              {quizzes.length === 0 && (
+                <p className="col-span-full text-sm text-ink-400">No quizzes in this category yet.</p>
+              )}
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+              {flashcardSets.map((set) => (
+                <FlashcardSetCard key={set.id} set={set} />
+              ))}
+              {flashcardSets.length === 0 && (
+                <p className="col-span-full text-sm text-ink-400">No flashcard sets in this category yet.</p>
+              )}
+            </div>
+          )}
           <Pagination
             page={page}
             pageSize={PAGE_SIZE}

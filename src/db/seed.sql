@@ -54,6 +54,7 @@ INSERT INTO feature_flags (key, enabled, label) VALUES
 ('comments', 1, 'Comments'),
 ('public_quiz_creation', 1, 'User Quiz Publishing'),
 ('certificates', 1, 'Certificates'),
+('flashcards', 1, 'Flashcards'),
 ('homepage_video', 1, 'Latest Video'),
 ('resources', 1, 'Books & Past Questions'),
 ('email_welcome', 1, 'Welcome Email'),

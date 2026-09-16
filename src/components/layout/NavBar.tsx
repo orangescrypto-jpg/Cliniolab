@@ -9,6 +9,7 @@ import { useAuth } from '@/lib/auth/AuthProvider';
 const navLinks = [
   { href: '/categories', label: 'Categories' },
   { href: '/quizzes', label: 'Latest Quizzes' },
+  { href: '/flashcards', label: 'Flashcards' },
   { href: '/resources', label: 'Resources' },
   { href: '/leaderboard', label: 'Leaderboard' },
   { href: '/blog', label: 'Blog' },
@@ -75,6 +76,12 @@ export function NavBar() {
                 className="text-sm font-medium text-ink-500 hover:text-ink-800"
               >
                 Upload quizzes
+              </Link>
+              <Link
+                href="/flashcards/bulk-upload"
+                className="text-sm font-medium text-ink-500 hover:text-ink-800"
+              >
+                Upload flashcards
               </Link>
               {(user.role === 'admin' || user.role === 'moderator') && (
                 <Link
@@ -149,6 +156,9 @@ export function NavBar() {
                 </Link>
                 <Link href="/quizzes/bulk-upload" onClick={() => setMobileOpen(false)} className="text-sm font-medium text-ink-600">
                   Upload quizzes
+                </Link>
+                <Link href="/flashcards/bulk-upload" onClick={() => setMobileOpen(false)} className="text-sm font-medium text-ink-600">
+                  Upload flashcards
                 </Link>
                 {(user.role === 'admin' || user.role === 'moderator') && (
                   <Link href="/admin" onClick={() => setMobileOpen(false)} className="text-sm font-medium text-ink-600">

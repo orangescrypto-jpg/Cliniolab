@@ -316,6 +316,7 @@ export type FeatureFlagKey =
   | 'comments'
   | 'public_quiz_creation'
   | 'certificates'
+  | 'flashcards'
   | 'homepage_video'
   | 'resources'
   | 'email_welcome'
@@ -503,6 +504,70 @@ export interface QuizPurchase {
   createdAt: string;
 }
 
+// ============================================
+// FLASHCARDS (standalone flashcard sets, distinct from per-quiz flashcard practice)
+// ============================================
+
+export interface FlashcardSet {
+  id: string;
+  subcategoryId: string;
+  creatorId: string;
+  title: string;
+  description: string | null;
+  visibility: QuizVisibility;
+  status: QuizStatus;
+  pricing: 'free' | 'paid';
+  priceKobo: number | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface FlashcardSetWithStats extends FlashcardSet {
+  cardCount: number;
+  categoryName?: string;
+  subcategoryName?: string;
+  creatorName?: string;
+}
+
+export interface Flashcard {
+  id: string;
+  setId: string;
+  front: string;
+  back: string;
+  explanation: string | null;
+  sortOrder: number;
+}
+
+export interface FlashcardInput {
+  subcategoryId: string;
+  title: string;
+  description?: string;
+  visibility: QuizVisibility;
+  pricing?: 'free' | 'paid';
+  priceKobo?: number;
+  cards: FlashcardCardInput[];
+}
+
+export interface FlashcardCardInput {
+  id?: string;
+  front: string;
+  back: string;
+  explanation?: string;
+}
+
+export interface FlashcardPurchase {
+  id: string;
+  setId: string;
+  buyerId: string;
+  amountKobo: number;
+  platformFeeKobo: number;
+  creatorEarningKobo: number;
+  txRef: string;
+  flwTransactionId: string | null;
+  status: PurchaseTransactionStatus;
+  createdAt: string;
+}
+
 export type PayoutMethod = 'flutterwave' | 'manual';
 export type PayoutStatus = 'pending' | 'processing' | 'paid' | 'failed';
 
@@ -553,7 +618,7 @@ export interface UserDashboardStats {
 // BOOKMARKS
 // ============================================
 
-export type BookmarkKind = 'quiz' | 'resource';
+export type BookmarkKind = 'quiz' | 'resource' | 'flashcard';
 
 export interface Bookmark {
   id: string;

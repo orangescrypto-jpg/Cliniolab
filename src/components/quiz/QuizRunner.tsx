@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { QuestionNavigator } from '@/components/quiz/QuestionNavigator';
+import { FlashcardRunner } from '@/components/flashcards/FlashcardRunner';
 import { clearDraft, loadDraft, saveDraft } from '@/lib/localDraft';
 import type { AttemptResult, Quiz, QuizQuestion } from '@/types';
 
@@ -133,6 +134,11 @@ export function QuizRunner({ quiz, questions: rawQuestions, submitEndpoint, isFi
   const [error, setError] = useState<string | null>(null);
   const [showSubmitConfirm, setShowSubmitConfirm] = useState(false);
   const [resultFilter, setResultFilter] = useState<'all' | 'correct' | 'incorrect'>('all');
+  // Whether "Practice with flashcards" has been launched from the results
+  // screen. Reuses the same shared FlashcardRunner as the standalone
+  // Flashcard feature — this just feeds it the quiz's own questions
+  // (front = prompt, back = correct answer, explanation carried over).
+  const [flashcardMode, setFlashcardMode] = useState<'all' | 'missed' | null>(null);
   // Separate from resultFilter above (which filters the post-submit
   // results screen). This filters the in-progress question navigator, so
   // the user can jump between unanswered/answered/skipped questions while
@@ -415,6 +421,25 @@ export function QuizRunner({ quiz, questions: rawQuestions, submitEndpoint, isFi
     );
   }
 
+  if (flashcardMode && result) {
+    const cards =
+      flashcardMode === 'missed'
+        ? result.perQuestion.filter((pq) => !pq.isCorrect)
+        : result.perQuestion;
+    return (
+      <FlashcardRunner
+        title={quiz.title}
+        cards={cards.map((pq) => ({
+          id: pq.questionId,
+          front: pq.prompt,
+          back: pq.options.find((o) => o.id === pq.correctAnswer)?.text ?? pq.correctAnswer,
+          explanation: pq.explanation,
+        }))}
+        onDone={() => setFlashcardMode(null)}
+      />
+    );
+  }
+
   if (result) {
     return (
       <div className="mx-auto max-w-2xl px-6 py-16">
@@ -575,6 +600,14 @@ export function QuizRunner({ quiz, questions: rawQuestions, submitEndpoint, isFi
                 }}
               >
                 Retake missed only
+              </Button>
+            )}
+            <Button variant="secondary" onClick={() => setFlashcardMode('all')}>
+              Practice with flashcards
+            </Button>
+            {result.perQuestion.some((pq) => !pq.isCorrect) && (
+              <Button variant="secondary" onClick={() => setFlashcardMode('missed')}>
+                Flashcards: missed only
               </Button>
             )}
             <Button

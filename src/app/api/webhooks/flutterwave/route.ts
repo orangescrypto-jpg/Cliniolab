@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { payoutRequestService, quizPurchaseService, resourceService } from '@/lib/db';
+import { flashcardPurchaseService, payoutRequestService, quizPurchaseService, resourceService } from '@/lib/db';
 import { verifyTransaction, verifyTransfer } from '@/lib/payments/flutterwaveClient';
 
 /**
@@ -68,8 +68,9 @@ async function handleChargeCompleted(transactionId: string): Promise<void> {
   const result = await verifyTransaction(transactionId);
   if (result.status !== 'successful') return;
 
-  // tx_ref is prefixed at creation time (quiz_... vs resource_...) so the
-  // webhook can route to the right service without needing extra lookups.
+  // tx_ref is prefixed at creation time (quiz_... vs resource_... vs
+  // flashcard_...) so the webhook can route to the right service without
+  // needing extra lookups.
   if (result.txRef.startsWith('quiz_')) {
     const purchase = await quizPurchaseService.getPurchaseByTxRef(result.txRef);
     if (!purchase || purchase.status === 'completed') return;
@@ -78,6 +79,14 @@ async function handleChargeCompleted(transactionId: string): Promise<void> {
       return;
     }
     await quizPurchaseService.markPurchaseCompleted(result.txRef, transactionId);
+  } else if (result.txRef.startsWith('flashcard_')) {
+    const purchase = await flashcardPurchaseService.getPurchaseByTxRef(result.txRef);
+    if (!purchase || purchase.status === 'completed') return;
+    if (result.amountKobo !== purchase.amountKobo) {
+      console.error(`Flutterwave webhook amount mismatch for ${result.txRef}: expected ${purchase.amountKobo}, got ${result.amountKobo}`);
+      return;
+    }
+    await flashcardPurchaseService.markPurchaseCompleted(result.txRef, transactionId);
   } else if (result.txRef.startsWith('resource_')) {
     const purchase = await resourceService.getPurchaseByTxRef(result.txRef);
     if (!purchase || purchase.status === 'confirmed') return;

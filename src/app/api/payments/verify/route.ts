@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getCurrentUser } from '@/lib/auth/currentUser';
-import { quizPurchaseService } from '@/lib/db';
+import { flashcardPurchaseService, quizPurchaseService } from '@/lib/db';
 import { verifyTransaction } from '@/lib/payments/flutterwaveClient';
 
 export async function POST(request: Request) {
@@ -21,7 +21,12 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'txRef and transactionId are required' }, { status: 400 });
   }
 
-  const purchase = await quizPurchaseService.getPurchaseByTxRef(body.txRef);
+  // tx_ref is generated as `quiz_...` or `flashcard_...` at checkout time
+  // (see the respective purchase routes), so the prefix tells us which
+  // purchase table/service owns this transaction.
+  const service = body.txRef.startsWith('flashcard_') ? flashcardPurchaseService : quizPurchaseService;
+
+  const purchase = await service.getPurchaseByTxRef(body.txRef);
   if (!purchase) return NextResponse.json({ error: 'Purchase record not found' }, { status: 404 });
   if (purchase.buyerId !== user.id) {
     return NextResponse.json({ error: 'This purchase does not belong to you' }, { status: 403 });
@@ -35,11 +40,11 @@ export async function POST(request: Request) {
     const result = await verifyTransaction(body.transactionId);
     const amountMatches = result.amountKobo === purchase.amountKobo;
     if (result.status === 'successful' && result.txRef === body.txRef && amountMatches) {
-      await quizPurchaseService.markPurchaseCompleted(body.txRef, body.transactionId);
+      await service.markPurchaseCompleted(body.txRef, body.transactionId);
       return NextResponse.json({ status: 'completed' });
     }
 
-    await quizPurchaseService.markPurchaseFailed(body.txRef);
+    await service.markPurchaseFailed(body.txRef);
     return NextResponse.json({ status: 'failed' });
   } catch (err) {
     return NextResponse.json(

@@ -31,6 +31,8 @@ export * as payoutRequestService from './services/payoutRequestService';
 export * as bookmarkService from './services/bookmarkService';
 export * as abbreviationService from './services/abbreviationService';
 export * as scholarService from './services/scholarService';
+export * as flashcardService from './services/flashcardService';
+export * as flashcardPurchaseService from './services/flashcardPurchaseService';
 
 export { RetakeNotAllowedError } from './services/attemptService';
 export * as blogCategoryService from './services/blogCategoryService';

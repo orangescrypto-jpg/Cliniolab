@@ -206,6 +206,58 @@ CREATE TABLE certificates (
   issued_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+-- Standalone Flashcard feature. A flashcard_set is the shareable/browsable
+-- unit (like a quiz) - own title, category/subcategory, pricing, creator.
+-- Shows in its own "Flashcards" homepage section/nav item AND inside each
+-- category's block, labelled "Flashcard".
+CREATE TABLE flashcard_sets (
+  id TEXT PRIMARY KEY,
+  subcategory_id TEXT NOT NULL REFERENCES subcategories(id),
+  creator_id TEXT NOT NULL REFERENCES users(id),
+  title TEXT NOT NULL,
+  description TEXT,
+  visibility TEXT NOT NULL DEFAULT 'public', -- public | private
+  status TEXT NOT NULL DEFAULT 'draft',      -- draft | published | archived
+  pricing TEXT NOT NULL DEFAULT 'free',      -- 'free' | 'paid'
+  price_kobo INTEGER,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX idx_flashcard_sets_subcategory ON flashcard_sets(subcategory_id);
+CREATE INDEX idx_flashcard_sets_visibility ON flashcard_sets(visibility, status);
+CREATE INDEX idx_flashcard_sets_creator ON flashcard_sets(creator_id);
+
+CREATE TABLE flashcards (
+  id TEXT PRIMARY KEY,
+  set_id TEXT NOT NULL REFERENCES flashcard_sets(id),
+  front TEXT NOT NULL,
+  back TEXT NOT NULL,
+  explanation TEXT,
+  sort_order INTEGER DEFAULT 0
+);
+
+CREATE INDEX idx_flashcards_set ON flashcards(set_id);
+
+-- Mirrors quiz_purchases exactly - same Flutterwave + platform-fee-split
+-- model, reusing existing payment/payout infrastructure.
+CREATE TABLE flashcard_purchases (
+  id TEXT PRIMARY KEY,
+  set_id TEXT NOT NULL REFERENCES flashcard_sets(id),
+  buyer_id TEXT NOT NULL REFERENCES users(id),
+  amount_kobo INTEGER NOT NULL,
+  platform_fee_kobo INTEGER NOT NULL,
+  creator_earning_kobo INTEGER NOT NULL,
+  tx_ref TEXT UNIQUE NOT NULL,
+  flw_transaction_id TEXT,
+  status TEXT NOT NULL DEFAULT 'pending',
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE(set_id, buyer_id)
+);
+
+CREATE INDEX idx_flashcard_purchases_buyer ON flashcard_purchases(buyer_id);
+CREATE INDEX idx_flashcard_purchases_set ON flashcard_purchases(set_id);
+
 -- Generic key/value store for small admin-editable homepage content blocks
 -- (e.g. the "latest video" YouTube embed). Distinct from feature_flags
 -- because it carries content, not just an on/off boolean, and distinct

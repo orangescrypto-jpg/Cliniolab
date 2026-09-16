@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { QuestionNavigator } from '@/components/quiz/QuestionNavigator';
+import { FlashcardRunner } from '@/components/flashcards/FlashcardRunner';
 import { clearDraft, loadDraft, saveDraft } from '@/lib/localDraft';
 import { resolveEffectiveCorrectAnswer } from '@/lib/quizAnswers';
 import type { Quiz, QuizQuestion } from '@/types';
@@ -134,6 +135,7 @@ export function StudyModeRunner({ quiz, questions: rawQuestions, onDone }: Study
   // answers breakdown Quiz/Exam mode already gives.
   const [showSummary, setShowSummary] = useState(false);
   const [summaryFilter, setSummaryFilter] = useState<SummaryFilter>('all');
+  const [flashcardMode, setFlashcardMode] = useState<'all' | 'missed' | null>(null);
 
   const question = questions[current];
   const answeredIds = useMemo(() => new Set(Object.keys(answers)), [answers]);
@@ -273,6 +275,32 @@ export function StudyModeRunner({ quiz, questions: rawQuestions, onDone }: Study
     return value;
   }
 
+  if (flashcardMode) {
+    const cards =
+      flashcardMode === 'missed'
+        ? questions.filter(
+            (q) =>
+              !(
+                answeredIds.has(q.id) &&
+                answers[q.id] !== undefined &&
+                answers[q.id].trim().toLowerCase() === q.correctAnswer.trim().toLowerCase()
+              )
+          )
+        : questions;
+    return (
+      <FlashcardRunner
+        title={quiz.title}
+        cards={cards.map((q) => ({
+          id: q.id,
+          front: q.prompt,
+          back: q.type === 'mcq' ? q.options?.find((o) => o.id === q.correctAnswer)?.text ?? q.correctAnswer : q.correctAnswer,
+          explanation: q.explanation,
+        }))}
+        onDone={() => setFlashcardMode(null)}
+      />
+    );
+  }
+
   if (showSummary) {
     const summaryRows = questions
       .map((q, i) => ({ q, i }))
@@ -367,6 +395,14 @@ export function StudyModeRunner({ quiz, questions: rawQuestions, onDone }: Study
             {answeredCount < questions.length && (
               <Button variant="secondary" onClick={() => setShowSummary(false)}>
                 Back to studying
+              </Button>
+            )}
+            <Button variant="secondary" onClick={() => setFlashcardMode('all')}>
+              Practice with flashcards
+            </Button>
+            {correctCount < questions.length && (
+              <Button variant="secondary" onClick={() => setFlashcardMode('missed')}>
+                Flashcards: missed only
               </Button>
             )}
             <Button onClick={finishStudying}>Done</Button>

@@ -3,7 +3,8 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth/AuthProvider';
-import { FlashcardRunner } from '@/components/flashcards/FlashcardRunner';
+import { FlashcardRunner, FLASHCARD_DRAFT_NAMESPACE } from '@/components/flashcards/FlashcardRunner';
+import { loadDraft } from '@/lib/localDraft';
 import { ShareButton } from '@/components/quiz/ShareButton';
 import { BookmarkButton } from '@/components/ui/BookmarkButton';
 import { Button } from '@/components/ui/Button';
@@ -42,6 +43,9 @@ export function FlashcardDetailClient({ setId }: { setId: string }) {
         }
         setSet(data.set);
         setCards(data.cards ?? []);
+        // Resume straight into the runner if a saved session exists for
+        // this set (e.g. tab was closed mid-study).
+        if (loadDraft(FLASHCARD_DRAFT_NAMESPACE, setId)) setStarted(true);
       })
       .catch(() => setError('Network error while loading flashcard set'))
       .finally(() => setFetching(false));
@@ -110,6 +114,7 @@ export function FlashcardDetailClient({ setId }: { setId: string }) {
       <FlashcardRunner
         title={set.title}
         cards={cards.map((c) => ({ id: c.id, front: c.front, back: c.back, explanation: c.explanation }))}
+        draftId={setId}
         onDone={() => setStarted(false)}
       />
     );

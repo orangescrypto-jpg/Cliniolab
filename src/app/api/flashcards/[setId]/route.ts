@@ -15,7 +15,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
   const { setId } = await params;
   const user = await getCurrentUser();
 
-  const set = await flashcardService.getFlashcardSetById(setId);
+  const set = await flashcardService.getFlashcardSetByIdWithStats(setId);
   if (!set) return NextResponse.json({ error: 'Flashcard set not found' }, { status: 404 });
 
   const owner = isOwnerOrStaff(user?.role ?? null, set.creatorId, user?.id ?? null);

@@ -296,6 +296,7 @@ export function StudyModeRunner({ quiz, questions: rawQuestions, onDone }: Study
           back: q.type === 'mcq' ? q.options?.find((o) => o.id === q.correctAnswer)?.text ?? q.correctAnswer : q.correctAnswer,
           explanation: q.explanation,
         }))}
+        draftId={`study-${quiz.id}-${flashcardMode}`}
         onDone={() => setFlashcardMode(null)}
       />
     );

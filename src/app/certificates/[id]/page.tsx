@@ -1,5 +1,5 @@
 import { notFound } from 'next/navigation';
-import { certificateService } from '@/lib/db';
+import { certificateService, featureFlagService } from '@/lib/db';
 import { PrintButton } from './PrintButton';
 
 interface RouteParams {
@@ -8,6 +8,10 @@ interface RouteParams {
 
 export default async function CertificatePage({ params }: RouteParams) {
   const { id } = await params;
+
+  const certificatesEnabled = await featureFlagService.isFeatureEnabled('certificates');
+  if (!certificatesEnabled) notFound();
+
   const certificate = await certificateService.getCertificateById(id);
   if (!certificate) notFound();
 

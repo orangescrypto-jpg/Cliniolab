@@ -518,6 +518,7 @@ export interface FlashcardSet {
   status: QuizStatus;
   pricing: 'free' | 'paid';
   priceKobo: number | null;
+  shuffleCards: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -545,6 +546,7 @@ export interface FlashcardInput {
   visibility: QuizVisibility;
   pricing?: 'free' | 'paid';
   priceKobo?: number;
+  shuffleCards?: boolean;
   cards: FlashcardCardInput[];
 }
 

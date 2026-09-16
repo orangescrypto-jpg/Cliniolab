@@ -435,6 +435,7 @@ export function QuizRunner({ quiz, questions: rawQuestions, submitEndpoint, isFi
           back: pq.options.find((o) => o.id === pq.correctAnswer)?.text ?? pq.correctAnswer,
           explanation: pq.explanation,
         }))}
+        draftId={`quiz-${quiz.id}-${flashcardMode}`}
         onDone={() => setFlashcardMode(null)}
       />
     );

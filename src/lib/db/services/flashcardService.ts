@@ -11,6 +11,7 @@ interface FlashcardSetRow {
   status: string;
   pricing: string;
   price_kobo: number | null;
+  shuffle_cards: number;
   created_at: string;
   updated_at: string;
 }
@@ -35,6 +36,7 @@ function mapSet(row: FlashcardSetRow): FlashcardSet {
     status: row.status as FlashcardSet['status'],
     pricing: row.pricing as FlashcardSet['pricing'],
     priceKobo: row.price_kobo,
+    shuffleCards: row.shuffle_cards === 1,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -61,8 +63,8 @@ export async function createFlashcardSet(creatorId: string, input: FlashcardInpu
   await db
     .prepare(
       `INSERT INTO flashcard_sets
-        (id, subcategory_id, creator_id, title, description, visibility, status, pricing, price_kobo, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, 'published', ?, ?, ?, ?)`
+        (id, subcategory_id, creator_id, title, description, visibility, status, pricing, price_kobo, shuffle_cards, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, 'published', ?, ?, ?, ?, ?)`
     )
     .bind(
       id,
@@ -73,6 +75,7 @@ export async function createFlashcardSet(creatorId: string, input: FlashcardInpu
       input.visibility,
       pricing,
       priceKobo,
+      input.shuffleCards ? 1 : 0,
       now,
       now
     )
@@ -97,6 +100,7 @@ export async function createFlashcardSet(creatorId: string, input: FlashcardInpu
     status: 'published',
     pricing,
     priceKobo,
+    shuffleCards: input.shuffleCards ?? false,
     createdAt: now,
     updatedAt: now,
   };
@@ -111,10 +115,20 @@ export async function updateFlashcardSet(setId: string, input: FlashcardInput): 
   await db
     .prepare(
       `UPDATE flashcard_sets
-       SET subcategory_id = ?, title = ?, description = ?, visibility = ?, pricing = ?, price_kobo = ?, updated_at = ?
+       SET subcategory_id = ?, title = ?, description = ?, visibility = ?, pricing = ?, price_kobo = ?, shuffle_cards = ?, updated_at = ?
        WHERE id = ?`
     )
-    .bind(input.subcategoryId, input.title, input.description ?? null, input.visibility, pricing, priceKobo, now, setId)
+    .bind(
+      input.subcategoryId,
+      input.title,
+      input.description ?? null,
+      input.visibility,
+      pricing,
+      priceKobo,
+      input.shuffleCards ? 1 : 0,
+      now,
+      setId
+    )
     .run();
 
   // Replace all cards wholesale — simplest correct approach and matches

@@ -411,6 +411,7 @@ export default function FlashcardBulkUploadPage() {
     setSubmitting(true);
     setSubmitError(null);
     let successCount = 0;
+    const failures: string[] = [];
     try {
       for (const set of parsedSets) {
         const res = await fetch('/api/flashcards', {
@@ -418,13 +419,18 @@ export default function FlashcardBulkUploadPage() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(set),
         });
-        if (res.ok) successCount++;
+        if (res.ok) {
+          successCount++;
+        } else {
+          const data = await res.json().catch(() => ({}));
+          failures.push(`"${set.title}": ${data.error ?? `HTTP ${res.status}`}`);
+        }
       }
       setSubmittedCount(successCount);
       setParsedSets([]);
       setFileName(null);
-      if (successCount < parsedSets.length) {
-        setSubmitError(`${parsedSets.length - successCount} set(s) failed to upload.`);
+      if (failures.length > 0) {
+        setSubmitError(`${failures.length} set(s) failed to upload:\n${failures.join('\n')}`);
       }
     } catch {
       setSubmitError('Network error while publishing.');
@@ -562,7 +568,7 @@ export default function FlashcardBulkUploadPage() {
         </Card>
       )}
 
-      {submitError && <p className="mt-4 text-sm text-critical-500">{submitError}</p>}
+      {submitError && <p className="mt-4 whitespace-pre-line text-sm text-critical-500">{submitError}</p>}
 
       {submittedCount !== null && (
         <Card className="mt-6 border-pulse-200 bg-pulse-50 p-4">

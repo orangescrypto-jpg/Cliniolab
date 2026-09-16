@@ -115,6 +115,7 @@ export function FlashcardDetailClient({ setId }: { setId: string }) {
         title={set.title}
         cards={cards.map((c) => ({ id: c.id, front: c.front, back: c.back, explanation: c.explanation }))}
         draftId={setId}
+        shuffle={set.shuffleCards}
         onDone={() => setStarted(false)}
       />
     );

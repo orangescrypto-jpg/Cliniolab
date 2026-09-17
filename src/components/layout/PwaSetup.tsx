@@ -67,8 +67,17 @@ export function PwaSetup() {
     const permission = await Notification.requestPermission();
     if (permission !== 'granted') return;
 
-    const vapidPublicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
-    if (!vapidPublicKey) return; // push not configured; permission alone is still useful for future setup
+    let vapidPublicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
+    if (!vapidPublicKey) {
+      try {
+        const res = await fetch('/api/push/vapid-public-key');
+        const data = await res.json();
+        vapidPublicKey = data.publicKey || undefined;
+      } catch {
+        // push not configured; permission alone is still useful for future setup
+      }
+    }
+    if (!vapidPublicKey) return;
 
     const registration = await navigator.serviceWorker.ready;
     const subscription = await registration.pushManager.subscribe({

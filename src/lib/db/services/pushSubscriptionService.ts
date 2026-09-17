@@ -46,3 +46,12 @@ export async function listSubscriptionsForUser(userId: string) {
     .all<{ id: string; endpoint: string; p256dh: string; auth: string }>();
   return results;
 }
+
+/** Distinct user IDs with at least one push subscription — used for broadcast-style sends like the daily quiz reminder. */
+export async function listSubscribedUserIds(): Promise<string[]> {
+  const db = getDb();
+  const { results } = await db
+    .prepare('SELECT DISTINCT user_id FROM push_subscriptions')
+    .all<{ user_id: string }>();
+  return results.map((r) => r.user_id);
+}

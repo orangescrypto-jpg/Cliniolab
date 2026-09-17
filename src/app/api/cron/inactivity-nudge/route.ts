@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { userService } from '@/lib/db';
 import { sendInactivityNudgeEmail } from '@/lib/email/emailService';
+import { sendInactivityNudgePush } from '@/lib/push/pushNotificationService';
+import { isValidCronSecret } from '@/lib/push/cronSecretConfig';
 
 /**
  * Called by an external scheduler (Cloudflare Cron Trigger hitting this
@@ -16,7 +18,7 @@ const NUDGE_DAY_THRESHOLDS = [3, 7, 14];
 
 export async function POST(request: Request) {
   const secret = request.headers.get('x-cron-secret');
-  if (!secret || secret !== process.env.CRON_SECRET) {
+  if (!secret || !(await isValidCronSecret(secret))) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
@@ -25,6 +27,7 @@ export async function POST(request: Request) {
     const inactiveUsers = await userService.listUsersInactiveForDays(days);
     for (const user of inactiveUsers) {
       await sendInactivityNudgeEmail(user, days).catch(() => {});
+      await sendInactivityNudgePush(user.id, days).catch(() => {});
       totalSent++;
     }
   }

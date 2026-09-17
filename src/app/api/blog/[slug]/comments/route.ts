@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getCurrentUser } from '@/lib/auth/currentUser';
 import { commentService, cmsService, featureFlagService } from '@/lib/db';
 import { sendCommentReplyEmail } from '@/lib/email/emailService';
+import { sendCommentReplyPush } from '@/lib/push/pushNotificationService';
 
 // Without this, Next.js can treat this GET handler as a static route
 // (no dynamic request data is read directly), caching the response and
@@ -65,6 +66,12 @@ export async function POST(request: Request, { params }: RouteParams) {
             post.title,
             `/blog/${post.slug}`,
             body.body.trim()
+          ).catch(() => {});
+          sendCommentReplyPush(
+            parent.userId,
+            user.displayName ?? user.email,
+            post.title,
+            `/blog/${post.slug}`
           ).catch(() => {});
         }
       }

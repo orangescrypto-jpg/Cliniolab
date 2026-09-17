@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getCurrentUser } from '@/lib/auth/currentUser';
 import { commentService, featureFlagService, quizService } from '@/lib/db';
 import { sendCommentReplyEmail } from '@/lib/email/emailService';
+import { sendCommentReplyPush } from '@/lib/push/pushNotificationService';
 
 // See comment in the blog comments route for why this is needed —
 // otherwise this GET can be served from a stale cache after a new
@@ -64,6 +65,12 @@ export async function POST(request: Request, { params }: RouteParams) {
             quiz.title,
             `/quizzes/${quizId}`,
             body.body.trim()
+          ).catch(() => {});
+          sendCommentReplyPush(
+            parent.userId,
+            user.displayName ?? user.email,
+            quiz.title,
+            `/quizzes/${quizId}`
           ).catch(() => {});
         }
       }

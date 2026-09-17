@@ -336,7 +336,10 @@ export type FeatureFlagKey =
   | 'feedback_widget'
   | 'paid_quizzes'
   | 'banners_header'
-  | 'banners_footer';
+  | 'banners_footer'
+  | 'push_inactivity_nudge'
+  | 'push_comment_reply'
+  | 'push_daily_quiz';
 
 export interface FeatureFlag {
   key: FeatureFlagKey;

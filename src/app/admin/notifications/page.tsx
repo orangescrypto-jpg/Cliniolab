@@ -23,6 +23,10 @@ const PUSH_FLAG_LABELS: Record<string, string> = {
   push_inactivity_nudge: 'Inactivity nudge (3 / 7 / 14 days away)',
   push_comment_reply: 'Comment reply',
   push_daily_quiz: 'Daily quiz reminder',
+  push_new_content_category: 'New content in a category you\u2019re active in',
+  push_leaderboard_rank_change: 'Leaderboard rank change (entering top 10)',
+  push_payout_update: 'Payout sent / purchase made (creators)',
+  push_interest_match: 'New job or scholarship posting',
 };
 
 export default function AdminNotificationsPage() {

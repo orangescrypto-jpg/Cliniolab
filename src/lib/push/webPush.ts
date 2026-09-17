@@ -65,44 +65,10 @@ function concatUint8Arrays(...arrays: Uint8Array[]): Uint8Array {
 }
 
 /**
- * Imports the VAPID private key for ECDSA (P-256) signing.
- * Accepts a raw 32-byte "d" scalar, base64url-encoded (the format
- * `web-push generate-vapid-keys` produces), and builds a PKCS8 wrapper
- * around it so Web Crypto can import it.
- */
-async function importVapidPrivateKey(privateKeyB64url: string): Promise<CryptoKey> {
-  const d = base64urlToUint8Array(privateKeyB64url);
-  if (d.length !== 32) {
-    throw new Error('VAPID private key must decode to 32 bytes (raw P-256 scalar)');
-  }
-
-  // Minimal PKCS8 wrapper for a P-256 EC private key containing only `d`.
-  // Web Crypto's importKey('pkcs8', ...) requires a full PKCS8 structure;
-  // we build the fixed ASN.1 prefix for a P-256 private key and splice in d.
-  const pkcs8Prefix = new Uint8Array([
-    0x30, 0x81, 0x87, 0x02, 0x01, 0x00, 0x30, 0x13, 0x06, 0x07, 0x2a, 0x86, 0x48, 0xce, 0x3d,
-    0x02, 0x01, 0x06, 0x08, 0x2a, 0x86, 0x48, 0xce, 0x3d, 0x03, 0x01, 0x07, 0x04, 0x6d, 0x30,
-    0x6b, 0x02, 0x01, 0x01, 0x04, 0x20,
-  ]);
-  const pkcs8Suffix = new Uint8Array([0xa1, 0x44, 0x03, 0x42, 0x00]);
-  // We don't have the public point handy here without re-deriving it, and
-  // the suffix normally embeds it — but Web Crypto's PKCS8 import for EC
-  // keys does not strictly require the public point to be correct for
-  // signing use, only for consistency checks some implementations skip.
-  // To be safe and portable, derive the public key separately when needed
-  // (see deriveVapidPublicKeyPoint) and append zeros here as a placeholder
-  // is NOT acceptable — instead we import via JWK, which is simpler and
-  // well-supported, and does not require constructing ASN.1 by hand.
-  void pkcs8Prefix;
-  void pkcs8Suffix;
-
-  throw new Error('unused'); // superseded by importVapidPrivateKeyJwk below
-}
-
-/**
- * Imports the VAPID private key via JWK — far simpler and more portable
- * than hand-rolling PKCS8 ASN.1. Requires the public key (uncompressed
- * point) to fill in the JWK's x/y coordinates alongside d.
+ * Imports the VAPID private key via JWK — simple and well-supported by
+ * Web Crypto, and doesn't require hand-rolling ASN.1/PKCS8. Requires the
+ * public key (uncompressed point) to fill in the JWK's x/y coordinates
+ * alongside d.
  */
 async function importVapidPrivateKeyJwk(
   privateKeyB64url: string,
@@ -132,11 +98,6 @@ async function importVapidPrivateKeyJwk(
     false,
     ['sign']
   );
-}
-
-async function importVapidPublicKeyRaw(publicKeyB64url: string): Promise<CryptoKey> {
-  const raw = base64urlToUint8Array(publicKeyB64url);
-  return crypto.subtle.importKey('raw', raw, { name: 'ECDH', namedCurve: 'P-256' }, true, []);
 }
 
 function base64urlEncodeJson(obj: unknown): string {
@@ -323,5 +284,3 @@ export async function sendWebPush(
   }
 }
 
-// Re-export for callers that only need the public-key derivation check.
-export { importVapidPublicKeyRaw };

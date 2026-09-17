@@ -129,7 +129,7 @@ export function PwaSetup() {
   return (
     <>
       {showInstallBanner && (
-        <div className="fixed bottom-4 left-1/2 z-50 w-[92%] max-w-sm -translate-x-1/2 rounded-lg border border-ink-100 bg-white p-4 shadow-lg">
+        <div className="fixed top-4 left-1/2 z-50 w-[92%] max-w-sm -translate-x-1/2 rounded-lg border border-ink-100 bg-white p-4 shadow-lg">
           <p className="text-sm font-medium text-ink-800">Install Cliniolab</p>
           <p className="mt-1 text-xs text-ink-500">Install to your phone for quick access.</p>
           <div className="mt-3 flex gap-2">

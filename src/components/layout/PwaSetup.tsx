@@ -29,6 +29,20 @@ export function PwaSetup() {
   const [installEvent, setInstallEvent] = useState<BeforeInstallPromptEvent | null>(null);
   const [showInstallBanner, setShowInstallBanner] = useState(false);
   const [showNotifyBanner, setShowNotifyBanner] = useState(false);
+  const [subscribeFailed, setSubscribeFailedState] = useState(false);
+
+  function setSubscribeFailed(failed: boolean) {
+    setSubscribeFailedState(failed);
+    try {
+      if (failed) {
+        localStorage.setItem('push_subscribe_failed', '1');
+      } else {
+        localStorage.removeItem('push_subscribe_failed');
+      }
+    } catch {
+      // localStorage unavailable (private mode etc.) - in-memory state still works for this session
+    }
+  }
 
   useEffect(() => {
     if ('serviceWorker' in navigator) {
@@ -50,7 +64,15 @@ export function PwaSetup() {
   useEffect(() => {
     if (!user) return;
     if (typeof Notification === 'undefined') return;
-    if (Notification.permission === 'default') {
+
+    let failedBefore = false;
+    try {
+      failedBefore = localStorage.getItem('push_subscribe_failed') === '1';
+    } catch {
+      // ignore - treat as not-failed if storage is unavailable
+    }
+
+    if (Notification.permission === 'default' || (Notification.permission === 'granted' && failedBefore)) {
       setShowNotifyBanner(true);
     }
   }, [user]);
@@ -85,11 +107,23 @@ export function PwaSetup() {
       applicationServerKey: urlBase64ToUint8Array(vapidPublicKey),
     });
 
-    await fetch('/api/push/subscribe', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(subscription.toJSON()),
-    });
+    try {
+      const res = await fetch('/api/push/subscribe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(subscription.toJSON()),
+      });
+      if (!res.ok) {
+        // Save failed server-side even though the browser granted permission
+        // and created a push subscription. Re-show the banner next reload
+        // so the user gets another chance, instead of silently losing push.
+        setSubscribeFailed(true);
+      } else {
+        setSubscribeFailed(false);
+      }
+    } catch {
+      setSubscribeFailed(true);
+    }
   }
 
   return (

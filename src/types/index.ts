@@ -525,6 +525,8 @@ export interface FlashcardSet {
 
 export interface FlashcardSetWithStats extends FlashcardSet {
   cardCount: number;
+  /** Number of completed study sessions (full run-throughs) - the flashcard equivalent of a quiz's attemptCount. */
+  attemptCount: number;
   categoryName?: string;
   subcategoryName?: string;
   creatorName?: string;

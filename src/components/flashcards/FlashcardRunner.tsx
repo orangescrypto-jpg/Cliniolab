@@ -18,6 +18,13 @@ interface FlashcardRunnerProps {
   title?: string;
   onDone?: () => void;
   /**
+   * Fired once, automatically, the moment the deck is completed (the
+   * user reaches the end) - independent of the "Done" button, which
+   * just closes the completion screen. Used to record a completed
+   * attempt server-side without requiring an extra tap.
+   */
+  onComplete?: () => void;
+  /**
    * Stable id used to key the resumable localStorage draft (e.g. the
    * flashcard set id, or `quiz-${quizId}-missed` for the embedded
    * "Practice with flashcards" entry points). Sessions with different
@@ -58,7 +65,7 @@ const DRAFT_NAMESPACE = FLASHCARD_DRAFT_NAMESPACE;
  * localStorage, keyed by draftId, so closing the tab or navigating away
  * mid-session doesn't lose your place — same pattern as Study Mode.
  */
-export function FlashcardRunner({ cards: rawCards, title, onDone, draftId, shuffle }: FlashcardRunnerProps) {
+export function FlashcardRunner({ cards: rawCards, title, onDone, onComplete, draftId, shuffle }: FlashcardRunnerProps) {
   // Shuffle once per mount, same pattern as QuizRunner — not on every
   // re-render, so flipping/marking a card doesn't reorder the deck.
   const [cards] = useState(() => (shuffle ? shuffleArray(rawCards) : rawCards));
@@ -88,6 +95,13 @@ export function FlashcardRunner({ cards: rawCards, title, onDone, draftId, shuff
       reviewIds: Array.from(reviewIds),
     });
   }, [draftId, current, knownIds, reviewIds, finished]);
+
+  // Fires once per completed run-through, including after "Study again" -
+  // each full pass through the deck is its own attempt.
+  useEffect(() => {
+    if (finished) onComplete?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [finished]);
 
   function goNext() {
     if (isLast) {

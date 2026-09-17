@@ -196,6 +196,7 @@ export async function setFlashcardSetVisibility(
 const STATS_SELECT = `
   fs.*,
   (SELECT COUNT(*) FROM flashcards WHERE set_id = fs.id) as card_count,
+  (SELECT COUNT(*) FROM flashcard_attempts WHERE set_id = fs.id) as attempt_count,
   c.name as category_name,
   s.name as subcategory_name,
   u.display_name as creator_name
@@ -207,6 +208,7 @@ const STATS_SELECT = `
 
 type StatsRow = FlashcardSetRow & {
   card_count: number;
+  attempt_count: number;
   category_name: string;
   subcategory_name: string;
   creator_name: string | null;
@@ -216,6 +218,7 @@ function mapStatsRow(row: StatsRow): FlashcardSetWithStats {
   return {
     ...mapSet(row),
     cardCount: row.card_count,
+    attemptCount: row.attempt_count,
     categoryName: row.category_name,
     subcategoryName: row.subcategory_name,
     creatorName: row.creator_name ?? 'Anonymous',

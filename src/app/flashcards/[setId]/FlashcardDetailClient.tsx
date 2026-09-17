@@ -117,6 +117,9 @@ export function FlashcardDetailClient({ setId }: { setId: string }) {
         draftId={setId}
         shuffle={set.shuffleCards}
         onDone={() => setStarted(false)}
+        onComplete={() => {
+          if (user) fetch(`/api/flashcards/${setId}/attempts`, { method: 'POST' }).catch(() => {});
+        }}
       />
     );
   }

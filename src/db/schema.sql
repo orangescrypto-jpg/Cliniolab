@@ -258,6 +258,19 @@ CREATE TABLE flashcard_purchases (
 CREATE INDEX idx_flashcard_purchases_buyer ON flashcard_purchases(buyer_id);
 CREATE INDEX idx_flashcard_purchases_set ON flashcard_purchases(set_id);
 
+-- One row per completed run through a flashcard set (reached the last
+-- card). Powers the "X attempts" stat on flashcard set cards, the
+-- flashcard equivalent of quiz_attempts' attempt_count.
+CREATE TABLE flashcard_attempts (
+  id TEXT PRIMARY KEY,
+  set_id TEXT NOT NULL REFERENCES flashcard_sets(id),
+  user_id TEXT NOT NULL REFERENCES users(id),
+  completed_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX idx_flashcard_attempts_set ON flashcard_attempts(set_id);
+CREATE INDEX idx_flashcard_attempts_user ON flashcard_attempts(user_id);
+
 -- Generic key/value store for small admin-editable homepage content blocks
 -- (e.g. the "latest video" YouTube embed). Distinct from feature_flags
 -- because it carries content, not just an on/off boolean, and distinct

@@ -34,6 +34,7 @@ export function FlashcardSetCard({ set }: { set: FlashcardSetWithStats }) {
         )}
         <div className="mt-4 flex items-center gap-4 font-mono text-xs text-ink-400">
           <span>{set.cardCount} cards</span>
+          <span title="Number of completed study sessions">{set.attemptCount} attempts</span>
         </div>
         {(set.categoryName || set.subcategoryName) && (
           <div className="mt-3 text-xs text-ink-400">
@@ -72,6 +73,7 @@ export function FeaturedFlashcardSetCard({ set }: { set: FlashcardSetWithStats }
         {set.description && <p className="mt-2 text-sm text-ink-500">{set.description}</p>}
         <div className="mt-5 flex flex-wrap items-center gap-4 font-mono text-xs text-ink-400">
           <span>{set.cardCount} cards</span>
+          <span title="Number of completed study sessions">{set.attemptCount} attempts</span>
         </div>
         {(set.categoryName || set.subcategoryName) && (
           <div className="mt-3 text-xs text-ink-400">
@@ -107,6 +109,7 @@ export function CompactFlashcardSetCard({ set }: { set: FlashcardSetWithStats })
           </div>
           <div className="mt-1 flex flex-wrap items-center gap-3 font-mono text-xs text-ink-400">
             <span>{set.cardCount} cards</span>
+            <span title="Number of completed study sessions">{set.attemptCount} attempts</span>
           </div>
           {set.creatorName && <div className="mt-1 text-xs text-ink-400">By {set.creatorName}</div>}
         </div>

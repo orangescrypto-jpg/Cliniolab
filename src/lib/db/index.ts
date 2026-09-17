@@ -11,6 +11,7 @@ export * as categoryService from './services/categoryService';
 export * as quizService from './services/quizService';
 export * as attemptService from './services/attemptService';
 export * as leaderboardService from './services/leaderboardService';
+export * as leaderboardRankStateService from './services/leaderboardRankStateService';
 export * as commentService from './services/commentService';
 export * as reportService from './services/reportService';
 export * as cmsService from './services/cmsService';

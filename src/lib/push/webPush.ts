@@ -53,6 +53,16 @@ function uint8ArrayToBase64url(bytes: Uint8Array): string {
   return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
+// TS's DOM lib types Web Crypto params as BufferSource, which requires an
+// ArrayBuffer-backed view. Uint8Arrays produced from crypto.subtle results
+// or slices can be typed Uint8Array<ArrayBufferLike>, so normalize before
+// passing them in.
+function toArrayBufferView(bytes: Uint8Array): Uint8Array<ArrayBuffer> {
+  const copy = new Uint8Array(bytes.length);
+  copy.set(bytes);
+  return copy;
+}
+
 function concatUint8Arrays(...arrays: Uint8Array[]): Uint8Array {
   const total = arrays.reduce((sum, a) => sum + a.length, 0);
   const result = new Uint8Array(total);
@@ -157,7 +167,7 @@ async function encryptPayload(
 
   const subscriberPublicKey = await crypto.subtle.importKey(
     'raw',
-    subscriberPublicKeyBytes,
+    toArrayBufferView(subscriberPublicKeyBytes),
     { name: 'ECDH', namedCurve: 'P-256' },
     false,
     []
@@ -191,7 +201,7 @@ async function encryptPayload(
   const keyInfoInput = concatUint8Arrays(authInfo, subscriberPublicKeyBytes, localPublicKeyRaw);
 
   const prkBits = await crypto.subtle.deriveBits(
-    { name: 'HKDF', hash: 'SHA-256', salt: authSecret, info: new Uint8Array(0) },
+    { name: 'HKDF', hash: 'SHA-256', salt: toArrayBufferView(authSecret), info: toArrayBufferView(new Uint8Array(0)) },
     hkdfKeyMaterial,
     256
   );
@@ -199,7 +209,7 @@ async function encryptPayload(
   const prkKey = await crypto.subtle.importKey('raw', prk, 'HKDF', false, ['deriveBits']);
 
   const ikmBits = await crypto.subtle.deriveBits(
-    { name: 'HKDF', hash: 'SHA-256', salt: new Uint8Array(0), info: keyInfoInput },
+    { name: 'HKDF', hash: 'SHA-256', salt: toArrayBufferView(new Uint8Array(0)), info: toArrayBufferView(keyInfoInput) },
     prkKey,
     256
   );
@@ -208,7 +218,7 @@ async function encryptPayload(
 
   const cekInfo = new TextEncoder().encode('Content-Encoding: aes128gcm\0');
   const cekBits = await crypto.subtle.deriveBits(
-    { name: 'HKDF', hash: 'SHA-256', salt, info: cekInfo },
+    { name: 'HKDF', hash: 'SHA-256', salt: toArrayBufferView(salt), info: toArrayBufferView(cekInfo) },
     ikmKey,
     128
   );
@@ -216,7 +226,7 @@ async function encryptPayload(
 
   const nonceInfo = new TextEncoder().encode('Content-Encoding: nonce\0');
   const nonceBits = await crypto.subtle.deriveBits(
-    { name: 'HKDF', hash: 'SHA-256', salt, info: nonceInfo },
+    { name: 'HKDF', hash: 'SHA-256', salt: toArrayBufferView(salt), info: toArrayBufferView(nonceInfo) },
     ikmKey,
     96
   );
@@ -228,9 +238,9 @@ async function encryptPayload(
   const paddedPlaintext = concatUint8Arrays(payload, new Uint8Array([0x02]));
 
   const encryptedBits = await crypto.subtle.encrypt(
-    { name: 'AES-GCM', iv: nonce },
+    { name: 'AES-GCM', iv: toArrayBufferView(nonce) },
     aesKey,
-    paddedPlaintext
+    toArrayBufferView(paddedPlaintext)
   );
   const ciphertext = new Uint8Array(encryptedBits);
 
@@ -270,7 +280,7 @@ export async function sendWebPush(
         TTL: '86400',
         Urgency: 'normal',
       },
-      body,
+      body: toArrayBufferView(body),
     });
 
     return {

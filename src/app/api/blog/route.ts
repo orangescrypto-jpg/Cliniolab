@@ -3,6 +3,7 @@ import { getCurrentUser } from '@/lib/auth/currentUser';
 import { permissions } from '@/lib/auth/permissions';
 import { cmsService, userService } from '@/lib/db';
 import { sendNewsletterForPost } from '@/lib/email/emailService';
+import { sendBlogPushBroadcast } from '@/lib/push/pushNotificationService';
 import type { BlogStatus } from '@/types';
 
 export async function GET(request: Request) {
@@ -53,6 +54,7 @@ export async function POST(request: Request) {
     isPinned?: boolean;
     fullWidth?: boolean;
     sendAsNewsletter?: boolean;
+    sendPush?: boolean;
   };
   try {
     body = await request.json();
@@ -83,6 +85,7 @@ export async function POST(request: Request) {
     isPinned: body.isPinned,
     fullWidth: body.fullWidth,
     sendAsNewsletter: body.sendAsNewsletter,
+    sendPush: body.sendPush,
   });
 
   // Only ever send once, and only for posts actually published (not drafts).
@@ -91,6 +94,15 @@ export async function POST(request: Request) {
     const excerpt = post.excerpt || post.content.replace(/[#*_>[\]()!-]/g, '').slice(0, 160) + '…';
     sendNewsletterForPost(post.id, post.title, post.slug, excerpt, recipients)
       .then(() => cmsService.markNewsletterSent(post.id))
+      .catch(() => {});
+  }
+
+  // Same guard as the newsletter above — only fires once, only for a
+  // post that's actually published, not a draft.
+  if (post.sendPush && post.status === 'published') {
+    const excerpt = post.excerpt || post.content.replace(/[#*_>[\]()!-]/g, '').slice(0, 160) + '…';
+    sendBlogPushBroadcast(post.title, excerpt, `/blog/${post.slug}`, post.featuredImageUrl)
+      .then(() => cmsService.markPushSent(post.id))
       .catch(() => {});
   }
 

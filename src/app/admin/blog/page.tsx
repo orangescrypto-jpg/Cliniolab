@@ -69,6 +69,7 @@ export default function AdminBlogPage() {
   const [isPinned, setIsPinned] = useState(false);
   const [fullWidth, setFullWidth] = useState(false);
   const [sendAsNewsletter, setSendAsNewsletter] = useState(false);
+  const [sendPush, setSendPush] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const [postsLoading, setPostsLoading] = useState(true);
@@ -214,6 +215,7 @@ export default function AdminBlogPage() {
     setIsPinned(false);
     setFullWidth(false);
     setSendAsNewsletter(false);
+    setSendPush(false);
     setError(null);
     window.localStorage.removeItem('cliniolab-blog-draft');
   }
@@ -240,6 +242,7 @@ export default function AdminBlogPage() {
     setIsPinned(post.isPinned);
     setFullWidth(post.fullWidth);
     setSendAsNewsletter(false); // never re-trigger a newsletter send just by opening an edit
+    setSendPush(false); // never re-trigger a push send just by opening an edit
     setError(null);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
@@ -300,6 +303,7 @@ export default function AdminBlogPage() {
       isPinned,
       fullWidth,
       sendAsNewsletter,
+      sendPush,
     };
     try {
       const res = editingId
@@ -569,11 +573,18 @@ export default function AdminBlogPage() {
             <Toggle checked={isPinned} onChange={setIsPinned} label="Pinned" />
             <Toggle checked={fullWidth} onChange={setFullWidth} label="Full-width content (skip the narrow article column)" />
             <Toggle checked={sendAsNewsletter} onChange={setSendAsNewsletter} label="Send as newsletter" />
+            <Toggle checked={sendPush} onChange={setSendPush} label="Send push notification" />
           </div>
 
           {sendAsNewsletter && status === 'draft' && (
             <p className="mt-3 text-xs text-flag-600">
               Newsletter only sends when status is Published — saving as Draft now won&apos;t email anyone yet.
+            </p>
+          )}
+
+          {sendPush && status === 'draft' && (
+            <p className="mt-3 text-xs text-flag-600">
+              Push notification only sends when status is Published — saving as Draft now won&apos;t notify anyone yet.
             </p>
           )}
         </div>

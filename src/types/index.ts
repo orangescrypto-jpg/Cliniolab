@@ -294,6 +294,8 @@ export interface BlogPost {
   fullWidth: boolean;
   sendAsNewsletter: boolean;
   newsletterSentAt: string | null;
+  sendPush: boolean;
+  pushSentAt: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -339,7 +341,8 @@ export type FeatureFlagKey =
   | 'banners_footer'
   | 'push_inactivity_nudge'
   | 'push_comment_reply'
-  | 'push_daily_quiz';
+  | 'push_daily_quiz'
+  | 'push_blog_new_post';
 
 export interface FeatureFlag {
   key: FeatureFlagKey;

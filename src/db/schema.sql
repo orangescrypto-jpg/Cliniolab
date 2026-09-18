@@ -162,6 +162,8 @@ CREATE TABLE blog_posts (
   full_width INTEGER NOT NULL DEFAULT 0, -- admin opt-in: render post body in the wide container instead of the narrow article column
   send_as_newsletter INTEGER NOT NULL DEFAULT 0, -- if 1, emails all newsletter-subscribed users on publish
   newsletter_sent_at TEXT,            -- set once sent, prevents duplicate sends
+  send_push INTEGER NOT NULL DEFAULT 0, -- if 1, sends a push notification to all subscribed users on publish
+  push_sent_at TEXT,                  -- set once sent, prevents duplicate sends
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 

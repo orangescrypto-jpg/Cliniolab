@@ -21,6 +21,8 @@ interface BlogRow {
   full_width: number;
   send_as_newsletter: number;
   newsletter_sent_at: string | null;
+  send_push: number;
+  push_sent_at: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -53,6 +55,8 @@ function mapBlog(row: BlogRow): BlogPost {
     fullWidth: row.full_width === 1,
     sendAsNewsletter: row.send_as_newsletter === 1,
     newsletterSentAt: row.newsletter_sent_at,
+    sendPush: row.send_push === 1,
+    pushSentAt: row.push_sent_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -183,6 +187,7 @@ export async function createPost(
     isPinned?: boolean;
     fullWidth?: boolean;
     sendAsNewsletter?: boolean;
+    sendPush?: boolean;
   }
 ): Promise<BlogPost> {
   const db = getDb();
@@ -191,8 +196,8 @@ export async function createPost(
   await db
     .prepare(
       `INSERT INTO blog_posts
-        (id, author_id, title, slug, content, content_format, excerpt, blog_category_id, blog_subcategory_id, featured_image_url, seo_title, seo_description, status, is_sponsored, is_pinned, full_width, send_as_newsletter, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        (id, author_id, title, slug, content, content_format, excerpt, blog_category_id, blog_subcategory_id, featured_image_url, seo_title, seo_description, status, is_sponsored, is_pinned, full_width, send_as_newsletter, send_push, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .bind(
       id,
@@ -212,6 +217,7 @@ export async function createPost(
       input.isPinned ? 1 : 0,
       input.fullWidth ? 1 : 0,
       input.sendAsNewsletter ? 1 : 0,
+      input.sendPush ? 1 : 0,
       createdAt,
       createdAt
     )
@@ -236,6 +242,8 @@ export async function createPost(
     fullWidth: input.fullWidth ?? false,
     sendAsNewsletter: input.sendAsNewsletter ?? false,
     newsletterSentAt: null,
+    sendPush: input.sendPush ?? false,
+    pushSentAt: null,
     createdAt,
     updatedAt: createdAt,
   };
@@ -258,6 +266,8 @@ export async function updatePost(
     isSponsored: boolean;
     isPinned: boolean;
     fullWidth: boolean;
+    sendAsNewsletter: boolean;
+    sendPush: boolean;
   }>
 ): Promise<void> {
   const db = getDb();
@@ -277,6 +287,8 @@ export async function updatePost(
   if (input.isSponsored !== undefined) { fields.push('is_sponsored = ?'); values.push(input.isSponsored ? 1 : 0); }
   if (input.isPinned !== undefined) { fields.push('is_pinned = ?'); values.push(input.isPinned ? 1 : 0); }
   if (input.fullWidth !== undefined) { fields.push('full_width = ?'); values.push(input.fullWidth ? 1 : 0); }
+  if (input.sendAsNewsletter !== undefined) { fields.push('send_as_newsletter = ?'); values.push(input.sendAsNewsletter ? 1 : 0); }
+  if (input.sendPush !== undefined) { fields.push('send_push = ?'); values.push(input.sendPush ? 1 : 0); }
   if (fields.length === 0) return;
   fields.push('updated_at = ?');
   values.push(nowIso());
@@ -288,6 +300,14 @@ export async function markNewsletterSent(postId: string): Promise<void> {
   const db = getDb();
   await db
     .prepare('UPDATE blog_posts SET newsletter_sent_at = ? WHERE id = ?')
+    .bind(nowIso(), postId)
+    .run();
+}
+
+export async function markPushSent(postId: string): Promise<void> {
+  const db = getDb();
+  await db
+    .prepare('UPDATE blog_posts SET push_sent_at = ? WHERE id = ?')
     .bind(nowIso(), postId)
     .run();
 }

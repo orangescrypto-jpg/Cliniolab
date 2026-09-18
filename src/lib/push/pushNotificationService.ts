@@ -3,6 +3,18 @@ import { sendWebPush, type PushPayload } from './webPush';
 import { getVapidKeysForSigning, getVapidSetting } from './vapidConfig';
 import type { FeatureFlagKey } from '@/types';
 
+// Same convention as src/lib/email/templates/newsletterEmail.ts. Needed
+// here because push notification `url` (click-through) and `image`
+// (hero banner) both require absolute URLs — a relative path silently
+// fails to load as a notification image, and can't reliably resolve on
+// click from a native OS notification the way an in-app link does.
+const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || 'https://cliniolab.com';
+
+function absolutize(path: string): string {
+  if (/^https?:\/\//.test(path)) return path;
+  return `${BASE_URL}${path.startsWith('/') ? '' : '/'}${path}`;
+}
+
 /**
  * One flag per notification type, same convention as the existing
  * email_* flags. All default enabled (feature_flags defaults enabled
@@ -12,6 +24,7 @@ export const PUSH_NOTIFICATION_FLAGS = {
   inactivityNudge: 'push_inactivity_nudge',
   commentReply: 'push_comment_reply',
   dailyQuiz: 'push_daily_quiz',
+  blogNewPost: 'push_blog_new_post',
 } as const satisfies Record<string, FeatureFlagKey>;
 
 /**
@@ -93,4 +106,35 @@ export async function sendDailyQuizPush(userId: string, quizTitle: string, quizU
     body: quizTitle,
     url: quizUrl,
   });
+}
+
+/**
+ * Broadcasts "new blog post" to every user with a push subscription,
+ * same fan-out as the daily-quiz cron (listSubscribedUserIds + one send
+ * per user — there's no true broadcast/multicast endpoint in Web Push,
+ * each subscription needs its own encrypted payload). Gated by the
+ * push_blog_new_post feature flag like every other push type. Returns
+ * how many sends were attempted so the caller (the blog publish route)
+ * can log/report it; PUSH_NOTIFICATION_FLAGS-gated sends that no-op
+ * (flag off, VAPID unset) still count as "attempted" here since the
+ * caller only uses this to mark the post as sent, not to retry.
+ */
+export async function sendBlogPushBroadcast(
+  postTitle: string,
+  postExcerpt: string,
+  postUrl: string,
+  coverImageUrl?: string | null
+): Promise<number> {
+  const userIds = await pushSubscriptionService.listSubscribedUserIds();
+  let attempted = 0;
+  for (const userId of userIds) {
+    await sendPushToUserIfEnabled(userId, PUSH_NOTIFICATION_FLAGS.blogNewPost, {
+      title: 'New on the Cliniolab blog',
+      body: postExcerpt || postTitle,
+      url: absolutize(postUrl),
+      image: coverImageUrl ? absolutize(coverImageUrl) : undefined,
+    }).catch(() => {});
+    attempted++;
+  }
+  return attempted;
 }

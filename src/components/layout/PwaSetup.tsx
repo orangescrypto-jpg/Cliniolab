@@ -8,6 +8,29 @@ interface BeforeInstallPromptEvent extends Event {
   userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>;
 }
 
+const DENIED_HINT_DISMISSED_KEY = 'push_denied_hint_dismissed_at';
+const DENIED_HINT_RESHOW_AFTER_MS = 1000 * 60 * 60 * 24 * 14;
+
+type BrowserKind = 'chrome' | 'firefox' | 'safari' | 'edge' | 'other';
+
+function detectBrowser(): BrowserKind {
+  if (typeof navigator === 'undefined') return 'other';
+  const ua = navigator.userAgent;
+  if (/Edg\//.test(ua)) return 'edge';
+  if (/Firefox\//.test(ua)) return 'firefox';
+  if (/Chrome\//.test(ua) || /CriOS\//.test(ua)) return 'chrome';
+  if (/Safari\//.test(ua) && !/Chrome\//.test(ua)) return 'safari';
+  return 'other';
+}
+
+const UNBLOCK_STEPS: Record<BrowserKind, string> = {
+  chrome: 'Tap the lock/info icon next to the address bar → Permissions → Notifications → Allow.',
+  edge: 'Tap the lock/info icon next to the address bar → Permissions for this site → Notifications → Allow.',
+  firefox: 'Tap the lock icon next to the address bar → Permissions → Notifications → Allow.',
+  safari: 'Open Settings → Safari → Notifications (or Websites → Notifications) and allow this site.',
+  other: "Open your browser's site settings for this page and allow Notifications.",
+};
+
 function urlBase64ToUint8Array(base64String: string): Uint8Array<ArrayBuffer> {
   const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
   const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
@@ -30,6 +53,8 @@ export function PwaSetup() {
   const [showInstallBanner, setShowInstallBanner] = useState(false);
   const [showNotifyBanner, setShowNotifyBanner] = useState(false);
   const [subscribeFailed, setSubscribeFailedState] = useState(false);
+  const [showDeniedHint, setShowDeniedHint] = useState(false);
+  const [browser, setBrowser] = useState<BrowserKind>('other');
 
   function setSubscribeFailed(failed: boolean) {
     setSubscribeFailedState(failed);
@@ -62,8 +87,30 @@ export function PwaSetup() {
   }, []);
 
   useEffect(() => {
+    setBrowser(detectBrowser());
+  }, []);
+
+  useEffect(() => {
     if (!user) return;
     if (typeof Notification === 'undefined') return;
+
+    if (Notification.permission === 'denied') {
+      // Browsers never re-prompt once denied, and re-calling
+      // requestPermission() just resolves to "denied" again with no
+      // UI — so there's no "ask again" path here, only pointing the
+      // user at their own browser's site-settings toggle. Shown at
+      // most every 14 days per dismissal, same reshow cadence as the
+      // rest of this component's banners.
+      let dismissedAt: string | null = null;
+      try {
+        dismissedAt = localStorage.getItem(DENIED_HINT_DISMISSED_KEY);
+      } catch {
+        // ignore - treat as not-dismissed if storage is unavailable
+      }
+      const recentlyDismissed = dismissedAt !== null && Date.now() - parseInt(dismissedAt, 10) < DENIED_HINT_RESHOW_AFTER_MS;
+      if (!recentlyDismissed) setShowDeniedHint(true);
+      return;
+    }
 
     let failedBefore = false;
     try {
@@ -76,6 +123,15 @@ export function PwaSetup() {
       setShowNotifyBanner(true);
     }
   }, [user]);
+
+  function dismissDeniedHint() {
+    setShowDeniedHint(false);
+    try {
+      localStorage.setItem(DENIED_HINT_DISMISSED_KEY, Date.now().toString());
+    } catch {
+      // ignore - dismissal just won't persist across reloads in this session
+    }
+  }
 
   async function handleInstall() {
     if (!installEvent) return;
@@ -165,6 +221,21 @@ export function PwaSetup() {
               className="rounded-md px-3 py-1.5 text-xs font-medium text-ink-500"
             >
               Not now
+            </button>
+          </div>
+        </div>
+      )}
+
+      {showDeniedHint && (
+        <div className="fixed bottom-4 left-1/2 z-50 w-[92%] max-w-sm -translate-x-1/2 rounded-lg border border-ink-100 bg-ink-800 p-4 text-white shadow-lg">
+          <p className="text-sm font-medium">Notifications are blocked for this site</p>
+          <p className="mt-1 text-xs text-ink-200">{UNBLOCK_STEPS[browser]}</p>
+          <div className="mt-3 flex gap-2">
+            <button
+              onClick={dismissDeniedHint}
+              className="rounded-md px-3 py-1.5 text-xs font-medium text-ink-200 hover:text-white"
+            >
+              Dismiss
             </button>
           </div>
         </div>

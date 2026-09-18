@@ -86,8 +86,11 @@ self.addEventListener('fetch', (event) => {
   }
 });
 
-// Push notifications (e.g. comment replies, quiz result follow-ups).
-// The push payload is expected to be JSON: { title, body, url }.
+// Push notifications (e.g. comment replies, quiz result follow-ups,
+// new blog posts). The push payload is expected to be JSON:
+// { title, body, url, tag?, image? }. `image` is a large banner-style
+// hero image shown inline in the notification body — supported on
+// Android Chrome, harmlessly ignored where it isn't (e.g. iOS Safari).
 self.addEventListener('push', (event) => {
   if (!event.data) return;
 
@@ -98,14 +101,16 @@ self.addEventListener('push', (event) => {
     payload.body = event.data.text();
   }
 
-  event.waitUntil(
-    self.registration.showNotification(payload.title, {
-      body: payload.body,
-      icon: '/icon-192.png',
-      badge: '/icon-192.png',
-      data: { url: payload.url },
-    })
-  );
+  const options = {
+    body: payload.body,
+    icon: '/icon-192.png',
+    badge: '/icon-192.png',
+    tag: payload.tag,
+    data: { url: payload.url },
+  };
+  if (payload.image) options.image = payload.image;
+
+  event.waitUntil(self.registration.showNotification(payload.title, options));
 });
 
 self.addEventListener('notificationclick', (event) => {

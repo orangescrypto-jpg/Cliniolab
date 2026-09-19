@@ -21,6 +21,7 @@ export default function DashboardPage() {
   const [deletingQuizId, setDeletingQuizId] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [copiedQuizId, setCopiedQuizId] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<'quizzes' | 'flashcards'>('quizzes');
 
   async function copyShareLink(quizId: string, shareSlug: string) {
     const url = `${window.location.origin}/quizzes/shared/${shareSlug}`;
@@ -193,90 +194,119 @@ export default function DashboardPage() {
         </Card>
       )}
 
-      <div className="mt-10 flex items-center justify-between">
-        <h2 className="font-display text-xl font-semibold text-ink-800">My quizzes</h2>
-        <div className="flex gap-2">
-          <Link href="/quizzes/bulk-upload">
-            <Button size="sm" variant="secondary">Upload many</Button>
-          </Link>
-          <Link href="/quizzes/new"><Button size="sm">+ New quiz</Button></Link>
-        </div>
-      </div>
-      <div className="mt-4 space-y-3">
-        {deleteError && (
-          <p className="rounded-md border border-critical-200 bg-critical-50 px-4 py-3 text-sm text-critical-600">
-            {deleteError}
-          </p>
-        )}
-        {myQuizzes.map((quiz) => (
-          <Card key={quiz.id} className="flex flex-wrap items-center justify-between gap-3 p-4">
-            <div>
-              <p className="font-medium text-ink-800">{quiz.title}</p>
-              <p className="text-xs text-ink-400">
-                {quiz.visibility === 'public' ? 'Public' : 'Private'} · {quiz.questionCount} questions ·{' '}
-                {quiz.attemptCount} attempts
-              </p>
-              {quiz.visibility === 'private' && quiz.shareSlug && (
-                <p className="mt-1 font-mono text-xs text-ink-400">
-                  /quizzes/shared/{quiz.shareSlug}
-                  {quiz.linkExpiresAt && ` · expires ${new Date(quiz.linkExpiresAt).toLocaleDateString()}`}
-                </p>
-              )}
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <Link href={`/quizzes/${quiz.id}/edit`}>
-                <Button size="sm" variant="secondary">Edit</Button>
-              </Link>
-              {quiz.visibility === 'private' && quiz.shareSlug && (
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  onClick={() => copyShareLink(quiz.id, quiz.shareSlug!)}
-                >
-                  {copiedQuizId === quiz.id ? 'Copied!' : 'Copy link'}
-                </Button>
-              )}
-              {quiz.visibility === 'private' && (
-                <Button size="sm" variant="secondary" onClick={() => regenerateLink(quiz.id)}>
-                  Regenerate link
-                </Button>
-              )}
-              <Button size="sm" variant="secondary" onClick={() => toggleVisibility(quiz.id, quiz.visibility)}>
-                Make {quiz.visibility === 'public' ? 'private' : 'public'}
-              </Button>
-              <Button
-                size="sm"
-                variant="danger"
-                onClick={() => deleteQuiz(quiz.id)}
-                disabled={deletingQuizId === quiz.id}
-              >
-                {deletingQuizId === quiz.id ? 'Deleting…' : 'Delete'}
-              </Button>
-            </div>
-          </Card>
-        ))}
-        {myQuizzes.length === 0 && (
-          <p className="text-sm text-ink-400">You haven&apos;t created any quizzes yet.</p>
-        )}
+      <div className="mt-10 flex gap-2 border-b border-ink-100">
+        <button
+          type="button"
+          onClick={() => setActiveTab('quizzes')}
+          className={`-mb-px flex-1 border-b-2 px-4 py-3 text-center font-display text-base font-semibold transition-colors sm:flex-none sm:text-lg ${
+            activeTab === 'quizzes'
+              ? 'border-pulse-600 text-ink-800'
+              : 'border-transparent text-ink-400 hover:text-ink-600'
+          }`}
+        >
+          My quizzes <span className="ml-1 font-mono text-xs text-ink-400">({myQuizzes.length})</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab('flashcards')}
+          className={`-mb-px flex-1 border-b-2 px-4 py-3 text-center font-display text-base font-semibold transition-colors sm:flex-none sm:text-lg ${
+            activeTab === 'flashcards'
+              ? 'border-pulse-600 text-ink-800'
+              : 'border-transparent text-ink-400 hover:text-ink-600'
+          }`}
+        >
+          My flashcards <span className="ml-1 font-mono text-xs text-ink-400">({myFlashcardSets.length})</span>
+        </button>
       </div>
 
-      <div className="mt-10 flex items-center justify-between">
-        <h2 className="font-display text-xl font-semibold text-ink-800">My flashcard sets</h2>
-        <div className="flex gap-2">
-          <Link href="/flashcards/bulk-upload">
-            <Button size="sm" variant="secondary">Upload many</Button>
-          </Link>
-          <Link href="/flashcards/new"><Button size="sm">+ New flashcard set</Button></Link>
+      {activeTab === 'quizzes' && (
+        <div>
+          <div className="mt-4 flex justify-end gap-2">
+            <Link href="/quizzes/bulk-upload">
+              <Button size="sm" variant="secondary">Upload many</Button>
+            </Link>
+            <Link href="/quizzes/new"><Button size="sm">+ New quiz</Button></Link>
+          </div>
+        <div className="mt-4 space-y-3">
+          {deleteError && (
+            <p className="rounded-md border border-critical-200 bg-critical-50 px-4 py-3 text-sm text-critical-600">
+              {deleteError}
+            </p>
+          )}
+          {myQuizzes.map((quiz) => (
+            <Card key={quiz.id} className="flex flex-wrap items-center justify-between gap-3 p-4">
+              <div>
+                <p className="font-medium text-ink-800">{quiz.title}</p>
+                <p className="text-xs text-ink-400">
+                  {quiz.visibility === 'public' ? 'Public' : 'Private'} · {quiz.questionCount} questions ·{' '}
+                  {quiz.attemptCount} attempts
+                </p>
+                {quiz.visibility === 'private' && quiz.shareSlug && (
+                  <p className="mt-1 font-mono text-xs text-ink-400">
+                    /quizzes/shared/{quiz.shareSlug}
+                    {quiz.linkExpiresAt && ` · expires ${new Date(quiz.linkExpiresAt).toLocaleDateString()}`}
+                  </p>
+                )}
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Link href={`/quizzes/${quiz.id}/edit`}>
+                  <Button size="sm" variant="secondary">Edit</Button>
+                </Link>
+                {quiz.visibility === 'private' && quiz.shareSlug && (
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => copyShareLink(quiz.id, quiz.shareSlug!)}
+                  >
+                    {copiedQuizId === quiz.id ? 'Copied!' : 'Copy link'}
+                  </Button>
+                )}
+                {quiz.visibility === 'private' && (
+                  <Button size="sm" variant="secondary" onClick={() => regenerateLink(quiz.id)}>
+                    Regenerate link
+                  </Button>
+                )}
+                <Button size="sm" variant="secondary" onClick={() => toggleVisibility(quiz.id, quiz.visibility)}>
+                  Make {quiz.visibility === 'public' ? 'private' : 'public'}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="danger"
+                  onClick={() => deleteQuiz(quiz.id)}
+                  disabled={deletingQuizId === quiz.id}
+                >
+                  {deletingQuizId === quiz.id ? 'Deleting…' : 'Delete'}
+                </Button>
+              </div>
+            </Card>
+          ))}
+          {myQuizzes.length === 0 && (
+            <p className="text-sm text-ink-400">You haven&apos;t created any quizzes yet.</p>
+          )}
         </div>
-      </div>
-      <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
-        {myFlashcardSets.map((set) => (
-          <FlashcardSetCard key={set.id} set={set} />
-        ))}
-        {myFlashcardSets.length === 0 && (
-          <p className="text-sm text-ink-400">You haven&apos;t created any flashcard sets yet.</p>
-        )}
-      </div>
+
+        </div>
+      )}
+
+      {activeTab === 'flashcards' && (
+        <div>
+          <div className="mt-4 flex justify-end gap-2">
+            <Link href="/flashcards/bulk-upload">
+              <Button size="sm" variant="secondary">Upload many</Button>
+            </Link>
+            <Link href="/flashcards/new"><Button size="sm">+ New flashcard set</Button></Link>
+          </div>
+        <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+          {myFlashcardSets.map((set) => (
+            <FlashcardSetCard key={set.id} set={set} />
+          ))}
+          {myFlashcardSets.length === 0 && (
+            <p className="text-sm text-ink-400">You haven&apos;t created any flashcard sets yet.</p>
+          )}
+        </div>
+
+        </div>
+      )}
 
       {flaggedQuestions.length > 0 && (
         <div className="mt-10">

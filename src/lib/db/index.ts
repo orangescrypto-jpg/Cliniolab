@@ -19,6 +19,7 @@ export * as certificateService from './services/certificateService';
 export * as userService from './services/userService';
 export * as featureFlagService from './services/featureFlagService';
 export * as siteSettingsService from './services/siteSettingsService';
+export * as dailyQuizService from './services/dailyQuizService';
 export * as pushSubscriptionService from './services/pushSubscriptionService';
 export * as resourceService from './services/resourceService';
 export * as resourceCategoryService from './services/resourceCategoryService';

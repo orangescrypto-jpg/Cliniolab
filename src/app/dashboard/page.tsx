@@ -14,6 +14,7 @@ export default function DashboardPage() {
   const { user, loading } = useAuth();
   const [stats, setStats] = useState<UserDashboardStats | null>(null);
   const [certificates, setCertificates] = useState<Certificate[]>([]);
+  const [certificatesEnabled, setCertificatesEnabled] = useState(true);
   const [myQuizzes, setMyQuizzes] = useState<QuizWithStats[]>([]);
   const [myFlashcardSets, setMyFlashcardSets] = useState<FlashcardSetWithStats[]>([]);
   const [flaggedQuestions, setFlaggedQuestions] = useState<QuestionReportWithContext[]>([]);
@@ -49,6 +50,7 @@ export default function DashboardPage() {
       .then((data) => {
         setStats(data.stats);
         setCertificates(data.certificates ?? []);
+        setCertificatesEnabled(data.certificatesEnabled !== false);
       });
     fetch('/api/quizzes?mine=true')
       .then((res) => res.json())
@@ -155,7 +157,7 @@ export default function DashboardPage() {
         </Card>
       )}
 
-      <div className="mt-8 grid grid-cols-2 gap-4 sm:grid-cols-4">
+      <div className={`mt-8 grid grid-cols-2 gap-4 ${certificatesEnabled ? 'sm:grid-cols-4' : 'sm:grid-cols-3'}`}>
         <Card className="p-5 text-center">
           <p className="font-mono text-3xl font-semibold text-ink-800">{stats?.totalAttempts ?? 0}</p>
           <p className="mt-1 text-xs text-ink-400">Attempts</p>
@@ -172,10 +174,12 @@ export default function DashboardPage() {
           </p>
           <p className="mt-1 text-xs text-ink-400">Best score</p>
         </Card>
-        <Card className="p-5 text-center">
-          <p className="font-mono text-3xl font-semibold text-ink-800">{stats?.certificatesEarned ?? 0}</p>
-          <p className="mt-1 text-xs text-ink-400">Certificates</p>
-        </Card>
+        {certificatesEnabled && (
+          <Card className="p-5 text-center">
+            <p className="font-mono text-3xl font-semibold text-ink-800">{stats?.certificatesEarned ?? 0}</p>
+            <p className="mt-1 text-xs text-ink-400">Certificates</p>
+          </Card>
+        )}
       </div>
 
       {stats && stats.scoreHistory.length > 0 && (

@@ -16,5 +16,6 @@ export async function GET() {
   return NextResponse.json({
     stats: certificatesEnabled ? stats : { ...stats, certificatesEarned: 0 },
     certificates,
+    certificatesEnabled,
   });
 }

@@ -15,19 +15,27 @@ export async function GET() {
   const denied = await requireAdmin();
   if (denied) return denied;
 
-  const [settings, schedule, history, today] = await Promise.all([
-    dailyQuizService.getSettings(),
-    dailyQuizService.listSchedule(),
-    dailyQuizService.listRecentHistory(14),
-    dailyQuizService.getTodaysDailyQuiz(),
-  ]);
-  return NextResponse.json({
-    settings,
-    schedule,
-    history,
-    todayDate: dailyQuizService.getLagosDateString(),
-    today: today ? { id: today.id, title: today.title } : null,
-  });
+  try {
+    const [settings, schedule, history, today] = await Promise.all([
+      dailyQuizService.getSettings(),
+      dailyQuizService.listSchedule(),
+      dailyQuizService.listRecentHistory(14),
+      dailyQuizService.getTodaysDailyQuiz(),
+    ]);
+    return NextResponse.json({
+      settings,
+      schedule,
+      history,
+      todayDate: dailyQuizService.getLagosDateString(),
+      today: today ? { id: today.id, title: today.title } : null,
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Unknown error';
+    const hint = /no such table/i.test(msg)
+      ? 'Daily quiz tables are missing. Run the 2026-09-daily-quiz-upgrade.sql migration.'
+      : msg;
+    return NextResponse.json({ error: hint }, { status: 500 });
+  }
 }
 
 /** Save settings. Body: { poolSize?, noRepeatDays?, skipCompletedForPush? } */

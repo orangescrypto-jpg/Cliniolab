@@ -20,6 +20,7 @@ const links = [
   { href: '/admin/banners', label: 'Banners' },
   { href: '/admin/adsense', label: 'Google AdSense' },
   { href: '/admin/notifications', label: 'Push Notifications' },
+  { href: '/admin/daily-quiz', label: 'Daily Quiz' },
   { href: '/admin/related-content', label: 'Related Content' },
   { href: '/admin/leaderboard', label: 'Leaderboard' },
   { href: '/admin/cookie-consent', label: 'Cookie Consent' },

@@ -40,13 +40,23 @@ export default function AdminDailyQuizPage() {
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  const [loadError, setLoadError] = useState<string | null>(null);
+
   async function load() {
-    const res = await fetch('/api/admin/daily-quiz');
-    if (!res.ok) return;
-    const json: AdminData = await res.json();
-    setData(json);
-    setSettings(json.settings);
-    setDate((d) => d || json.todayDate);
+    try {
+      const res = await fetch('/api/admin/daily-quiz');
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setLoadError(json.error ?? `Failed to load (${res.status})`);
+        return;
+      }
+      setLoadError(null);
+      setData(json as AdminData);
+      setSettings((json as AdminData).settings);
+      setDate((d) => d || (json as AdminData).todayDate);
+    } catch {
+      setLoadError('Network error while loading.');
+    }
   }
 
   useEffect(() => {
@@ -126,6 +136,17 @@ export default function AdminDailyQuizPage() {
     }
   }
 
+  if (loadError) {
+    return (
+      <div>
+        <h1 className="font-display text-2xl font-semibold text-ink-800">Daily quiz</h1>
+        <p className="mt-4 rounded-md border border-critical-200 bg-critical-50 px-4 py-3 text-sm text-critical-600">
+          {loadError}
+        </p>
+        <Button className="mt-4" size="sm" onClick={load}>Retry</Button>
+      </div>
+    );
+  }
   if (!data || !settings) return <p className="text-sm text-ink-400">Loading…</p>;
 
   return (

@@ -1,121 +1,77 @@
-'use client';
+import type { Metadata } from 'next';
+import { categoryService, quizService } from '@/lib/db';
+import { SubcategoryClient } from './SubcategoryClient';
 
-import { Suspense, useEffect, useState } from 'react';
-import { useParams, useSearchParams } from 'next/navigation';
-import { QuizCard } from '@/components/quiz/QuizCard';
-import { LeaderboardList } from '@/components/quiz/LeaderboardList';
-import { Pagination } from '@/components/ui/Pagination';
-import { useAuth } from '@/lib/auth/AuthProvider';
-import type { Category, LeaderboardEntry, QuizWithStats, Subcategory } from '@/types';
-
+const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || 'https://cliniolab.com';
 const PAGE_SIZE = 25;
 
-function SubcategoryPageContent() {
-  const params = useParams<{ slug: string }>();
-  const searchParams = useSearchParams();
-  const categorySlug = searchParams.get('category');
-  const { user } = useAuth();
-
-  const [subcategory, setSubcategory] = useState<Subcategory | null>(null);
-  const [category, setCategory] = useState<Category | null>(null);
-  const [quizzes, setQuizzes] = useState<QuizWithStats[]>([]);
-  const [total, setTotal] = useState(0);
-  const [page, setPage] = useState(1);
-  const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
-  const [leaderboardEnabled, setLeaderboardEnabled] = useState(true);
-  const [leaderboardCurrentUserRank, setLeaderboardCurrentUserRank] = useState<number | null>(null);
-
-  useEffect(() => {
-    fetch('/api/categories')
-      .then((res) => res.json())
-      .then((data) => {
-        const cat = (data.categories as Category[]).find((c) => c.slug === categorySlug) ?? null;
-        setCategory(cat);
-        const sub = (data.subcategories as Subcategory[]).find((s) => s.slug === params.slug) ?? null;
-        setSubcategory(sub);
-
-        if (cat) {
-          fetch(`/api/leaderboard/category/${cat.id}`)
-            .then((res) => res.json())
-            .then((lbData) => {
-              setLeaderboardEnabled(lbData.enabled);
-              setLeaderboard(lbData.entries ?? []);
-              setLeaderboardCurrentUserRank(lbData.currentUserRank ?? null);
-            });
-        }
-      });
-  }, [params.slug, categorySlug]);
-
-  // Quiz list re-fetches whenever the subcategory resolves or the page
-  // changes, kept separate from the lookup above so paging doesn't
-  // re-trigger the category/subcategory/leaderboard fetch every time.
-  useEffect(() => {
-    if (!subcategory) return;
-    fetch(`/api/quizzes?subcategoryId=${subcategory.id}&page=${page}&pageSize=${PAGE_SIZE}`)
-      .then((res) => res.json())
-      .then((data) => {
-        setQuizzes(data.quizzes ?? []);
-        setTotal(data.total ?? 0);
-      });
-  }, [subcategory, page]);
-
-  useEffect(() => {
-    setPage(1);
-  }, [subcategory?.id]);
-
-  return (
-    <div className="mx-auto max-w-7xl px-6 py-16">
-      {category && <p className="font-mono text-xs uppercase tracking-widest text-pulse-600">{category.name}</p>}
-      <h1 className="mt-2 font-display text-3xl font-semibold text-ink-800">
-        {subcategory?.name ?? 'Loading…'}
-      </h1>
-
-      <div className="mt-10 grid grid-cols-1 gap-10 lg:grid-cols-3">
-        <div className="lg:col-span-2">
-          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
-            {quizzes.map((quiz) => (
-              <QuizCard key={quiz.id} quiz={quiz} />
-            ))}
-            {quizzes.length === 0 && (
-              <p className="col-span-full text-sm text-ink-400">No quizzes in this subcategory yet.</p>
-            )}
-          </div>
-          <Pagination
-            page={page}
-            pageSize={PAGE_SIZE}
-            total={total}
-            onPageChange={(p) => {
-              setPage(p);
-              window.scrollTo({ top: 0, behavior: 'smooth' });
-            }}
-            className="mt-8"
-          />
-        </div>
-        {leaderboardEnabled && category && (
-          <div>
-            <LeaderboardList
-              entries={leaderboard}
-              title={`${category.name} Leaders`}
-              currentUserId={user?.id ?? null}
-              currentUserRank={leaderboardCurrentUserRank}
-            />
-          </div>
-        )}
-      </div>
-    </div>
-  );
+interface PageProps {
+  params: Promise<{ slug: string }>;
+  searchParams: Promise<{ category?: string; page?: string }>;
 }
 
-export default function SubcategoryPage() {
+async function resolveSubcategory(slug: string, categorySlug?: string) {
+  if (categorySlug) {
+    const category = await categoryService.getCategoryBySlug(categorySlug).catch(() => null);
+    if (category) {
+      const subcategory = await categoryService.getSubcategoryBySlug(category.id, slug).catch(() => null);
+      if (subcategory) return { category, subcategory };
+    }
+  }
+  // Fallback for links without a ?category= param: scan all subcategories.
+  const subcategories = await categoryService.listSubcategories();
+  const subcategory = subcategories.find((s) => s.slug === slug) ?? null;
+  if (!subcategory) return { category: null, subcategory: null };
+  const categories = await categoryService.listCategories();
+  const category = categories.find((c) => c.id === subcategory.categoryId) ?? null;
+  return { category, subcategory };
+}
+
+export async function generateMetadata({ params, searchParams }: PageProps): Promise<Metadata> {
+  const { slug } = await params;
+  const { category: categorySlug } = await searchParams;
+  const { category, subcategory } = await resolveSubcategory(slug, categorySlug);
+
+  if (!subcategory) {
+    return { title: 'Category | Cliniolab' };
+  }
+
+  const title = category
+    ? `${subcategory.name} — ${category.name} Quizzes | Cliniolab`
+    : `${subcategory.name} Quizzes | Cliniolab`;
+  const description = `Practice ${subcategory.name} quizzes${category ? ` in ${category.name}` : ''} on Cliniolab, a nursing and clinical exam practice platform.`;
+  const canonical = `${BASE_URL}/categories/${subcategory.slug}${category ? `?category=${category.slug}` : ''}`;
+
+  return {
+    title,
+    description,
+    alternates: { canonical },
+    openGraph: { title, description, type: 'website', url: canonical },
+    twitter: { card: 'summary', title, description },
+  };
+}
+
+export default async function SubcategoryPage({ params, searchParams }: PageProps) {
+  const { slug } = await params;
+  const { category: categorySlug } = await searchParams;
+  const { category, subcategory } = await resolveSubcategory(slug, categorySlug);
+
+  const initialQuizzes = subcategory
+    ? await quizService.listQuizzesBySubcategoryPaginated(subcategory.id, 1, PAGE_SIZE).catch(() => ({
+        quizzes: [],
+        total: 0,
+        page: 1,
+        pageSize: PAGE_SIZE,
+      }))
+    : { quizzes: [], total: 0, page: 1, pageSize: PAGE_SIZE };
+
   return (
-    <Suspense
-      fallback={
-        <div className="mx-auto max-w-7xl px-6 py-16">
-          <p className="text-sm text-ink-400">Loading…</p>
-        </div>
-      }
-    >
-      <SubcategoryPageContent />
-    </Suspense>
+    <SubcategoryClient
+      category={category}
+      subcategory={subcategory}
+      initialQuizzes={initialQuizzes.quizzes}
+      initialTotal={initialQuizzes.total}
+      pageSize={PAGE_SIZE}
+    />
   );
 }

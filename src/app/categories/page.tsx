@@ -1,22 +1,29 @@
-'use client';
-
+import type { Metadata } from 'next';
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
 import { Card } from '@/components/ui/Card';
-import type { Category, Subcategory } from '@/types';
+import { categoryService } from '@/lib/db';
 
-export default function CategoriesPage() {
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [subcategories, setSubcategories] = useState<Subcategory[]>([]);
+const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || 'https://cliniolab.com';
 
-  useEffect(() => {
-    fetch('/api/categories')
-      .then((res) => res.json())
-      .then((data) => {
-        setCategories(data.categories ?? []);
-        setSubcategories(data.subcategories ?? []);
-      });
-  }, []);
+export const metadata: Metadata = {
+  title: 'Categories | Cliniolab',
+  description:
+    'Browse nursing and clinical exam practice quizzes by subject area on Cliniolab.',
+  alternates: { canonical: `${BASE_URL}/categories` },
+  openGraph: {
+    title: 'Categories | Cliniolab',
+    description:
+      'Browse nursing and clinical exam practice quizzes by subject area on Cliniolab.',
+    type: 'website',
+    url: `${BASE_URL}/categories`,
+  },
+};
+
+export default async function CategoriesPage() {
+  const [categories, subcategories] = await Promise.all([
+    categoryService.listCategories(),
+    categoryService.listSubcategories(),
+  ]);
 
   return (
     <div className="mx-auto max-w-7xl px-6 py-16">

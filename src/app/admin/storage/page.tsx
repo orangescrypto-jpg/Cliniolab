@@ -55,6 +55,9 @@ export default function AdminStoragePage() {
   const [busy, setBusy] = useState<string | null>(null);
   const [retentionRun, setRetentionRun] = useState<RetentionRun | null>(null);
   const [orphanRun, setOrphanRun] = useState<OrphanRun | null>(null);
+  // One clear banner per action so the admin always sees "Done" or an error
+  // next to the button they pressed, even when nothing was deleted.
+  const [status, setStatus] = useState<{ action: string; kind: 'success' | 'error'; message: string } | null>(null);
 
   async function load() {
     const res = await fetch('/api/admin/retention');
@@ -99,25 +102,77 @@ export default function AdminStoragePage() {
 
     setBusy(action);
     setError(null);
+    setStatus(null);
     try {
       const res = await fetch('/api/admin/retention/run', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action }),
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setError(data.error ?? 'Cleanup failed.');
+        setStatus({ action, kind: 'error', message: data.error ?? `Failed (error ${res.status}). Nothing was deleted.` });
         return;
       }
-      if (action === 'retention') setRetentionRun(data.result);
-      else setOrphanRun(data.result);
+
+      if (action === 'retention') {
+        const r: RetentionRun = data.result;
+        setRetentionRun(r);
+        const total = r.attemptAnswersDeleted + r.emailLogDeleted + r.bannerStatsDeleted;
+        setStatus({
+          action,
+          kind: 'success',
+          message:
+            total === 0
+              ? 'Done. Nothing to delete, everything is already within the time windows.'
+              : `Done. Deleted ${r.attemptAnswersDeleted.toLocaleString()} answer rows, ${r.emailLogDeleted.toLocaleString()} email log rows and ${r.bannerStatsDeleted.toLocaleString()} banner stat rows.` +
+                (r.complete ? '' : ' More remains, press the button again to continue.'),
+        });
+      } else {
+        const r: OrphanRun = data.result;
+        setOrphanRun(r);
+        if (r.aborted) {
+          setStatus({ action, kind: 'error', message: r.aborted });
+        } else if (action === 'orphans-preview') {
+          setStatus({
+            action,
+            kind: 'success',
+            message:
+              r.orphaned === 0
+                ? `Preview complete. Scanned ${r.scanned.toLocaleString()} images and found no unused ones. Nothing was deleted.`
+                : `Preview complete. Found ${r.orphaned.toLocaleString()} unused images (${formatBytes(r.orphanedBytes)}). Nothing was deleted.`,
+          });
+        } else {
+          setStatus({
+            action,
+            kind: 'success',
+            message:
+              r.deleted === 0
+                ? 'Done. No unused images to delete.'
+                : `Done. Deleted ${r.deleted.toLocaleString()} unused images, freed ${formatBytes(r.orphanedBytes)}.`,
+          });
+        }
+      }
       load();
     } catch {
-      setError('Network error. Please try again.');
+      setStatus({ action, kind: 'error', message: 'Network error. Nothing was deleted. Please try again.' });
     } finally {
       setBusy(null);
     }
+  }
+
+  function renderStatus(action: string[]) {
+    if (!status || !action.includes(status.action)) return null;
+    const ok = status.kind === 'success';
+    return (
+      <p
+        role="status"
+        className={`mt-2 rounded-md px-3 py-2 text-sm ${ok ? 'bg-green-50 text-green-700' : 'bg-red-50 text-critical-500'}`}
+      >
+        {ok ? '\u2713 ' : '\u2717 '}
+        {status.message}
+      </p>
+    );
   }
 
   function numberField(label: string, field: keyof Settings, help: string) {
@@ -129,7 +184,7 @@ export default function AdminStoragePage() {
           min={0}
           max={3650}
           value={settings[field]}
-          onChange={(e) => setSettings({ ...settings, [field]: Math.max(0, Number(e.target.value) || 0) })}
+          onChange={(e: { target: { value: string } }) => setSettings({ ...settings, [field]: Math.max(0, Number(e.target.value) || 0) })}
           className="mt-1 w-32 rounded-md border border-ink-100 px-4 py-2 text-sm focus:border-pulse-400 focus:outline-none"
         />
         <span className="ml-2 text-sm text-ink-500">days</span>
@@ -167,7 +222,13 @@ export default function AdminStoragePage() {
           <Button size="sm" onClick={save} disabled={saving}>
             {saving ? 'Saving…' : 'Save'}
           </Button>
-          {saved && <span className="ml-3 text-xs text-pulse-600">Saved</span>}
+          {saved && (
+            <p role="status" className="mt-2 rounded-md bg-green-50 px-3 py-2 text-sm text-green-700">
+              {'\u2713'} Saved. Quiz answers older than {settings.attemptAnswersDays === 0 ? '(never deleted)' : `${settings.attemptAnswersDays} days`} will be
+              removed by the weekly cleanup.
+            </p>
+          )}
+          {error && <p className="mt-2 rounded-md bg-red-50 px-3 py-2 text-sm text-critical-500">{'\u2717'} {error}</p>}
         </div>
       </Card>
 
@@ -200,14 +261,7 @@ export default function AdminStoragePage() {
           <Button size="sm" variant="secondary" onClick={() => run('retention')} disabled={busy !== null}>
             {busy === 'retention' ? 'Cleaning…' : 'Delete old data now'}
           </Button>
-          {retentionRun && (
-            <p className="text-sm text-ink-600">
-              Deleted {retentionRun.attemptAnswersDeleted.toLocaleString()} answer rows,{' '}
-              {retentionRun.emailLogDeleted.toLocaleString()} email log rows,{' '}
-              {retentionRun.bannerStatsDeleted.toLocaleString()} banner stat rows.
-              {!retentionRun.complete && ' More remains. Press the button again to continue.'}
-            </p>
-          )}
+          {renderStatus(['retention'])}
         </div>
 
         <div className="space-y-2 border-t border-ink-100 pt-4">
@@ -223,24 +277,13 @@ export default function AdminStoragePage() {
               {busy === 'orphans-delete' ? 'Deleting…' : 'Delete unused images'}
             </Button>
           </div>
-          {orphanRun && (
-            <div className="text-sm text-ink-600">
-              <p>
-                Scanned {orphanRun.scanned.toLocaleString()} images. Unused: {orphanRun.orphaned.toLocaleString()} (
-                {formatBytes(orphanRun.orphanedBytes)}).
-                {!orphanRun.dryRun && orphanRun.aborted === null && ` Deleted ${orphanRun.deleted.toLocaleString()}.`}
-                {orphanRun.skippedTooRecent > 0 && ` ${orphanRun.skippedTooRecent} skipped as too recent.`}
-              </p>
-              {orphanRun.aborted && <p className="mt-1 text-critical-500">{orphanRun.aborted}</p>}
-              {orphanRun.dryRun && orphanRun.sampleOrphans.length > 0 && (
-                <p className="mt-1 break-all text-xs text-ink-400">e.g. {orphanRun.sampleOrphans.join(', ')}</p>
-              )}
-            </div>
+          {renderStatus(['orphans-preview', 'orphans-delete'])}
+          {orphanRun && orphanRun.dryRun && orphanRun.sampleOrphans.length > 0 && (
+            <p className="mt-1 break-all text-xs text-ink-400">e.g. {orphanRun.sampleOrphans.join(', ')}</p>
           )}
         </div>
       </Card>
 
-      {error && <p className="mt-3 text-sm text-critical-500">{error}</p>}
     </div>
   );
 }

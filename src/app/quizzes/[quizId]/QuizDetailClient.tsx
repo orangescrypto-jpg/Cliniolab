@@ -8,7 +8,7 @@ import { StudyModeRunner } from '@/components/quiz/StudyModeRunner';
 import { CommentThread } from '@/components/quiz/CommentThread';
 import { ShareButton } from '@/components/quiz/ShareButton';
 import { QuizLeaderboardSection } from '@/components/quiz/QuizLeaderboardSection';
-import { CreatorProfileCard } from './CreatorProfileCard';
+import { CreatorProfileCard } from '@/components/creator/CreatorProfileCard';
 import { RelatedQuizzes } from '@/components/quiz/RelatedQuizzes';
 import { Button } from '@/components/ui/Button';
 import { Card, DifficultyBadge } from '@/components/ui/Card';

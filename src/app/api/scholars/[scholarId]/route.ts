@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getCurrentUser } from '@/lib/auth/currentUser';
 import { permissions } from '@/lib/auth/permissions';
 import { scholarService } from '@/lib/db';
+import { cleanupImagesAfterDelete } from '@/lib/storage/mediaCleanup';
 
 interface RouteParams {
   params: Promise<{ scholarId: string }>;
@@ -44,6 +45,10 @@ export async function DELETE(_request: Request, { params }: RouteParams) {
     return NextResponse.json({ error: 'Only admins/moderators can delete a scholar' }, { status: 403 });
   }
 
+  const existing = await scholarService.getScholarById(scholarId);
   await scholarService.deleteScholar(scholarId);
+  if (existing) {
+    await cleanupImagesAfterDelete([existing.photoUrl], { table: 'scholars_of_the_day', id: scholarId });
+  }
   return NextResponse.json({ success: true });
 }

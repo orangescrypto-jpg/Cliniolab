@@ -4,6 +4,7 @@ import { permissions } from '@/lib/auth/permissions';
 import { cmsService, userService } from '@/lib/db';
 import { sendNewsletterForPost } from '@/lib/email/emailService';
 import { sendBlogPushBroadcast } from '@/lib/push/pushNotificationService';
+import { cleanupImagesAfterDelete } from '@/lib/storage/mediaCleanup';
 import type { BlogContentFormat, BlogStatus } from '@/types';
 
 interface RouteParams {
@@ -81,6 +82,12 @@ export async function DELETE(_request: Request, { params }: RouteParams) {
   }
 
   const { id } = await params;
+  // Read before deleting: once the row is gone we can't tell which images
+  // (cover + any embedded in the body) it was using.
+  const existing = await cmsService.getPostById(id);
   await cmsService.deletePost(id);
+  if (existing) {
+    await cleanupImagesAfterDelete([existing.featuredImageUrl, existing.content], { table: 'blog_posts', id });
+  }
   return NextResponse.json({ ok: true });
 }

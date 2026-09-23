@@ -140,10 +140,13 @@ export async function updateBanner(
 
 export async function deleteBanner(id: string): Promise<void> {
   const db = getDb();
-  // banner_events references banners by id with no cascade in D1/SQLite,
+  // banner_stats references banners by id with no cascade in D1/SQLite,
   // so its rows for this banner would otherwise be orphaned forever once
-  // the banner itself is gone.
-  await db.prepare('DELETE FROM banner_events WHERE banner_id = ?').bind(id).run();
+  // the banner itself is gone (and would block the DELETE via the FK).
+  await db.prepare('DELETE FROM banner_stats WHERE banner_id = ?').bind(id).run();
+  // Legacy per-event log. Tolerate the table already being dropped after
+  // the migration's cleanup step.
+  await db.prepare('DELETE FROM banner_events WHERE banner_id = ?').bind(id).run().catch(() => {});
   await db.prepare('DELETE FROM banners WHERE id = ?').bind(id).run();
 }
 
@@ -163,22 +166,33 @@ export async function isImagePathUsedByOtherBanner(imagePath: string, excludingB
 }
 
 /**
- * Records a single impression or click event for a banner. Called via a
- * lightweight fire-and-forget beacon from the public BannerSlot component
- * — failures here should never block the user from seeing/using the site,
- * so callers should not await this in a way that blocks rendering.
+ * Records a single impression or click for a banner by bumping today's
+ * counter row in banner_stats (one row per banner per day) rather than
+ * inserting a new row per event. This keeps the table tiny no matter how
+ * much traffic the banner gets, while still supporting totals, CTR, and
+ * date-range sponsor reports. Called via a lightweight fire-and-forget
+ * beacon from the public BannerSlot component - failures here should never
+ * block the user from seeing/using the site.
  */
 export async function recordBannerEvent(bannerId: string, eventType: 'impression' | 'click'): Promise<void> {
   const db = getDb();
+  const day = nowIso().slice(0, 10); // YYYY-MM-DD, UTC
+  const impressions = eventType === 'impression' ? 1 : 0;
+  const clicks = eventType === 'click' ? 1 : 0;
   await db
-    .prepare('INSERT INTO banner_events (id, banner_id, event_type, created_at) VALUES (?, ?, ?, ?)')
-    .bind(crypto.randomUUID(), bannerId, eventType, nowIso())
+    .prepare(
+      `INSERT INTO banner_stats (banner_id, day, impressions, clicks) VALUES (?, ?, ?, ?)
+       ON CONFLICT(banner_id, day) DO UPDATE SET
+         impressions = impressions + excluded.impressions,
+         clicks = clicks + excluded.clicks`
+    )
+    .bind(bannerId, day, impressions, clicks)
     .run();
 }
 
 /**
  * Impression/click counts and CTR for every banner, for the admin list
- * view — this is the number you'd actually show a sponsor to justify
+ * view - this is the number you'd actually show a sponsor to justify
  * (or set) a rate.
  */
 export async function getStatsForAllBanners(): Promise<Record<string, BannerStats>> {
@@ -187,9 +201,9 @@ export async function getStatsForAllBanners(): Promise<Record<string, BannerStat
     .prepare(
       `SELECT
         banner_id,
-        SUM(CASE WHEN event_type = 'impression' THEN 1 ELSE 0 END) as impression_count,
-        SUM(CASE WHEN event_type = 'click' THEN 1 ELSE 0 END) as click_count
-      FROM banner_events
+        COALESCE(SUM(impressions), 0) as impression_count,
+        COALESCE(SUM(clicks), 0) as click_count
+      FROM banner_stats
       GROUP BY banner_id`
     )
     .all<{ banner_id: string; impression_count: number; click_count: number }>();
@@ -212,9 +226,9 @@ export async function getStatsForBanner(bannerId: string): Promise<BannerStats> 
   const row = await db
     .prepare(
       `SELECT
-        SUM(CASE WHEN event_type = 'impression' THEN 1 ELSE 0 END) as impression_count,
-        SUM(CASE WHEN event_type = 'click' THEN 1 ELSE 0 END) as click_count
-      FROM banner_events
+        SUM(impressions) as impression_count,
+        SUM(clicks) as click_count
+      FROM banner_stats
       WHERE banner_id = ?`
     )
     .bind(bannerId)

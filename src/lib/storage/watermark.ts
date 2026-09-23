@@ -1,27 +1,47 @@
 /**
- * Stamps the Cliniolab logo onto uploaded images before they're stored in
- * R2, so any image pulled off the site and reused elsewhere still carries
- * attribution back to Cliniolab.
+ * Image processing for uploads: resize, watermark, and compress.
+ *
+ * Storage budget matters here. R2's free tier is 10GB, and the original
+ * version of this file re-encoded every upload as PNG (Photon's
+ * get_bytes() always emits PNG), which turned a 300KB JPEG into a 2-3MB
+ * PNG. Now every image is:
+ *
+ *   1. downscaled to a per-purpose max width (nothing on the site renders
+ *      wider, so extra pixels are pure storage cost),
+ *   2. watermarked AFTER the resize (cheaper on CPU, and the logo scales
+ *      relative to the final image rather than the original),
+ *   3. encoded as JPEG (or WebP where alpha must survive), not PNG.
+ *
+ * The watermark itself costs a few KB; the savings come from 2 + 3.
  *
  * Uses Photon (Rust image lib compiled to WASM via @cf-wasm/photon)
  * rather than sharp: sharp needs native bindings, which complicates
- * portability across this app's deploy targets. Photon runs as pure
- * WASM instead. This app's API routes build and deploy through Vercel
- * (see the build logs — `next build` via Vercel, not a wrangler/
- * workerd build), so the `node` subpath is the correct entrypoint here;
- * a separate wrangler/workerd deploy target would need `/workerd`
- * instead.
+ * portability across this app's deploy targets. The `node` subpath is
+ * used because API routes build through Vercel; a wrangler/workerd
+ * build would need `/workerd` instead.
  */
-import { PhotonImage, watermark } from '@cf-wasm/photon/node';
+import {
+  PhotonImage,
+  SamplingFilter,
+  resize,
+  watermark,
+} from '@cf-wasm/photon/node';
 
-// Logo is bundled as a module-scope constant rather than fetched per
-// request — it's a fixed local asset (public/icon-512.png), so paying a
-// network round trip (or filesystem read, which isn't available in
-// workerd anyway) on every upload would be pure waste. Inlined as base64
-// at build time via the .ts wrapper below.
 import LOGO_BASE64 from './cliniolabLogoBase64';
 
-const MARK_WIDTH_FRACTION = 0.24; // logo+wordmark width as a fraction of the uploaded image's width
+/** Longest-edge caps (px) by upload purpose. Never upscales. */
+export const MAX_WIDTH_BY_PURPOSE = {
+  blog: 1200,
+  resources: 1000,
+  scholars: 800,
+  banners: 1600,
+  avatars: 256,
+} as const;
+
+export type ImagePurpose = keyof typeof MAX_WIDTH_BY_PURPOSE;
+
+const JPEG_QUALITY = 80;
+const MARK_WIDTH_FRACTION = 0.24; // logo width as a fraction of the (resized) image width
 const MARGIN_FRACTION = 0.035; // gap from the bottom edge, as a fraction of image height
 
 let cachedLogoBytes: Uint8Array | null = null;
@@ -35,55 +55,71 @@ function getLogoBytes(): Uint8Array {
   return cachedLogoBytes;
 }
 
+export interface ProcessedImage {
+  bytes: Uint8Array;
+  ext: 'jpg';
+  contentType: 'image/jpeg';
+}
+
 /**
- * Applies the watermark and returns new image bytes in the same format
- * the input was (PNG in, PNG out — get_bytes() always encodes PNG,
- * which is fine since uploadImage() stores whatever bytes we hand it
- * under the original content-type; see the caller for why JPEG/WEBP/GIF
- * inputs are re-tagged as PNG after this step).
+ * Resizes to the purpose's max width, optionally stamps the Cliniolab
+ * logo bottom-center, and returns compressed JPEG bytes.
  *
- * Placement: bottom-center, not a corner. Every place this app displays
- * an uploaded image (blog cover, card grids, banners) renders it with
- * CSS object-fit: cover inside a fixed-aspect box, which crops from
- * whichever edges don't match the box's ratio — almost always trimming
- * the corners first. A logo stamped in a corner gets cropped off
- * constantly. Center-bottom survives that crop far more often since
- * object-cover keeps the full width or height (whichever the box ratio
- * allows) and only trims the other axis symmetrically from both edges,
- * so a horizontally-centered mark near (but not at) the bottom edge
- * stays inside frame unless the crop is extremely aggressive.
+ * Watermark placement: bottom-center, not a corner. Every place this app
+ * displays an uploaded image renders it with CSS object-fit: cover inside
+ * a fixed-aspect box, which crops from whichever edges don't match the
+ * box's ratio - almost always trimming corners first. A horizontally
+ * centered mark near the bottom survives that crop far more often.
+ *
+ * JPEG has no alpha channel, so transparent PNGs get flattened onto a
+ * white background. That is fine for blog/resource/banner/scholar
+ * photography and is the price of the ~15-20x size reduction vs PNG.
  */
-export async function applyWatermark(inputBytes: Uint8Array): Promise<Uint8Array> {
-  const baseImage = PhotonImage.new_from_byteslice(inputBytes);
-  const logoImage = PhotonImage.new_from_byteslice(getLogoBytes());
+export async function processImage(
+  inputBytes: Uint8Array,
+  purpose: ImagePurpose,
+  options: { applyWatermark: boolean }
+): Promise<ProcessedImage> {
+  const maxWidth = MAX_WIDTH_BY_PURPOSE[purpose];
+  let image = PhotonImage.new_from_byteslice(inputBytes);
+  let logo: PhotonImage | null = null;
+  let resizedLogo: PhotonImage | null = null;
 
   try {
-    const baseWidth = baseImage.get_width();
-    const baseHeight = baseImage.get_height();
+    // 1. Downscale (never upscale).
+    const srcWidth = image.get_width();
+    const srcHeight = image.get_height();
+    if (srcWidth > maxWidth) {
+      const newWidth = maxWidth;
+      const newHeight = Math.max(1, Math.round((srcHeight * newWidth) / srcWidth));
+      const resized = resize(image, newWidth, newHeight, SamplingFilter.Lanczos3);
+      image.free();
+      image = resized;
+    }
 
-    const targetLogoWidth = Math.max(24, Math.round(baseWidth * MARK_WIDTH_FRACTION));
-    const scale = targetLogoWidth / logoImage.get_width();
-    const targetLogoHeight = Math.max(24, Math.round(logoImage.get_height() * scale));
+    // 2. Watermark the already-resized image.
+    if (options.applyWatermark) {
+      logo = PhotonImage.new_from_byteslice(getLogoBytes());
+      const baseWidth = image.get_width();
+      const baseHeight = image.get_height();
 
-    // Photon's watermark() draws the second image onto the first at a
-    // pixel offset with no resize step of its own, so the logo is
-    // resized to the target footprint first via a scratch canvas... but
-    // Photon doesn't expose a standalone resize-then-return-new-image
-    // helper that's simpler than just importing resize() directly.
-    const { resize, SamplingFilter } = await import('@cf-wasm/photon/node');
-    const resizedLogo = resize(logoImage, targetLogoWidth, targetLogoHeight, SamplingFilter.Lanczos3);
+      const targetLogoWidth = Math.max(24, Math.round(baseWidth * MARK_WIDTH_FRACTION));
+      const scale = targetLogoWidth / logo.get_width();
+      const targetLogoHeight = Math.max(24, Math.round(logo.get_height() * scale));
+      resizedLogo = resize(logo, targetLogoWidth, targetLogoHeight, SamplingFilter.Lanczos3);
 
-    const margin = Math.round(baseHeight * MARGIN_FRACTION);
-    const x = Math.max(0, Math.round((baseWidth - targetLogoWidth) / 2));
-    const y = Math.max(0, baseHeight - targetLogoHeight - margin);
+      const margin = Math.round(baseHeight * MARGIN_FRACTION);
+      const x = Math.max(0, Math.round((baseWidth - targetLogoWidth) / 2));
+      const y = Math.max(0, baseHeight - targetLogoHeight - margin);
+      watermark(image, resizedLogo, BigInt(x), BigInt(y));
+    }
 
-    watermark(baseImage, resizedLogo, BigInt(x), BigInt(y));
-
-    const outBytes = baseImage.get_bytes();
-    resizedLogo.free();
-    return outBytes;
+    // 3. Encode as JPEG instead of Photon's default PNG.
+    const bytes = image.get_bytes_jpeg(JPEG_QUALITY);
+    return { bytes, ext: 'jpg', contentType: 'image/jpeg' };
   } finally {
-    baseImage.free();
-    logoImage.free();
+    image.free();
+    logo?.free();
+    resizedLogo?.free();
   }
 }

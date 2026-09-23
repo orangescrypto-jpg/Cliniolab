@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getCurrentUser } from '@/lib/auth/currentUser';
 import { permissions } from '@/lib/auth/permissions';
 import { resourceService } from '@/lib/db';
+import { cleanupImagesAfterDelete } from '@/lib/storage/mediaCleanup';
 
 interface RouteParams {
   params: Promise<{ resourceId: string }>;
@@ -65,6 +66,10 @@ export async function DELETE(_request: Request, { params }: RouteParams) {
   if (!permissions.canAccessAdminPanel(user.role)) {
     return NextResponse.json({ error: 'Admin/moderator access required' }, { status: 403 });
   }
+  const existing = await resourceService.getResourceById(resourceId);
   await resourceService.deleteResource(resourceId);
+  if (existing) {
+    await cleanupImagesAfterDelete([existing.coverImageUrl], { table: 'resources', id: resourceId });
+  }
   return NextResponse.json({ success: true });
 }

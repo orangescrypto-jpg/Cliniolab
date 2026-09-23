@@ -70,7 +70,12 @@ function getBucket(): R2Bucket {
 }
 
 const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
-const MAX_BYTES = 5 * 1024 * 1024; // 5MB
+// Uploads are downscaled and re-encoded before storage (see watermark.ts),
+// so this only guards what the server has to decode, not what gets stored.
+const MAX_BYTES = 3 * 1024 * 1024; // 3MB
+// Animated GIFs can't be processed by Photon (it flattens to frame 1), so
+// they are stored as-is. Keep them small since they bypass compression.
+const MAX_GIF_BYTES = 1 * 1024 * 1024; // 1MB
 
 export class ImageUploadError extends Error {}
 
@@ -79,12 +84,14 @@ export class ImageUploadError extends Error {}
  * (served back out via /api/images/[key], not a direct R2 URL, so we
  * control caching/headers centrally).
  *
- * Every upload is watermarked with the Cliniolab logo before it's
- * stored (see watermark.ts) — GIFs are the one exception, since Photon
- * only reads/writes static frames and would silently flatten an
- * animated GIF to its first frame. 'avatars' is the other exception:
- * a user's own profile photo shouldn't be stamped with the platform
- * logo the way promotional content (blog/banners/etc) is.
+ * Every upload is downscaled, compressed to JPEG, and (except avatars)
+ * watermarked with the Cliniolab logo before it's stored - see
+ * watermark.ts. GIFs are the one exception: Photon only reads/writes
+ * static frames and would flatten an animated GIF to its first frame, so
+ * they're stored as-is under a tighter size cap. 'avatars' skips the
+ * watermark only: a user's own profile photo shouldn't be stamped with
+ * the platform logo the way promotional content is, but it is still
+ * resized (256px) so avatars can't quietly eat the bucket.
  */
 export async function uploadImage(
   file: File,
@@ -94,7 +101,10 @@ export async function uploadImage(
     throw new ImageUploadError('Only JPEG, PNG, WEBP, or GIF images are allowed.');
   }
   if (file.size > MAX_BYTES) {
-    throw new ImageUploadError('Image must be smaller than 5MB.');
+    throw new ImageUploadError('Image must be smaller than 3MB.');
+  }
+  if (file.type === 'image/gif' && file.size > MAX_GIF_BYTES) {
+    throw new ImageUploadError('GIFs must be smaller than 1MB. Use a JPEG or PNG for still images.');
   }
 
   const bucket = getBucket();
@@ -104,21 +114,28 @@ export async function uploadImage(
   let ext = file.type.split('/')[1];
   let contentType = file.type;
 
-  if (file.type !== 'image/gif' && keyPrefix !== 'avatars') {
+  if (file.type !== 'image/gif') {
     try {
-      const { applyWatermark } = await import('@/lib/storage/watermark');
-      outBytes = await applyWatermark(new Uint8Array(originalBuffer));
-      // Photon's get_bytes() always encodes PNG regardless of input
-      // format, so the stored extension/content-type must follow suit
-      // for JPEG/WEBP inputs or the file would be mislabeled.
-      ext = 'png';
-      contentType = 'image/png';
+      const { processImage } = await import('@/lib/storage/watermark');
+      const processed = await processImage(new Uint8Array(originalBuffer), keyPrefix, {
+        // Avatars are a user's own photo - resized/compressed like the rest
+        // but never stamped with the platform logo.
+        applyWatermark: keyPrefix !== 'avatars',
+      });
+      outBytes = processed.bytes;
+      ext = processed.ext;
+      contentType = processed.contentType;
     } catch (err) {
-      // Watermarking is a nice-to-have layered on top of a working
-      // upload path; a WASM init failure or decode edge case shouldn't
-      // block the admin from publishing content. Store the original
-      // un-watermarked bytes instead of failing the whole upload.
-      console.error('Watermarking failed, storing original image instead:', err);
+      // Processing is layered on top of a working upload path; a WASM init
+      // failure or decode edge case shouldn't block an admin from
+      // publishing. Fall back to the original bytes - but the stricter
+      // size cap below still applies so a fallback can't sneak in a huge file.
+      console.error('Image processing failed, storing original instead:', err);
+      if (originalBuffer.byteLength > 1024 * 1024) {
+        throw new ImageUploadError(
+          'Could not process this image. Try a smaller file (under 1MB) or a different format.'
+        );
+      }
       outBytes = originalBuffer;
       ext = file.type.split('/')[1];
       contentType = file.type;
@@ -179,4 +196,92 @@ export async function listImages(purpose?: 'blog' | 'resources' | 'banners' | 's
     .sort((a, b) => b.uploadedAt.localeCompare(a.uploadedAt));
 
   return { images, nextCursor: result.truncated ? result.cursor : undefined };
+}
+
+// ---------------------------------------------------------------------------
+// Orphan cleanup
+// ---------------------------------------------------------------------------
+
+const IMAGE_PATH_PATTERN = /\/api\/images\/((?:blog|resources|banners|scholars|avatars)\/[A-Za-z0-9._-]+)/g;
+
+/**
+ * Pulls every /api/images/... reference out of arbitrary text (blog HTML or
+ * markdown, a single URL column, etc.) and returns the R2 keys. Only keys
+ * under our own upload prefixes match, so an external image URL is never
+ * mistaken for something we own and try to delete.
+ */
+export function extractImageKeys(text: string | null | undefined): string[] {
+  if (!text) return [];
+  const keys = new Set<string>();
+  for (const match of text.matchAll(IMAGE_PATH_PATTERN)) {
+    keys.add(match[1]);
+  }
+  return [...keys];
+}
+
+/**
+ * Deletes the given R2 keys, skipping any that `isStillReferenced` reports
+ * as used elsewhere. The admin image library deliberately lets one upload
+ * be reused across several posts/resources, so a blind delete when one post
+ * is removed would break the others' images.
+ *
+ * Best-effort by design: this runs AFTER the database row is already gone,
+ * and a failed R2 delete just leaves an orphan for the weekly sweep to pick
+ * up. It must never make a successful content deletion look like a failure.
+ * Returns how many objects were actually deleted.
+ */
+export async function deleteImageKeysIfUnreferenced(
+  keys: string[],
+  isStillReferenced: (key: string) => Promise<boolean>
+): Promise<number> {
+  let deleted = 0;
+  const bucket = getBucket();
+  for (const key of keys) {
+    try {
+      if (await isStillReferenced(key)) continue;
+      await bucket.delete(key);
+      deleted++;
+    } catch (err) {
+      console.error(`Failed to delete orphaned image ${key} (non-fatal):`, err);
+    }
+  }
+  return deleted;
+}
+
+export interface StoredObjectInfo {
+  key: string;
+  size: number;
+  uploaded: Date;
+}
+
+/**
+ * Walks the whole bucket (paginated) for the orphan sweep. Returns object
+ * metadata only, never bodies.
+ */
+export async function listAllObjects(maxObjects = 5000): Promise<StoredObjectInfo[]> {
+  const bucket = getBucket();
+  const all: StoredObjectInfo[] = [];
+  let cursor: string | undefined;
+  do {
+    const page = await bucket.list({ cursor, limit: 1000 });
+    for (const obj of page.objects) {
+      if (!obj.key.endsWith('/')) all.push({ key: obj.key, size: obj.size, uploaded: obj.uploaded });
+    }
+    cursor = page.truncated ? page.cursor : undefined;
+  } while (cursor && all.length < maxObjects);
+  return all;
+}
+
+export async function deleteObjectsByKey(keys: string[]): Promise<number> {
+  const bucket = getBucket();
+  let deleted = 0;
+  for (const key of keys) {
+    try {
+      await bucket.delete(key);
+      deleted++;
+    } catch (err) {
+      console.error(`Failed to delete object ${key} (non-fatal):`, err);
+    }
+  }
+  return deleted;
 }

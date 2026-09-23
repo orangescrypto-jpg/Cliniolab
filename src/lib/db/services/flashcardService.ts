@@ -333,6 +333,28 @@ export async function listFlashcardSetsByCreator(creatorId: string): Promise<Fla
   return results.map(mapStatsRow);
 }
 
+/**
+ * Public-only aggregate for a creator's profile card: how many public
+ * flashcard sets they have and how many completed study sessions those
+ * sets have received. Never counts private/draft sets.
+ */
+export async function getPublicFlashcardStatsByCreator(
+  creatorId: string
+): Promise<{ setCount: number; totalAttempts: number }> {
+  const db = getDb();
+  const row = await db
+    .prepare(
+      `SELECT
+        (SELECT COUNT(*) FROM flashcard_sets WHERE creator_id = ? AND visibility = 'public') AS set_count,
+        (SELECT COUNT(*) FROM flashcard_attempts fa
+           JOIN flashcard_sets fs ON fs.id = fa.set_id
+          WHERE fs.creator_id = ? AND fs.visibility = 'public') AS attempt_count`
+    )
+    .bind(creatorId, creatorId)
+    .first<{ set_count: number; attempt_count: number }>();
+  return { setCount: row?.set_count ?? 0, totalAttempts: row?.attempt_count ?? 0 };
+}
+
 export async function adminListAllFlashcardSets(
   page = 1,
   pageSize = 25

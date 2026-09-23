@@ -9,6 +9,7 @@ import { ShareButton } from '@/components/quiz/ShareButton';
 import { BookmarkButton } from '@/components/ui/BookmarkButton';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
+import { CreatorProfileCard } from '@/components/creator/CreatorProfileCard';
 import type { Flashcard, FlashcardSet } from '@/types';
 
 function formatNaira(kobo: number): string {
@@ -185,6 +186,12 @@ export function FlashcardDetailClient({ setId }: { setId: string }) {
           </div>
         )}
       </Card>
+
+      {set.visibility === 'public' && (
+        <div className="mt-6">
+          <CreatorProfileCard creatorId={set.creatorId} />
+        </div>
+      )}
     </div>
   );
 }

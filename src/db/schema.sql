@@ -16,6 +16,8 @@ CREATE TABLE users (
   payout_account_number TEXT,
   payout_account_name TEXT,
   contact_phone TEXT,               -- optional, shown on shared quiz text ("contact: ...")
+  bio TEXT,                         -- shown on the creator's public profile page
+  avatar_path TEXT,                 -- /api/images/avatars/<uuid>.<ext>, shown on public profile
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -92,6 +94,20 @@ CREATE TABLE attempt_answers (
   submitted_answer TEXT,
   is_correct INTEGER NOT NULL
 );
+
+-- One row per completed Study Mode session. No score/leaderboard
+-- concept (Study Mode intentionally never touches quiz_attempts) -
+-- every finished session is its own row. See
+-- migrations/2026-09-add-study-attempts.sql for details.
+CREATE TABLE study_attempts (
+  id TEXT PRIMARY KEY,
+  quiz_id TEXT NOT NULL REFERENCES quizzes(id),
+  user_id TEXT NOT NULL REFERENCES users(id),
+  completed_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX idx_study_attempts_quiz ON study_attempts(quiz_id);
+CREATE INDEX idx_study_attempts_user ON study_attempts(user_id);
 
 CREATE TABLE comments (
   id TEXT PRIMARY KEY,

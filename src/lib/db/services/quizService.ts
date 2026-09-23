@@ -685,6 +685,7 @@ export async function getQuizzesWithStatsByIds(ids: string[]): Promise<QuizWithS
         q.*,
         (SELECT COUNT(*) FROM questions WHERE quiz_id = q.id) as question_count,
         (SELECT COUNT(*) FROM quiz_attempts WHERE quiz_id = q.id) as attempt_count,
+        (SELECT COUNT(*) FROM study_attempts WHERE quiz_id = q.id) as study_attempt_count,
         (SELECT AVG(CAST(score AS REAL) / total_questions * 100) FROM quiz_attempts WHERE quiz_id = q.id) as avg_score,
         (SELECT COUNT(*) FROM comments WHERE quiz_id = q.id) as comment_count,
         c.name as category_name,
@@ -698,12 +699,16 @@ export async function getQuizzesWithStatsByIds(ids: string[]): Promise<QuizWithS
       WHERE q.id IN (${placeholders})`
     )
     .bind(...ids)
-    .all<QuizRow & { question_count: number; attempt_count: number; avg_score: number | null; comment_count: number; category_name: string; subcategory_name: string; creator_name: string | null; creator_contact: string | null }>();
+    .all<QuizRow & { question_count: number; attempt_count: number; study_attempt_count: number; avg_score: number | null; comment_count: number; category_name: string; subcategory_name: string; creator_name: string | null; creator_contact: string | null }>();
 
   return results.map((row) => ({
     ...mapQuiz(row),
     questionCount: row.question_count,
     attemptCount: row.attempt_count,
+    // Study Mode sessions never write to quiz_attempts (see
+    // StudyModeRunner), so attemptCount alone always reads 0 for
+    // study-mode quizzes - this is the separate counter for those.
+    studyAttemptCount: row.study_attempt_count,
     averageScorePercent: row.avg_score,
     commentCount: row.comment_count,
     categoryName: row.category_name,
@@ -1141,6 +1146,42 @@ export async function listQuizzesByCreator(creatorId: string): Promise<QuizWithS
     ...mapQuiz(row),
     questionCount: row.question_count,
     attemptCount: row.attempt_count,
+    averageScorePercent: row.avg_score,
+    commentCount: row.comment_count,
+  }));
+}
+
+/**
+ * Public-facing variant of listQuizzesByCreator, for a creator's public
+ * profile page (/creator/[userId]): only quizzes visible to the public
+ * (matches what a stranger could already find/attempt), and includes
+ * studyAttemptCount alongside attemptCount since a creator's public
+ * quizzes may mix Quiz/Exam and Study Mode. Unlike the dashboard
+ * version, this never exposes a creator's private/draft quizzes.
+ */
+export async function listPublicQuizzesByCreator(creatorId: string): Promise<QuizWithStats[]> {
+  const db = getDb();
+  const { results } = await db
+    .prepare(
+      `SELECT
+        q.*,
+        (SELECT COUNT(*) FROM questions WHERE quiz_id = q.id) as question_count,
+        (SELECT COUNT(*) FROM quiz_attempts WHERE quiz_id = q.id) as attempt_count,
+        (SELECT COUNT(*) FROM study_attempts WHERE quiz_id = q.id) as study_attempt_count,
+        (SELECT AVG(CAST(score AS REAL) / total_questions * 100) FROM quiz_attempts WHERE quiz_id = q.id) as avg_score,
+        (SELECT COUNT(*) FROM comments WHERE quiz_id = q.id) as comment_count
+      FROM quizzes q
+      WHERE q.creator_id = ? AND q.visibility = 'public'
+      ORDER BY q.updated_at DESC`
+    )
+    .bind(creatorId)
+    .all<QuizRow & { question_count: number; attempt_count: number; study_attempt_count: number; avg_score: number | null; comment_count: number }>();
+
+  return results.map((row) => ({
+    ...mapQuiz(row),
+    questionCount: row.question_count,
+    attemptCount: row.attempt_count,
+    studyAttemptCount: row.study_attempt_count,
     averageScorePercent: row.avg_score,
     commentCount: row.comment_count,
   }));

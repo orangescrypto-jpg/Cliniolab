@@ -82,11 +82,13 @@ export class ImageUploadError extends Error {}
  * Every upload is watermarked with the Cliniolab logo before it's
  * stored (see watermark.ts) — GIFs are the one exception, since Photon
  * only reads/writes static frames and would silently flatten an
- * animated GIF to its first frame.
+ * animated GIF to its first frame. 'avatars' is the other exception:
+ * a user's own profile photo shouldn't be stamped with the platform
+ * logo the way promotional content (blog/banners/etc) is.
  */
 export async function uploadImage(
   file: File,
-  keyPrefix: 'blog' | 'resources' | 'banners' | 'scholars'
+  keyPrefix: 'blog' | 'resources' | 'banners' | 'scholars' | 'avatars'
 ): Promise<string> {
   if (!ALLOWED_TYPES.includes(file.type)) {
     throw new ImageUploadError('Only JPEG, PNG, WEBP, or GIF images are allowed.');
@@ -102,7 +104,7 @@ export async function uploadImage(
   let ext = file.type.split('/')[1];
   let contentType = file.type;
 
-  if (file.type !== 'image/gif') {
+  if (file.type !== 'image/gif' && keyPrefix !== 'avatars') {
     try {
       const { applyWatermark } = await import('@/lib/storage/watermark');
       outBytes = await applyWatermark(new Uint8Array(originalBuffer));

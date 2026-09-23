@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getCurrentUser } from '@/lib/auth/currentUser';
 import { isOwnerOrStaff } from '@/lib/auth/permissions';
-import { quizPurchaseService, quizService } from '@/lib/db';
+import { quizPurchaseService, quizService, studyAttemptService, userService } from '@/lib/db';
 
 interface RouteParams {
   params: Promise<{ quizId: string }>;
@@ -58,4 +58,33 @@ export async function GET(request: Request, { params }: RouteParams) {
 
   const questions = await quizService.getQuizQuestions(quizId);
   return NextResponse.json({ quiz, questions });
+}
+
+/**
+ * Records one completed Study Mode session (the user reached the
+ * "Finish studying" summary screen). This is intentionally separate
+ * from quiz_attempts - no score, no leaderboard, no retake policy -
+ * see study_attempts / studyAttemptService for why. Fire-and-forget
+ * from the client once StudyModeRunner shows its summary screen.
+ */
+export async function POST(_request: Request, { params }: RouteParams) {
+  const { quizId } = await params;
+  const user = await getCurrentUser();
+  if (!user) {
+    return NextResponse.json({ error: 'Login required to record study attempts' }, { status: 401 });
+  }
+
+  const quiz = await quizService.getQuizById(quizId);
+  if (!quiz) return NextResponse.json({ error: 'Quiz not found' }, { status: 404 });
+  if (quiz.mode !== 'study') {
+    return NextResponse.json({ error: 'This quiz is not in Study Mode' }, { status: 400 });
+  }
+
+  await studyAttemptService.recordStudyAttempt(quizId, user.id);
+
+  // Same streak signal quiz/flashcard attempts use - a finished study
+  // session is genuine practice too.
+  await userService.recordActivityForStreak(user.id);
+
+  return NextResponse.json({ success: true });
 }

@@ -20,6 +20,10 @@ export interface AppUser {
   payoutAccountNumber: string | null;
   payoutAccountName: string | null;
   contactPhone: string | null;
+  /** Short bio shown on the creator's public profile page (/creator/[userId]). */
+  bio: string | null;
+  /** /api/images/avatars/<uuid>.<ext>, or null if no avatar uploaded. */
+  avatarPath: string | null;
   createdAt: string;
 }
 
@@ -86,6 +90,14 @@ export interface Quiz {
 export interface QuizWithStats extends Quiz {
   questionCount: number;
   attemptCount: number;
+  /**
+   * Completed Study Mode sessions (see study_attempts). Study Mode never
+   * writes to quiz_attempts, so attemptCount is always 0 for study-mode
+   * quizzes - this is the separate counter for those. Optional because
+   * only getQuizzesWithStatsByIds currently populates it; other
+   * QuizWithStats call sites don't fetch it.
+   */
+  studyAttemptCount?: number;
   averageScorePercent: number | null;
   commentCount: number;
   categoryName?: string;

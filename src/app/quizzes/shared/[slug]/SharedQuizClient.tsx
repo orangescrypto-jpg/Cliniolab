@@ -83,6 +83,9 @@ export function SharedQuizClient() {
           quiz={quiz}
           questions={studyQuestions}
           onDone={() => setStarted(false)}
+          onComplete={() => {
+            if (user) fetch(`/api/quizzes/${quiz.id}/study`, { method: 'POST' }).catch(() => {});
+          }}
         />
       );
     }

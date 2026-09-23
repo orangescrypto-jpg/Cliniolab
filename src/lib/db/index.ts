@@ -36,6 +36,7 @@ export * as scholarService from './services/scholarService';
 export * as flashcardService from './services/flashcardService';
 export * as flashcardPurchaseService from './services/flashcardPurchaseService';
 export * as flashcardAttemptService from './services/flashcardAttemptService';
+export * as studyAttemptService from './services/studyAttemptService';
 
 export { RetakeNotAllowedError } from './services/attemptService';
 export * as blogCategoryService from './services/blogCategoryService';

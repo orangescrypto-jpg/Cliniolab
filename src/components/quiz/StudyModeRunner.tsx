@@ -22,6 +22,14 @@ interface StudyModeRunnerProps {
    * this, so it keeps the original router.push behavior.
    */
   onDone?: () => void;
+  /**
+   * Fires once per finished study session, when the "Finish studying"
+   * summary screen first shows - mirrors FlashcardRunner's onComplete.
+   * Used to record a study attempt (see study_attempts /
+   * studyAttemptService); Study Mode itself has no score, so this is
+   * purely a "did they finish a pass" signal, not a graded result.
+   */
+  onComplete?: () => void;
 }
 
 type ResultFilter = 'all' | 'unanswered' | 'incorrect' | 'skipped';
@@ -67,7 +75,7 @@ function shuffleArray<T>(arr: T[]): T[] {
  * lose your place. That cache is purely local and disposable; it's cleared
  * once you finish studying.
  */
-export function StudyModeRunner({ quiz, questions: rawQuestions, onDone }: StudyModeRunnerProps) {
+export function StudyModeRunner({ quiz, questions: rawQuestions, onDone, onComplete }: StudyModeRunnerProps) {
   const router = useRouter();
 
   // Try to resume a prior session for this quiz before falling back to a
@@ -200,6 +208,16 @@ export function StudyModeRunner({ quiz, questions: rawQuestions, onDone }: Study
     };
     saveDraft(DRAFT_NAMESPACE, quiz.id, draft);
   }, [quiz.id, questions, current, answers, skipped, confidence, resultFilter]);
+
+  // Fires once per finished study session, when the summary screen first
+  // shows - mirrors FlashcardRunner's "finished" effect. Reaching the
+  // summary is the study-mode equivalent of a completed run-through;
+  // resuming/reopening the summary later (e.g. after a refresh) doesn't
+  // re-fire since showSummary only flips false -> true once per session.
+  useEffect(() => {
+    if (showSummary) onComplete?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showSummary]);
 
   function rateConfidence(level: 'sure' | 'guessing') {
     setConfidence((prev) => ({ ...prev, [question.id]: level }));

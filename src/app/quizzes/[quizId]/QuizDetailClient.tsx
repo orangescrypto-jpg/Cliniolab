@@ -8,6 +8,7 @@ import { StudyModeRunner } from '@/components/quiz/StudyModeRunner';
 import { CommentThread } from '@/components/quiz/CommentThread';
 import { ShareButton } from '@/components/quiz/ShareButton';
 import { QuizLeaderboardSection } from '@/components/quiz/QuizLeaderboardSection';
+import { CreatorProfileCard } from './CreatorProfileCard';
 import { RelatedQuizzes } from '@/components/quiz/RelatedQuizzes';
 import { Button } from '@/components/ui/Button';
 import { Card, DifficultyBadge } from '@/components/ui/Card';
@@ -277,13 +278,27 @@ export function QuizDetailClient({
         </Card>
 
         <QuizLeaderboardSection quizId={quizId} currentUserId={null} />
+        {previewStats?.creatorId && (
+          <div className="mt-6">
+            <CreatorProfileCard creatorId={previewStats.creatorId} />
+          </div>
+        )}
       </div>
     );
   }
 
   if (started && quiz) {
     if (quiz.mode === 'study') {
-      return <StudyModeRunner key={attemptKey} quiz={quiz} questions={studyQuestions} />;
+      return (
+        <StudyModeRunner
+          key={attemptKey}
+          quiz={quiz}
+          questions={studyQuestions}
+          onComplete={() => {
+            if (user) fetch(`/api/quizzes/${quizId}/study`, { method: 'POST' }).catch(() => {});
+          }}
+        />
+      );
     }
     return (
       <QuizRunner
@@ -360,12 +375,19 @@ export function QuizDetailClient({
               <dt className="text-xs uppercase tracking-wide text-ink-400">Questions</dt>
               <dd className="text-ink-700">{previewStats.questionCount}</dd>
             </div>
-            <div>
-              <dt className="text-xs uppercase tracking-wide text-ink-400">Trials allowed</dt>
-              <dd className="text-ink-700">
-                {RETAKE_LABELS[previewStats.retakePolicy]?.(previewStats.retakeLimit) ?? '—'}
-              </dd>
-            </div>
+            {previewStats.mode === 'study' ? (
+              <div>
+                <dt className="text-xs uppercase tracking-wide text-ink-400">Study attempts</dt>
+                <dd className="text-ink-700">{previewStats.studyAttemptCount ?? 0}</dd>
+              </div>
+            ) : (
+              <div>
+                <dt className="text-xs uppercase tracking-wide text-ink-400">Trials allowed</dt>
+                <dd className="text-ink-700">
+                  {RETAKE_LABELS[previewStats.retakePolicy]?.(previewStats.retakeLimit) ?? '—'}
+                </dd>
+              </div>
+            )}
           </dl>
         )}
 
@@ -405,6 +427,11 @@ export function QuizDetailClient({
 
       <CommentThread endpoint={`/api/quizzes/${quizId}/comments`} />
       <QuizLeaderboardSection quizId={quizId} currentUserId={user?.id ?? null} />
+      {previewStats?.creatorId && (
+        <div className="mt-6">
+          <CreatorProfileCard creatorId={previewStats.creatorId} />
+        </div>
+      )}
       <RelatedQuizzes endpoint={`/api/quizzes/${quizId}/related`} />
     </div>
   );

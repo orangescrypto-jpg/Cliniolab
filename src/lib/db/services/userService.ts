@@ -17,6 +17,8 @@ interface UserRow {
   payout_account_number: string | null;
   payout_account_name: string | null;
   contact_phone: string | null;
+  bio: string | null;
+  avatar_path: string | null;
   created_at: string;
 }
 
@@ -37,6 +39,8 @@ function mapUser(row: UserRow): AppUser {
     payoutAccountNumber: row.payout_account_number,
     payoutAccountName: row.payout_account_name,
     contactPhone: row.contact_phone,
+    bio: row.bio,
+    avatarPath: row.avatar_path,
     createdAt: row.created_at,
   };
 }
@@ -77,6 +81,8 @@ export async function ensureUserRecord(
     payoutAccountNumber: null,
     payoutAccountName: null,
     contactPhone: null,
+    bio: null,
+    avatarPath: null,
     createdAt,
   };
 }
@@ -144,6 +150,64 @@ export async function adjustCreatorBalance(userId: string, deltaKobo: number): P
 export async function updateContactPhone(userId: string, contactPhone: string | null): Promise<void> {
   const db = getDb();
   await db.prepare('UPDATE users SET contact_phone = ? WHERE id = ?').bind(contactPhone, userId).run();
+}
+
+/**
+ * Updates the fields shown on a creator's public profile page
+ * (/creator/[userId]) - display name, bio, avatar. Each field is
+ * only touched when provided, so a caller can update just one (e.g.
+ * an avatar-only upload) without clobbering the others.
+ */
+export async function updateProfile(
+  userId: string,
+  fields: { displayName?: string | null; bio?: string | null; avatarPath?: string | null }
+): Promise<void> {
+  const db = getDb();
+  const sets: string[] = [];
+  const values: (string | null)[] = [];
+  if ('displayName' in fields) {
+    sets.push('display_name = ?');
+    values.push(fields.displayName ?? null);
+  }
+  if ('bio' in fields) {
+    sets.push('bio = ?');
+    values.push(fields.bio ?? null);
+  }
+  if ('avatarPath' in fields) {
+    sets.push('avatar_path = ?');
+    values.push(fields.avatarPath ?? null);
+  }
+  if (sets.length === 0) return;
+  values.push(userId);
+  await db.prepare(`UPDATE users SET ${sets.join(', ')} WHERE id = ?`).bind(...values).run();
+}
+
+/**
+ * Public creator profile data for /creator/[userId] - deliberately a
+ * narrow projection (no email, payout details, streaks, etc), since
+ * this is served to anyone with the link, not just the creator
+ * themselves. Returns null for an unknown id so the route can 404.
+ */
+export async function getPublicCreatorProfile(userId: string): Promise<{
+  id: string;
+  displayName: string | null;
+  bio: string | null;
+  avatarPath: string | null;
+  createdAt: string;
+} | null> {
+  const db = getDb();
+  const row = await db
+    .prepare('SELECT id, display_name, bio, avatar_path, created_at FROM users WHERE id = ?')
+    .bind(userId)
+    .first<{ id: string; display_name: string | null; bio: string | null; avatar_path: string | null; created_at: string }>();
+  if (!row) return null;
+  return {
+    id: row.id,
+    displayName: row.display_name,
+    bio: row.bio,
+    avatarPath: row.avatar_path,
+    createdAt: row.created_at,
+  };
 }
 
 export async function updateEmailPreferences(

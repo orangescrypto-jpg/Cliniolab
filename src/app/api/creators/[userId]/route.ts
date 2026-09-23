@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { quizService, userService } from '@/lib/db';
+import { flashcardService, quizService, userService } from '@/lib/db';
 
 interface RouteParams {
   params: Promise<{ userId: string }>;
@@ -24,16 +24,25 @@ export async function GET(_request: Request, { params }: RouteParams) {
   // reached" in the sense QuizzerWeb-style profile cards use it: anyone
   // who finished a graded attempt or a study session counts, since both
   // represent someone actually engaging with the creator's content.
-  const totalAttempts = quizzes.reduce(
+  const quizAttempts = quizzes.reduce(
     (sum, q) => sum + q.attemptCount + (q.studyAttemptCount ?? 0),
     0
   );
+
+  // Flashcard sets count toward reach too - a completed flashcard study
+  // session is a student engaging with the creator's content. Failure
+  // here must not break the profile, so fall back to zeros.
+  const flashcardStats = await flashcardService
+    .getPublicFlashcardStatsByCreator(userId)
+    .catch(() => ({ setCount: 0, totalAttempts: 0 }));
+  const totalAttempts = quizAttempts + flashcardStats.totalAttempts;
 
   return NextResponse.json({
     profile,
     quizzes,
     stats: {
       quizCount: quizzes.length,
+      flashcardSetCount: flashcardStats.setCount,
       totalAttempts,
     },
   });

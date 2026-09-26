@@ -44,6 +44,13 @@ export async function GET(request: Request, { params }: RouteParams) {
         { status: 403 }
       );
     }
+    if (resolved.accessMode === 'password') {
+      const password = searchParams.get('password');
+      const valid = password ? await quizService.checkQuizPassword(quiz.id, password) : false;
+      if (!valid) {
+        return NextResponse.json({ error: 'Password required', passwordRequired: true }, { status: 401 });
+      }
+    }
   }
 
   if (quiz.pricing === 'paid' && !isOwnerOrStaff(user.role, quiz.creatorId, user.id)) {

@@ -7,6 +7,7 @@ import { useAuth } from '@/lib/auth/AuthProvider';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { FlashcardSetCard } from '@/components/flashcards/FlashcardSetCard';
+import { ShareButton } from '@/components/quiz/ShareButton';
 import type { Certificate, FlashcardSetWithStats, QuestionReportWithContext, QuizWithStats, UserDashboardStats } from '@/types';
 
 export default function DashboardPage() {
@@ -239,7 +240,7 @@ export default function DashboardPage() {
           )}
           {myQuizzes.map((quiz) => (
             <Card key={quiz.id} className="flex flex-wrap items-center justify-between gap-3 p-4">
-              <div>
+              <div className="min-w-0">
                 <p className="font-medium text-ink-800">{quiz.title}</p>
                 <p className="text-xs text-ink-400">
                   {quiz.visibility === 'public' ? 'Public' : 'Private'} · {quiz.questionCount} questions ·{' '}
@@ -252,10 +253,27 @@ export default function DashboardPage() {
                   </p>
                 )}
               </div>
-              <div className="flex flex-wrap gap-2">
+              <div className="flex w-full flex-wrap gap-2 sm:w-auto">
                 <Link href={`/quizzes/${quiz.id}/edit`}>
                   <Button size="sm" variant="secondary">Edit</Button>
                 </Link>
+                {quiz.visibility === 'public' && (
+                  <ShareButton
+                    url={typeof window !== 'undefined' ? `${window.location.origin}/quizzes/${quiz.id}` : ''}
+                    title={quiz.title}
+                    stats={{
+                      questionCount: quiz.questionCount,
+                      difficulty: quiz.difficulty,
+                      mode: quiz.mode,
+                      pricing: quiz.pricing,
+                      priceKobo: quiz.priceKobo,
+                      categoryName: quiz.categoryName,
+                      subcategoryName: quiz.subcategoryName,
+                      attemptCount: quiz.attemptCount,
+                      averageScorePercent: quiz.averageScorePercent,
+                    }}
+                  />
+                )}
                 {quiz.visibility === 'private' && quiz.shareSlug && (
                   <Button
                     size="sm"

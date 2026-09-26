@@ -7,6 +7,7 @@ import { QuizRunner } from '@/components/quiz/QuizRunner';
 import { StudyModeRunner } from '@/components/quiz/StudyModeRunner';
 import { Button } from '@/components/ui/Button';
 import { Card, DifficultyBadge } from '@/components/ui/Card';
+import { QuizLeaderboardSection } from '@/components/quiz/QuizLeaderboardSection';
 import type { Quiz, QuizQuestion } from '@/types';
 
 const MODE_LABELS: Record<Quiz['mode'], string> = {
@@ -101,13 +102,17 @@ export function SharedQuizClient() {
       );
     }
     return (
-      <QuizRunner
-        key={attemptKey}
-        quiz={quiz}
-        questions={questions}
-        submitEndpoint={`/api/quizzes/${quiz.id}/attempt`}
-        isFirstAttempt={!hasAttempted}
-      />
+      <div>
+        <QuizRunner
+          key={attemptKey}
+          quiz={quiz}
+          questions={questions}
+          submitEndpoint={`/api/quizzes/${quiz.id}/attempt`}
+          isFirstAttempt={!hasAttempted}
+          onSubmitted={() => setHasAttempted(true)}
+        />
+        {hasAttempted && <QuizLeaderboardSection quizId={quiz.id} currentUserId={user?.id ?? null} />}
+      </div>
     );
   }
 

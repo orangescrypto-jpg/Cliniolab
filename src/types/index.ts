@@ -94,6 +94,8 @@ export interface Quiz {
   allowFlagging: boolean;
   defaultMark: number;
   showMarks: boolean;
+  /** Only meaningful when visibility === 'private'; ignored for public quizzes, which are governed solely by the global leaderboard_per_quiz admin flag. Lets the creator hide this quiz's own leaderboard from anyone with the link. */
+  leaderboardEnabled: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -156,6 +158,8 @@ export interface QuizInput {
   allowFlagging?: boolean;
   defaultMark?: number;
   showMarks?: boolean;
+  /** Only meaningful when visibility === 'private'. Defaults to true. */
+  leaderboardEnabled?: boolean;
   questions: QuizQuestionInput[];
 }
 

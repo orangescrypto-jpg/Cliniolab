@@ -6,7 +6,7 @@ interface RouteParams {
   params: Promise<{ slug: string }>;
 }
 
-export async function GET(_request: Request, { params }: RouteParams) {
+export async function GET(request: Request, { params }: RouteParams) {
   const { slug } = await params;
   const user = await getCurrentUser();
   if (!user) {
@@ -16,6 +16,19 @@ export async function GET(_request: Request, { params }: RouteParams) {
   const quiz = await quizService.getQuizByShareSlug(slug);
   if (!quiz) {
     return NextResponse.json({ error: 'This link is invalid or has expired' }, { status: 404 });
+  }
+
+  if (quiz.accessMode === 'password') {
+    const password = new URL(request.url).searchParams.get('password');
+    if (!password) {
+      // Tell the client a password is needed without leaking any quiz
+      // content yet.
+      return NextResponse.json({ error: 'Password required', passwordRequired: true }, { status: 401 });
+    }
+    const valid = await quizService.checkQuizPassword(quiz.id, password);
+    if (!valid) {
+      return NextResponse.json({ error: 'Incorrect password', passwordRequired: true }, { status: 401 });
+    }
   }
 
   const questions = await quizService.getQuizQuestions(quiz.id);

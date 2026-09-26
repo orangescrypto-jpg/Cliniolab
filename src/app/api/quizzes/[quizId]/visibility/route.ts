@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { getCurrentUser } from '@/lib/auth/currentUser';
 import { isOwnerOrStaff } from '@/lib/auth/permissions';
 import { quizService } from '@/lib/db';
-import type { LinkExpiryOption, QuizVisibility } from '@/types';
+import type { LinkExpiryOption, QuizVisibility, QuizAccessMode } from '@/types';
 
 interface RouteParams {
   params: Promise<{ quizId: string }>;
@@ -19,21 +19,47 @@ export async function PATCH(request: Request, { params }: RouteParams) {
     return NextResponse.json({ error: 'Not permitted to modify this quiz' }, { status: 403 });
   }
 
-  let body: { visibility: QuizVisibility; linkExpiry?: LinkExpiryOption; customExpiryDate?: string };
+  let body: {
+    visibility: QuizVisibility;
+    linkExpiry?: LinkExpiryOption;
+    customExpiryDate?: string;
+    accessMode?: QuizAccessMode;
+    password?: string;
+  };
   try {
     body = await request.json();
   } catch {
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
   }
 
-  if (body.visibility === 'private' && body.linkExpiry === 'custom' && !body.customExpiryDate) {
+  if (body.visibility === 'private' && body.accessMode === 'password' && !body.password) {
+    return NextResponse.json({ error: 'A password is required for password-protected quizzes' }, { status: 400 });
+  }
+
+  if (
+    body.visibility === 'private' &&
+    body.accessMode !== 'password' &&
+    body.linkExpiry === 'custom' &&
+    !body.customExpiryDate
+  ) {
     return NextResponse.json(
       { error: 'customExpiryDate is required when linkExpiry is "custom"' },
       { status: 400 }
     );
   }
 
-  await quizService.setQuizVisibility(quizId, body.visibility, body.linkExpiry, body.customExpiryDate);
+  try {
+    await quizService.setQuizVisibility(
+      quizId,
+      body.visibility,
+      body.linkExpiry,
+      body.customExpiryDate,
+      body.accessMode,
+      body.password
+    );
+  } catch (err) {
+    return NextResponse.json({ error: err instanceof Error ? err.message : 'Failed to update visibility' }, { status: 400 });
+  }
   const updated = await quizService.getQuizById(quizId);
   return NextResponse.json({ quiz: updated });
 }

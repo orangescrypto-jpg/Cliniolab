@@ -26,23 +26,34 @@ export function SharedQuizClient() {
   const [error, setError] = useState<string | null>(null);
   const [fetching, setFetching] = useState(false);
   const [hasAttempted, setHasAttempted] = useState(false);
+  const [passwordRequired, setPasswordRequired] = useState(false);
+  const [passwordInput, setPasswordInput] = useState('');
 
-  async function handleStart() {
+  async function handleStart(overridePassword?: string) {
     setFetching(true);
     setError(null);
     setAttemptKey((k) => k + 1);
     try {
-      const res = await fetch(`/api/quizzes/shared/${params.slug}`);
+      const password = overridePassword ?? passwordInput;
+      const qs = password ? `?password=${encodeURIComponent(password)}` : '';
+      const res = await fetch(`/api/quizzes/shared/${params.slug}${qs}`);
       const data = await res.json();
       if (!res.ok) {
+        if (data.passwordRequired) {
+          setPasswordRequired(true);
+          setError(password ? 'Incorrect password. Try again.' : null);
+          return;
+        }
         setError(data.error ?? 'This link is invalid or has expired.');
         return;
       }
+      setPasswordRequired(false);
 
       if (data.quiz.mode === 'study') {
-        const studyRes = await fetch(
-          `/api/quizzes/${data.quiz.id}/study?slug=${encodeURIComponent(params.slug)}`
-        );
+        const studyQs = password
+          ? `slug=${encodeURIComponent(params.slug)}&password=${encodeURIComponent(password)}`
+          : `slug=${encodeURIComponent(params.slug)}`;
+        const studyRes = await fetch(`/api/quizzes/${data.quiz.id}/study?${studyQs}`);
         const studyData = await studyRes.json();
         if (!studyRes.ok) {
           setError(studyData.error ?? 'This link is invalid or has expired.');
@@ -113,9 +124,28 @@ export function SharedQuizClient() {
           </span>
         )}
         {quiz?.description && <p className="mt-2 text-ink-500">{quiz.description}</p>}
+        {passwordRequired && (
+          <div className="mt-4">
+            <label htmlFor="quiz-access-password" className="text-sm font-medium text-ink-700">
+              This quiz is password-protected
+            </label>
+            <input
+              id="quiz-access-password"
+              type="password"
+              autoFocus
+              value={passwordInput}
+              onChange={(e) => setPasswordInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleStart();
+              }}
+              placeholder="Enter password"
+              className="mt-2 w-full rounded-md border border-ink-200 px-3 py-2 text-sm text-ink-800 focus:border-pulse-400 focus:outline-none"
+            />
+          </div>
+        )}
         {error && <p className="mt-4 text-sm text-critical-500">{error}</p>}
-        <Button className="mt-6" onClick={handleStart} disabled={fetching}>
-          {fetching ? 'Loading…' : 'Start'}
+        <Button className="mt-6" onClick={() => handleStart()} disabled={fetching || (passwordRequired && !passwordInput)}>
+          {fetching ? 'Loading…' : passwordRequired ? 'Unlock and start' : 'Start'}
         </Button>
       </Card>
     </div>

@@ -59,6 +59,13 @@ export type QuizStatus = 'draft' | 'published' | 'archived';
 export type RetakePolicy = 'unlimited' | 'single' | 'daily_limit' | 'cooldown';
 export type QuestionType = 'mcq' | 'true_false' | 'fill_blank';
 export type LinkExpiryOption = '1d' | '3d' | '7d' | 'custom';
+/**
+ * How a private quiz's share link is gated:
+ * - 'link': existing behavior, an expiring unguessable slug
+ * - 'password': permanent slug, but the quiz-taker must also enter a
+ *   creator-set password (changeable anytime) before starting
+ */
+export type QuizAccessMode = 'link' | 'password';
 
 export interface Quiz {
   id: string;
@@ -71,6 +78,10 @@ export interface Quiz {
   visibility: QuizVisibility;
   shareSlug: string | null;
   linkExpiresAt: string | null;
+  /** Only meaningful when visibility === 'private'. Defaults to 'link'. */
+  accessMode: QuizAccessMode;
+  /** True when a password is currently set (never expose the hash to clients). */
+  hasPassword: boolean;
   timeLimitSeconds: number | null;
   shuffleQuestions: boolean;
   shuffleOptions: boolean;

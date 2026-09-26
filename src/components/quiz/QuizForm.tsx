@@ -88,6 +88,7 @@ export function QuizForm({
   const [allowFlagging, setAllowFlagging] = useState(initialQuiz?.allowFlagging ?? true);
   const [defaultMark, setDefaultMark] = useState(initialQuiz?.defaultMark ?? 1);
   const [showMarks, setShowMarks] = useState(initialQuiz?.showMarks ?? true);
+  const [leaderboardEnabled, setLeaderboardEnabled] = useState(initialQuiz?.leaderboardEnabled ?? true);
   const [retakePolicy, setRetakePolicy] = useState<RetakePolicy>(initialQuiz?.retakePolicy ?? 'unlimited');
   const [retakeLimit, setRetakeLimit] = useState(initialQuiz?.retakeLimit ?? 1);
   const [questions, setQuestions] = useState<QuizQuestionInput[]>(
@@ -193,6 +194,7 @@ export function QuizForm({
       allowFlagging,
       defaultMark,
       showMarks,
+      leaderboardEnabled: visibility === 'private' ? leaderboardEnabled : undefined,
       pricing,
       priceKobo: pricing === 'paid' ? Math.round(priceNaira * 100) : undefined,
       questions,
@@ -369,6 +371,21 @@ export function QuizForm({
                 className="mt-2 rounded-md border border-ink-100 px-4 py-2 text-sm focus:border-pulse-400 focus:outline-none"
               />
             )}
+          </div>
+        )}
+
+        {visibility === 'private' && (
+          <div className="border-t border-ink-50 pt-4">
+            <Toggle
+              checked={leaderboardEnabled}
+              onChange={setLeaderboardEnabled}
+              label="Show a leaderboard for this quiz"
+            />
+            <p className="mt-1 text-xs text-ink-400">
+              On by default. When on, anyone with the link can see this quiz&apos;s own
+              leaderboard after they attempt it. If the site admin has turned leaderboards
+              off entirely, this stays off no matter what you choose here.
+            </p>
           </div>
         )}
 

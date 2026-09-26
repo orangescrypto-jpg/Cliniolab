@@ -60,6 +60,7 @@ CREATE TABLE quizzes (
   pricing TEXT NOT NULL DEFAULT 'free',     -- 'free' | 'paid'
   price_kobo INTEGER,                       -- price in kobo (NGN minor unit), null if free
   allow_flagging INTEGER NOT NULL DEFAULT 1, -- creator can disable "flag this question" on results screen
+  leaderboard_enabled INTEGER NOT NULL DEFAULT 1, -- only meaningful for private quizzes; creator can hide the per-quiz leaderboard from link-holders. Ignored/moot for public quizzes, which are always governed by the global leaderboard_per_quiz admin flag.
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );

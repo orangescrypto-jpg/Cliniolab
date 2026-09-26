@@ -7,6 +7,7 @@ import type {
   QuizInput,
   LinkExpiryOption,
   QuizVisibility,
+  QuizAccessMode,
 } from '@/types';
 
 interface QuizRow {
@@ -20,6 +21,9 @@ interface QuizRow {
   visibility: string;
   share_slug: string | null;
   link_expires_at: string | null;
+  access_mode: string;
+  password_hash: string | null;
+  password_salt: string | null;
   time_limit_seconds: number | null;
   shuffle_questions: number;
   shuffle_options: number;
@@ -60,6 +64,8 @@ function mapQuiz(row: QuizRow): Quiz {
     visibility: row.visibility as Quiz['visibility'],
     shareSlug: row.share_slug,
     linkExpiresAt: row.link_expires_at,
+    accessMode: (row.access_mode as QuizAccessMode) ?? 'link',
+    hasPassword: !!row.password_hash,
     timeLimitSeconds: row.time_limit_seconds,
     shuffleQuestions: row.shuffle_questions === 1,
     shuffleOptions: row.shuffle_options === 1,
@@ -118,6 +124,49 @@ export function computeExpiryDate(
 
 function generateShareSlug(): string {
   return crypto.randomUUID().replace(/-/g, '').slice(0, 12);
+}
+
+const PBKDF2_ITERATIONS = 100_000;
+
+function bufToHex(buf: ArrayBuffer): string {
+  return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+function hexToBuf(hex: string): Uint8Array {
+  const bytes = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < bytes.length; i++) bytes[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
+  return bytes;
+}
+
+/**
+ * Hashes a quiz-access password with PBKDF2-SHA256 and a random salt, using
+ * Web Crypto (available in both the Workers runtime and Node), so it never
+ * touches the DB in plaintext. Returns hex-encoded hash + salt for storage.
+ */
+export async function hashPassword(password: string): Promise<{ hash: string; salt: string }> {
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const keyMaterial = await crypto.subtle.importKey('raw', new TextEncoder().encode(password), 'PBKDF2', false, [
+    'deriveBits',
+  ]);
+  const derived = await crypto.subtle.deriveBits(
+    { name: 'PBKDF2', salt, iterations: PBKDF2_ITERATIONS, hash: 'SHA-256' },
+    keyMaterial,
+    256
+  );
+  return { hash: bufToHex(derived), salt: bufToHex(salt.buffer as ArrayBuffer) };
+}
+
+/** Verifies a plaintext password against a stored hash+salt pair. */
+export async function verifyPassword(password: string, hash: string, salt: string): Promise<boolean> {
+  const keyMaterial = await crypto.subtle.importKey('raw', new TextEncoder().encode(password), 'PBKDF2', false, [
+    'deriveBits',
+  ]);
+  const derived = await crypto.subtle.deriveBits(
+    { name: 'PBKDF2', salt: hexToBuf(salt), iterations: PBKDF2_ITERATIONS, hash: 'SHA-256' },
+    keyMaterial,
+    256
+  );
+  return bufToHex(derived) === hash;
 }
 
 /**
@@ -225,6 +274,8 @@ export async function createQuiz(creatorId: string, input: QuizInput): Promise<Q
     visibility: input.visibility,
     shareSlug,
     linkExpiresAt,
+    accessMode: 'link',
+    hasPassword: false,
     timeLimitSeconds: input.timeLimitSeconds ?? null,
     shuffleQuestions: input.shuffleQuestions ?? false,
     shuffleOptions: input.shuffleOptions ?? false,
@@ -509,13 +560,15 @@ export async function getQuizByShareSlug(slug: string): Promise<Quiz | null> {
     .first<QuizRow>();
   if (!row) return null;
   const quiz = mapQuiz(row);
-  if (quiz.linkExpiresAt && new Date(quiz.linkExpiresAt).getTime() < Date.now()) {
+  // Password-protected links are permanent by design (see migration note) -
+  // only the 'link' access mode ever carries an expiry to check.
+  if (quiz.accessMode === 'link' && quiz.linkExpiresAt && new Date(quiz.linkExpiresAt).getTime() < Date.now()) {
     return null; // expired
   }
   return quiz;
 }
 
-/** Regenerates a private quiz's share link, invalidating the old one. */
+/** Regenerates a private quiz's share link, invalidating the old one. Only used for access_mode 'link'. */
 export async function regenerateShareLink(
   quizId: string,
   linkExpiry?: LinkExpiryOption,
@@ -531,31 +584,93 @@ export async function regenerateShareLink(
   return { shareSlug, linkExpiresAt };
 }
 
-/** Flips a quiz between public and private, updating slug/expiry accordingly. */
+/**
+ * Flips a quiz between public and private, updating slug/expiry/access mode
+ * accordingly. When going private with accessMode 'password', a password is
+ * required (first-time set) and the link never expires. When going private
+ * with accessMode 'link' (default), behavior is unchanged from before.
+ */
 export async function setQuizVisibility(
   quizId: string,
   visibility: QuizVisibility,
   linkExpiry?: LinkExpiryOption,
-  customExpiryDate?: string
+  customExpiryDate?: string,
+  accessMode?: QuizAccessMode,
+  password?: string
 ): Promise<void> {
   const db = getDb();
   if (visibility === 'public') {
     await db
       .prepare(
-        "UPDATE quizzes SET visibility = 'public', share_slug = NULL, link_expires_at = NULL, updated_at = ? WHERE id = ?"
+        `UPDATE quizzes SET visibility = 'public', share_slug = NULL, link_expires_at = NULL,
+          access_mode = 'link', password_hash = NULL, password_salt = NULL, updated_at = ?
+        WHERE id = ?`
       )
       .bind(nowIso(), quizId)
       .run();
-  } else {
-    const shareSlug = generateShareSlug();
-    const linkExpiresAt = computeExpiryDate(linkExpiry, customExpiryDate);
+    return;
+  }
+
+  const shareSlug = generateShareSlug();
+  const mode: QuizAccessMode = accessMode ?? 'link';
+
+  if (mode === 'password') {
+    if (!password) throw new Error('A password is required when accessMode is "password"');
+    const { hash, salt } = await hashPassword(password);
     await db
       .prepare(
-        "UPDATE quizzes SET visibility = 'private', share_slug = ?, link_expires_at = ?, updated_at = ? WHERE id = ?"
+        `UPDATE quizzes SET visibility = 'private', share_slug = ?, link_expires_at = NULL,
+          access_mode = 'password', password_hash = ?, password_salt = ?, updated_at = ?
+        WHERE id = ?`
       )
-      .bind(shareSlug, linkExpiresAt, nowIso(), quizId)
+      .bind(shareSlug, hash, salt, nowIso(), quizId)
       .run();
+    return;
   }
+
+  const linkExpiresAt = computeExpiryDate(linkExpiry, customExpiryDate);
+  await db
+    .prepare(
+      `UPDATE quizzes SET visibility = 'private', share_slug = ?, link_expires_at = ?,
+        access_mode = 'link', password_hash = NULL, password_salt = NULL, updated_at = ?
+      WHERE id = ?`
+    )
+    .bind(shareSlug, linkExpiresAt, nowIso(), quizId)
+    .run();
+}
+
+/**
+ * Changes the password on an already password-protected private quiz,
+ * without touching its share slug (the link stays the same; the creator
+ * can rotate the password anytime without breaking a link they've shared).
+ */
+export async function setQuizPassword(quizId: string, password: string): Promise<void> {
+  const db = getDb();
+  const { hash, salt } = await hashPassword(password);
+  await db
+    .prepare(
+      `UPDATE quizzes SET access_mode = 'password', password_hash = ?, password_salt = ?, updated_at = ?
+      WHERE id = ? AND visibility = 'private'`
+    )
+    .bind(hash, salt, nowIso(), quizId)
+    .run();
+}
+
+/**
+ * Verifies a quiz-taker-supplied password for a password-protected private
+ * quiz. Looks up the hash/salt itself (never exposed on the public Quiz
+ * type) rather than requiring callers to have fetched it separately.
+ */
+export async function checkQuizPassword(quizId: string, password: string): Promise<boolean> {
+  const db = getDb();
+  const row = await db
+    .prepare(
+      "SELECT password_hash, password_salt FROM quizzes WHERE id = ? AND visibility = 'private' AND access_mode = 'password'"
+    )
+    .bind(quizId)
+    .first<{ password_hash: string | null; password_salt: string | null }>();
+  if (!row?.password_hash || !row.password_salt) return false;
+  return verifyPassword(password, row.password_hash, row.password_salt);
 }
 
 export async function getQuizQuestions(quizId: string): Promise<QuizQuestion[]> {

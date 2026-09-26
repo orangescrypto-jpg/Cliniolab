@@ -25,6 +25,13 @@ interface QuizRunnerProps {
    * reviewing).
    */
   isFirstAttempt: boolean;
+  /**
+   * Fired once, right after a submit succeeds (whether or not it was
+   * persisted to quiz_attempts) so a parent can react to "this visitor
+   * has now attempted the quiz" — e.g. to reveal a leaderboard that's
+   * only meant for people who've actually taken it.
+   */
+  onSubmitted?: () => void;
 }
 
 /**
@@ -67,7 +74,7 @@ function shuffleArray<T>(arr: T[]): T[] {
   return copy;
 }
 
-export function QuizRunner({ quiz, questions: rawQuestions, submitEndpoint, isFirstAttempt }: QuizRunnerProps) {
+export function QuizRunner({ quiz, questions: rawQuestions, submitEndpoint, isFirstAttempt, onSubmitted }: QuizRunnerProps) {
   const router = useRouter();
 
   // Anti-cheat exams intentionally never read or write a draft: no resume
@@ -366,6 +373,7 @@ export function QuizRunner({ quiz, questions: rawQuestions, submitEndpoint, isFi
         return;
       }
       setResult(data.result);
+      onSubmitted?.();
       if (draftsEnabled) {
         clearDraft(DRAFT_NAMESPACE, quiz.id);
         // Cache the result itself now, so a reload of this results screen

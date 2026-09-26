@@ -25,6 +25,16 @@ export default function DashboardPage() {
   const [copiedQuizId, setCopiedQuizId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'quizzes' | 'flashcards'>('quizzes');
 
+  // Which quiz's "go private" access-mode picker is currently open, and the
+  // password field's contents while it's open (for either first-time set
+  // or a later change on an already password-protected quiz).
+  const [accessPickerQuizId, setAccessPickerQuizId] = useState<string | null>(null);
+  const [accessModeChoice, setAccessModeChoice] = useState<'link' | 'password'>('link');
+  const [passwordDraft, setPasswordDraft] = useState('');
+  const [accessError, setAccessError] = useState<string | null>(null);
+  const [savingAccess, setSavingAccess] = useState(false);
+  const [passwordChangeQuizId, setPasswordChangeQuizId] = useState<string | null>(null);
+
   async function copyShareLink(quizId: string, shareSlug: string) {
     const url = `${window.location.origin}/quizzes/shared/${shareSlug}`;
     try {
@@ -74,16 +84,84 @@ export default function DashboardPage() {
   }
 
   async function toggleVisibility(quizId: string, current: 'public' | 'private') {
-    const next = current === 'public' ? 'private' : 'public';
+    if (current === 'public') {
+      // Going private: open the access-mode picker instead of flipping
+      // straight to link-mode, so the creator can choose link vs password.
+      setAccessPickerQuizId(quizId);
+      setAccessModeChoice('link');
+      setPasswordDraft('');
+      setAccessError(null);
+      return;
+    }
+    // Going back to public needs no picker.
     const res = await fetch(`/api/quizzes/${quizId}/visibility`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ visibility: next, linkExpiry: '7d' }),
+      body: JSON.stringify({ visibility: 'public' }),
     });
     if (res.ok) {
       const res2 = await fetch('/api/quizzes?mine=true');
       const data = await res2.json();
       setMyQuizzes(data.quizzes ?? []);
+    }
+  }
+
+  async function confirmGoPrivate(quizId: string) {
+    if (accessModeChoice === 'password' && passwordDraft.length < 4) {
+      setAccessError('Password must be at least 4 characters');
+      return;
+    }
+    setSavingAccess(true);
+    setAccessError(null);
+    try {
+      const res = await fetch(`/api/quizzes/${quizId}/visibility`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          visibility: 'private',
+          accessMode: accessModeChoice,
+          ...(accessModeChoice === 'password'
+            ? { password: passwordDraft }
+            : { linkExpiry: '7d' }),
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setAccessError(data.error ?? 'Failed to update visibility');
+        return;
+      }
+      setAccessPickerQuizId(null);
+      setPasswordDraft('');
+      const res2 = await fetch('/api/quizzes?mine=true');
+      const data2 = await res2.json();
+      setMyQuizzes(data2.quizzes ?? []);
+    } finally {
+      setSavingAccess(false);
+    }
+  }
+
+  async function changePassword(quizId: string) {
+    if (passwordDraft.length < 4) {
+      setAccessError('Password must be at least 4 characters');
+      return;
+    }
+    setSavingAccess(true);
+    setAccessError(null);
+    try {
+      const res = await fetch(`/api/quizzes/${quizId}/password`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: passwordDraft }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setAccessError(data.error ?? 'Failed to update password');
+        return;
+      }
+      setPasswordChangeQuizId(null);
+      setPasswordDraft('');
+    } finally {
+      setSavingAccess(false);
     }
   }
 
@@ -239,18 +317,104 @@ export default function DashboardPage() {
             </p>
           )}
           {myQuizzes.map((quiz) => (
-            <Card key={quiz.id} className="flex flex-wrap items-center justify-between gap-3 p-4">
+            <Card key={quiz.id} className="flex flex-wrap items-start justify-between gap-3 p-4">
               <div className="min-w-0">
                 <p className="font-medium text-ink-800">{quiz.title}</p>
                 <p className="text-xs text-ink-400">
                   {quiz.visibility === 'public' ? 'Public' : 'Private'} · {quiz.questionCount} questions ·{' '}
                   {quiz.attemptCount} attempts
                 </p>
-                {quiz.visibility === 'private' && quiz.shareSlug && (
+                {quiz.visibility === 'private' && quiz.accessMode === 'password' && (
+                  <p className="mt-1 font-mono text-xs text-ink-400">
+                    /quizzes/shared/{quiz.shareSlug} · password-protected
+                  </p>
+                )}
+                {quiz.visibility === 'private' && quiz.accessMode === 'link' && quiz.shareSlug && (
                   <p className="mt-1 font-mono text-xs text-ink-400">
                     /quizzes/shared/{quiz.shareSlug}
                     {quiz.linkExpiresAt && ` · expires ${new Date(quiz.linkExpiresAt).toLocaleDateString()}`}
                   </p>
+                )}
+
+                {accessPickerQuizId === quiz.id && (
+                  <div className="mt-3 w-full max-w-sm rounded-md border border-ink-100 bg-ink-50 p-3">
+                    <p className="text-xs font-medium text-ink-700">How should this private link work?</p>
+                    <div className="mt-2 flex flex-col gap-2">
+                      <label className="flex items-center gap-2 text-sm text-ink-700">
+                        <input
+                          type="radio"
+                          name={`access-mode-${quiz.id}`}
+                          checked={accessModeChoice === 'link'}
+                          onChange={() => setAccessModeChoice('link')}
+                        />
+                        Shareable link (expires in 7 days)
+                      </label>
+                      <label className="flex items-center gap-2 text-sm text-ink-700">
+                        <input
+                          type="radio"
+                          name={`access-mode-${quiz.id}`}
+                          checked={accessModeChoice === 'password'}
+                          onChange={() => setAccessModeChoice('password')}
+                        />
+                        Password-protected link (never expires)
+                      </label>
+                    </div>
+                    {accessModeChoice === 'password' && (
+                      <input
+                        type="password"
+                        value={passwordDraft}
+                        onChange={(e) => setPasswordDraft(e.target.value)}
+                        placeholder="Set a password"
+                        className="mt-2 w-full rounded-md border border-ink-200 px-3 py-1.5 text-sm focus:border-pulse-400 focus:outline-none"
+                      />
+                    )}
+                    {accessError && <p className="mt-2 text-xs text-critical-500">{accessError}</p>}
+                    <div className="mt-3 flex gap-2">
+                      <Button size="sm" onClick={() => confirmGoPrivate(quiz.id)} disabled={savingAccess}>
+                        {savingAccess ? 'Saving…' : 'Make private'}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => {
+                          setAccessPickerQuizId(null);
+                          setAccessError(null);
+                        }}
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
+                {passwordChangeQuizId === quiz.id && (
+                  <div className="mt-3 w-full max-w-sm rounded-md border border-ink-100 bg-ink-50 p-3">
+                    <p className="text-xs font-medium text-ink-700">Set a new password</p>
+                    <p className="mt-1 text-xs text-ink-400">The share link stays the same — only the password changes.</p>
+                    <input
+                      type="password"
+                      value={passwordDraft}
+                      onChange={(e) => setPasswordDraft(e.target.value)}
+                      placeholder="New password"
+                      className="mt-2 w-full rounded-md border border-ink-200 px-3 py-1.5 text-sm focus:border-pulse-400 focus:outline-none"
+                    />
+                    {accessError && <p className="mt-2 text-xs text-critical-500">{accessError}</p>}
+                    <div className="mt-3 flex gap-2">
+                      <Button size="sm" onClick={() => changePassword(quiz.id)} disabled={savingAccess}>
+                        {savingAccess ? 'Saving…' : 'Save password'}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => {
+                          setPasswordChangeQuizId(null);
+                          setAccessError(null);
+                        }}
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                  </div>
                 )}
               </div>
               <div className="flex w-full flex-wrap gap-2 sm:w-auto">
@@ -261,6 +425,7 @@ export default function DashboardPage() {
                   <ShareButton
                     url={typeof window !== 'undefined' ? `${window.location.origin}/quizzes/${quiz.id}` : ''}
                     title={quiz.title}
+                    showWhatsApp={false}
                     stats={{
                       questionCount: quiz.questionCount,
                       difficulty: quiz.difficulty,
@@ -283,9 +448,22 @@ export default function DashboardPage() {
                     {copiedQuizId === quiz.id ? 'Copied!' : 'Copy link'}
                   </Button>
                 )}
-                {quiz.visibility === 'private' && (
+                {quiz.visibility === 'private' && quiz.accessMode === 'link' && (
                   <Button size="sm" variant="secondary" onClick={() => regenerateLink(quiz.id)}>
                     Regenerate link
+                  </Button>
+                )}
+                {quiz.visibility === 'private' && quiz.accessMode === 'password' && (
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => {
+                      setPasswordChangeQuizId(quiz.id);
+                      setPasswordDraft('');
+                      setAccessError(null);
+                    }}
+                  >
+                    Change password
                   </Button>
                 )}
                 <Button size="sm" variant="secondary" onClick={() => toggleVisibility(quiz.id, quiz.visibility)}>

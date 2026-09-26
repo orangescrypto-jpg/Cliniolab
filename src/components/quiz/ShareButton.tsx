@@ -110,10 +110,13 @@ export function ShareButton({
   url,
   title,
   stats,
+  showWhatsApp = true,
 }: {
   url: string;
   title: string;
   stats?: ShareStats;
+  /** Dashboard usage hides the WhatsApp button to keep the row compact. */
+  showWhatsApp?: boolean;
 }) {
   const [copied, setCopied] = useState(false);
 
@@ -144,20 +147,22 @@ export function ShareButton({
   }
 
   return (
-    <div className="inline-flex flex-col gap-2 sm:flex-row">
+    <div className="inline-flex flex-wrap gap-2">
       <button
         onClick={handleShare}
         className="inline-flex items-center gap-1.5 rounded-md border border-ink-100 px-3 py-1.5 text-xs font-medium text-ink-600 hover:bg-ink-50"
       >
         {copied ? 'Link copied' : 'Share'}
       </button>
-      <button
-        onClick={handleWhatsAppShare}
-        className="inline-flex items-center gap-1.5 rounded-md border border-pulse-200 px-3 py-1.5 text-xs font-medium text-pulse-700 hover:bg-pulse-50"
-        title="Share to WhatsApp"
-      >
-        WhatsApp
-      </button>
+      {showWhatsApp && (
+        <button
+          onClick={handleWhatsAppShare}
+          className="inline-flex items-center gap-1.5 rounded-md border border-pulse-200 px-3 py-1.5 text-xs font-medium text-pulse-700 hover:bg-pulse-50"
+          title="Share to WhatsApp"
+        >
+          WhatsApp
+        </button>
+      )}
     </div>
   );
 }

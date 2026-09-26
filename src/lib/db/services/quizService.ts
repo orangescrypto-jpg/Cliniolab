@@ -36,6 +36,7 @@ interface QuizRow {
   allow_flagging: number;
   default_mark: number;
   show_marks: number;
+  leaderboard_enabled: number;
   created_at: string;
   updated_at: string;
 }
@@ -78,6 +79,7 @@ function mapQuiz(row: QuizRow): Quiz {
     allowFlagging: row.allow_flagging === 1,
     defaultMark: row.default_mark,
     showMarks: row.show_marks === 1,
+    leaderboardEnabled: row.leaderboard_enabled === 1,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -212,8 +214,8 @@ export async function createQuiz(creatorId: string, input: QuizInput): Promise<Q
         visibility, share_slug, link_expires_at, time_limit_seconds,
         shuffle_questions, shuffle_options,
         anti_cheat_enabled, retake_policy, retake_limit, status, pricing, price_kobo,
-        allow_flagging, default_mark, show_marks, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        allow_flagging, default_mark, show_marks, leaderboard_enabled, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .bind(
       id,
@@ -238,6 +240,7 @@ export async function createQuiz(creatorId: string, input: QuizInput): Promise<Q
       input.allowFlagging ?? true ? 1 : 0,
       input.defaultMark ?? 1,
       input.showMarks ?? true ? 1 : 0,
+      input.leaderboardEnabled ?? true ? 1 : 0,
       now,
       now
     );
@@ -288,6 +291,7 @@ export async function createQuiz(creatorId: string, input: QuizInput): Promise<Q
     allowFlagging: input.allowFlagging ?? true,
     defaultMark: input.defaultMark ?? 1,
     showMarks: input.showMarks ?? true,
+    leaderboardEnabled: input.leaderboardEnabled ?? true,
     createdAt: now,
     updatedAt: now,
   };
@@ -334,7 +338,7 @@ export async function updateQuiz(quizId: string, input: QuizInput): Promise<Quiz
         subcategory_id = ?, title = ?, description = ?, mode = ?, difficulty = ?,
         time_limit_seconds = ?, shuffle_questions = ?, shuffle_options = ?,
         anti_cheat_enabled = ?, retake_policy = ?, retake_limit = ?,
-        pricing = ?, price_kobo = ?, allow_flagging = ?, default_mark = ?, show_marks = ?, updated_at = ?
+        pricing = ?, price_kobo = ?, allow_flagging = ?, default_mark = ?, show_marks = ?, leaderboard_enabled = ?, updated_at = ?
       WHERE id = ?`
     )
     .bind(
@@ -354,6 +358,7 @@ export async function updateQuiz(quizId: string, input: QuizInput): Promise<Quiz
       input.allowFlagging ?? true ? 1 : 0,
       input.defaultMark ?? 1,
       input.showMarks ?? true ? 1 : 0,
+      input.leaderboardEnabled ?? true ? 1 : 0,
       now,
       quizId
     );
@@ -439,6 +444,7 @@ export async function updateQuiz(quizId: string, input: QuizInput): Promise<Quiz
     allowFlagging: input.allowFlagging ?? true,
     defaultMark: input.defaultMark ?? 1,
     showMarks: input.showMarks ?? true,
+    leaderboardEnabled: input.leaderboardEnabled ?? true,
     updatedAt: now,
   };
 }
